@@ -2,7 +2,6 @@ services:
   - type: web
     name: nomo-backend
     runtime: docker
-    rootDir: Backend
     plan: free
     healthCheckPath: /healthz
     envVars:
