@@ -8,6 +8,7 @@ type Profile struct {
 	DisplayName  string `json:"display_name"`
 	CharacterKey string `json:"character_key"`
 	AvatarURL    string `json:"avatar_url,omitempty"`
+	IsPlus       bool   `json:"is_plus"`
 }
 
 type Friend struct {
@@ -16,6 +17,7 @@ type Friend struct {
 	DisplayName  string `json:"display_name"`
 	CharacterKey string `json:"character_key"`
 	AvatarURL    string `json:"avatar_url,omitempty"`
+	IsPlus       bool   `json:"is_plus"`
 }
 
 type DrinkLog struct {
