@@ -41,6 +41,10 @@ type DailyStatusRequest struct {
 	Status     string `json:"status"`
 }
 
+type FriendFavoriteRequest struct {
+	IsFavorite bool `json:"is_favorite"`
+}
+
 type AuthUser struct {
 	ID           string         `json:"id"`
 	Email        string         `json:"email"`
