@@ -40,8 +40,9 @@ role key is never shipped to Flutter. Set these backend environment variables in
 dev and production before using `/v1/admin/*`:
 
 - `SUPABASE_SERVICE_ROLE_KEY`
-- `NOMO_ADMIN_USER_IDS` (comma-separated `auth.users.id`, recommended)
-- optional `NOMO_ADMIN_EMAILS` for local/dev convenience
+
+Admin access is intentionally hard-limited to the Supabase Auth user whose
+email is `yisshiki39@gmail.com`.
 
 Available endpoints:
 

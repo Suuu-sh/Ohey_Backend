@@ -10,6 +10,8 @@ import (
 	"unicode/utf8"
 )
 
+const adminEmail = "yisshiki39@gmail.com"
+
 var adminUserIDPattern = regexp.MustCompile(`^[A-Za-z0-9_]{3,24}$`)
 
 func (r *router) adminMe(w http.ResponseWriter, req *http.Request, adminUser AuthUser) {
@@ -356,30 +358,7 @@ func (r *router) admin(next func(http.ResponseWriter, *http.Request, AuthUser)) 
 }
 
 func (r *router) isAdminUser(user AuthUser) bool {
-	for _, id := range r.deps.Config.AdminUserIDs {
-		if id == user.ID {
-			return true
-		}
-	}
-	for _, email := range r.deps.Config.AdminEmails {
-		if strings.EqualFold(email, user.Email) {
-			return true
-		}
-	}
-	if value, ok := user.AppMetadata["nomo_admin"].(bool); ok && value {
-		return true
-	}
-	if role, ok := user.AppMetadata["role"].(string); ok && (role == "admin" || role == "nomo_admin") {
-		return true
-	}
-	if roles, ok := user.AppMetadata["roles"].([]any); ok {
-		for _, role := range roles {
-			if roleText, ok := role.(string); ok && (roleText == "admin" || roleText == "nomo_admin") {
-				return true
-			}
-		}
-	}
-	return false
+	return strings.EqualFold(strings.TrimSpace(user.Email), adminEmail)
 }
 
 func (r *router) adminInsertDrinkLogFriends(req *http.Request, drinkLogID string, friendIDs []string) error {

@@ -12,8 +12,6 @@ type Config struct {
 	SupabaseURL            string
 	SupabaseAnonKey        string
 	SupabaseServiceRoleKey string
-	AdminUserIDs           []string
-	AdminEmails            []string
 	AllowedOrigins         []string
 }
 
@@ -24,8 +22,6 @@ func Load() (Config, error) {
 		SupabaseURL:            strings.TrimRight(os.Getenv("SUPABASE_URL"), "/"),
 		SupabaseAnonKey:        os.Getenv("SUPABASE_ANON_KEY"),
 		SupabaseServiceRoleKey: strings.TrimSpace(os.Getenv("SUPABASE_SERVICE_ROLE_KEY")),
-		AdminUserIDs:           splitCSV(os.Getenv("NOMO_ADMIN_USER_IDS")),
-		AdminEmails:            splitCSV(os.Getenv("NOMO_ADMIN_EMAILS")),
 		AllowedOrigins:         splitCSV(getEnv("ALLOWED_ORIGINS", "*")),
 	}
 	if cfg.SupabaseURL == "" {
