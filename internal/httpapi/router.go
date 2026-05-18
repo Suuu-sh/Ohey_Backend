@@ -357,8 +357,8 @@ func (r *router) upsertDailyStatus(w http.ResponseWriter, req *http.Request, aut
 	if input.StatusDate == "" {
 		input.StatusDate = time.Now().Format(time.DateOnly)
 	}
-	if input.Status != "unselected" && input.Status != "want_drink" && input.Status != "busy" {
-		writeError(w, http.StatusBadRequest, "status must be unselected, want_drink, or busy")
+	if !isValidDailyStatus(input.Status) {
+		writeError(w, http.StatusBadRequest, "status is invalid")
 		return
 	}
 	q := url.Values{}
@@ -370,6 +370,24 @@ func (r *router) upsertDailyStatus(w http.ResponseWriter, req *http.Request, aut
 		return
 	}
 	writeJSON(w, http.StatusOK, rows)
+}
+
+func isValidDailyStatus(status string) bool {
+	switch status {
+	case "unselected",
+		"want_drink",
+		"busy",
+		"can_drink_today",
+		"light_drink",
+		"want_drink_hard",
+		"non_alcohol",
+		"liver_rest",
+		"waiting_invite",
+		"has_plans":
+		return true
+	default:
+		return false
+	}
 }
 
 func (r *router) auth(next func(http.ResponseWriter, *http.Request, string)) http.HandlerFunc {
