@@ -34,14 +34,27 @@ func NewRouter(deps Dependencies) http.Handler {
 func (r *router) routes() {
 	r.mux.HandleFunc("GET /healthz", r.health)
 	r.mux.HandleFunc("GET /v1/me/profile", r.auth(r.getProfile))
+	r.mux.HandleFunc("PUT /v1/me/profile", r.auth(r.upsertProfile))
 	r.mux.HandleFunc("PATCH /v1/me/profile", r.auth(r.updateProfile))
+	r.mux.HandleFunc("GET /v1/profiles/by-user-id/{user_id}", r.auth(r.getProfileByUserID))
 	r.mux.HandleFunc("GET /v1/friends", r.auth(r.listFriends))
+	r.mux.HandleFunc("POST /v1/friends", r.auth(r.createFriendship))
 	r.mux.HandleFunc("PUT /v1/friends/{id}/favorite", r.auth(r.updateFriendFavorite))
+	r.mux.HandleFunc("GET /v1/friend-requests/status", r.auth(r.getFriendRequestStatus))
+	r.mux.HandleFunc("POST /v1/friend-requests", r.auth(r.createFriendRequest))
+	r.mux.HandleFunc("PATCH /v1/friend-requests/{id}", r.auth(r.updateFriendRequest))
 	r.mux.HandleFunc("GET /v1/drink-logs", r.auth(r.listDrinkLogs))
 	r.mux.HandleFunc("POST /v1/drink-logs", r.auth(r.createDrinkLog))
 	r.mux.HandleFunc("DELETE /v1/drink-logs/{id}", r.auth(r.deleteDrinkLog))
+	r.mux.HandleFunc("PUT /v1/drink-logs/{id}/like", r.auth(r.likeDrinkLog))
+	r.mux.HandleFunc("DELETE /v1/drink-logs/{id}/like", r.auth(r.unlikeDrinkLog))
+	r.mux.HandleFunc("POST /v1/drink-logs/{id}/report", r.auth(r.reportDrinkLog))
 	r.mux.HandleFunc("GET /v1/daily-status", r.auth(r.getDailyStatus))
 	r.mux.HandleFunc("PUT /v1/daily-status", r.auth(r.upsertDailyStatus))
+	r.mux.HandleFunc("GET /v1/drink-invites/today-reservations", r.auth(r.listTodayReservations))
+	r.mux.HandleFunc("GET /v1/drink-invites/incoming-pending", r.auth(r.listIncomingPendingInvites))
+	r.mux.HandleFunc("POST /v1/drink-invites", r.auth(r.createDrinkInvite))
+	r.mux.HandleFunc("PATCH /v1/drink-invites/{id}", r.auth(r.updateDrinkInvite))
 	r.mux.HandleFunc("GET /v1/admin/me", r.admin(r.adminMe))
 	r.mux.HandleFunc("GET /v1/admin/users", r.admin(r.adminListUsers))
 	r.mux.HandleFunc("POST /v1/admin/users", r.admin(r.adminCreateUser))
@@ -66,7 +79,11 @@ func (r *router) getProfile(w http.ResponseWriter, req *http.Request, authToken 
 		writeSupabaseError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, rows)
+	if len(rows) == 0 {
+		writeError(w, http.StatusNotFound, "profile not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, rows[0])
 }
 
 func (r *router) updateProfile(w http.ResponseWriter, req *http.Request, authToken string) {
@@ -80,6 +97,13 @@ func (r *router) updateProfile(w http.ResponseWriter, req *http.Request, authTok
 		if value, ok := body[key]; ok {
 			allowed[key] = value
 		}
+	}
+	if value, ok := body["user_id"]; ok {
+		allowed["user_id"] = value
+	}
+	if errMessage := validateProfilePayload(req, authToken, allowed); errMessage != "" {
+		writeError(w, http.StatusBadRequest, errMessage)
+		return
 	}
 	q := url.Values{}
 	q.Set("id", "eq."+req.Header.Get("X-Nomo-User-ID"))
@@ -98,6 +122,10 @@ func (r *router) listFriends(w http.ResponseWriter, req *http.Request, authToken
 	q.Set("order", "created_at.desc")
 	var rows []map[string]any
 	if err := r.deps.Supabase.Get(req.Context(), authToken, "friendships", q, &rows); err != nil {
+		writeSupabaseError(w, err)
+		return
+	}
+	if err := r.attachTodayStatuses(req, authToken, rows); err != nil {
 		writeSupabaseError(w, err)
 		return
 	}
@@ -276,15 +304,15 @@ func (r *router) upsertDailyStatus(w http.ResponseWriter, req *http.Request, aut
 	if input.StatusDate == "" {
 		input.StatusDate = time.Now().Format(time.DateOnly)
 	}
-	if input.Status != "unselected" && input.Status != "want_drink" && input.Status != "busy" {
-		writeError(w, http.StatusBadRequest, "status must be unselected, want_drink, or busy")
+	if !isValidDailyStatus(input.Status) {
+		writeError(w, http.StatusBadRequest, "status is invalid")
 		return
 	}
 	q := url.Values{}
 	q.Set("on_conflict", "user_id,status_date")
 	payload := map[string]any{"user_id": req.Header.Get("X-Nomo-User-ID"), "status_date": input.StatusDate, "status": input.Status}
 	var rows []map[string]any
-	if err := r.deps.Supabase.Post(req.Context(), authToken, "daily_statuses", q, payload, &rows); err != nil {
+	if err := r.deps.Supabase.Upsert(req.Context(), authToken, "daily_statuses", q, payload, &rows); err != nil {
 		writeSupabaseError(w, err)
 		return
 	}
@@ -308,6 +336,20 @@ func (r *router) auth(next func(http.ResponseWriter, *http.Request, string)) htt
 			writeError(w, http.StatusBadRequest, "X-Nomo-User-ID header is required")
 			return
 		}
+		var authUser AuthUser
+		if err := r.deps.Supabase.GetAuthUser(req.Context(), token, &authUser); err != nil {
+			writeSupabaseError(w, err)
+			return
+		}
+		if authUser.ID == "" {
+			writeError(w, http.StatusUnauthorized, "invalid auth user")
+			return
+		}
+		if userID != authUser.ID {
+			writeError(w, http.StatusForbidden, "auth user mismatch")
+			return
+		}
+		req.Header.Set("X-Nomo-User-ID", authUser.ID)
 		next(w, req, token)
 	}
 }

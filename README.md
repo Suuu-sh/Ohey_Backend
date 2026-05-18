@@ -26,12 +26,27 @@ Authenticated requests must include:
 
 - `GET /healthz`
 - `GET /v1/me/profile`
+- `PUT /v1/me/profile`
 - `PATCH /v1/me/profile`
+- `GET /v1/profiles/by-user-id/{user_id}`
 - `GET /v1/friends`
+- `POST /v1/friends`
+- `PUT /v1/friends/{id}/favorite`
+- `GET /v1/friend-requests/status?friend_id={id}`
+- `POST /v1/friend-requests`
+- `PATCH /v1/friend-requests/{id}`
 - `GET /v1/drink-logs`
 - `POST /v1/drink-logs`
+- `DELETE /v1/drink-logs/{id}`
+- `PUT /v1/drink-logs/{id}/like`
+- `DELETE /v1/drink-logs/{id}/like`
+- `POST /v1/drink-logs/{id}/report`
 - `GET /v1/daily-status?date=YYYY-MM-DD`
 - `PUT /v1/daily-status`
+- `GET /v1/drink-invites/today-reservations?date=YYYY-MM-DD`
+- `GET /v1/drink-invites/incoming-pending?date=YYYY-MM-DD`
+- `POST /v1/drink-invites`
+- `PATCH /v1/drink-invites/{id}`
 
 ## Admin endpoints
 
