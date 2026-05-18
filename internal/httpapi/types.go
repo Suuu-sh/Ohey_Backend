@@ -86,3 +86,11 @@ type AdminUpdateDrinkLogRequest struct {
 	Memo        *string    `json:"memo"`
 	PhotoPath   *string    `json:"photo_path"`
 }
+
+type AdminCreateSystemNotificationRequest struct {
+	Title            string   `json:"title"`
+	Message          string   `json:"message"`
+	RecipientUserIDs []string `json:"recipient_user_ids"`
+	SendToAll        bool     `json:"send_to_all"`
+	SystemKey        string   `json:"system_key"`
+}

@@ -66,6 +66,7 @@ func (r *router) routes() {
 	r.mux.HandleFunc("POST /v1/admin/drink-logs", r.admin(r.adminCreateDrinkLog))
 	r.mux.HandleFunc("PATCH /v1/admin/drink-logs/{id}", r.admin(r.adminUpdateDrinkLog))
 	r.mux.HandleFunc("DELETE /v1/admin/drink-logs/{id}", r.admin(r.adminDeleteDrinkLog))
+	r.mux.HandleFunc("POST /v1/admin/notifications", r.admin(r.adminCreateNotification))
 }
 
 func (r *router) health(w http.ResponseWriter, _ *http.Request) {
@@ -225,8 +226,9 @@ func (r *router) createDrinkLog(w http.ResponseWriter, req *http.Request, authTo
 	if input.DrankAt != nil {
 		drankAt = *input.DrankAt
 	}
+	ownerUserID := req.Header.Get("X-Nomo-User-ID")
 	payload := map[string]any{
-		"owner_user_id": req.Header.Get("X-Nomo-User-ID"),
+		"owner_user_id": ownerUserID,
 		"drank_at":      drankAt.Format(time.RFC3339),
 		"place_name":    strings.TrimSpace(input.PlaceName),
 		"memo":          strings.TrimSpace(input.Memo),
@@ -256,6 +258,7 @@ func (r *router) createDrinkLog(w http.ResponseWriter, req *http.Request, authTo
 			}
 		}
 	}
+	r.createDrinkLogTaggedNotifications(req, authToken, logs[0].ID, ownerUserID, input.FriendIDs)
 	writeJSON(w, http.StatusCreated, logs[0])
 }
 

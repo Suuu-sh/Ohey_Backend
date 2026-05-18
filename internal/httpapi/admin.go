@@ -255,6 +255,7 @@ func (r *router) adminCreateDrinkLog(w http.ResponseWriter, req *http.Request, _
 		writeSupabaseError(w, err)
 		return
 	}
+	r.createDrinkLogTaggedNotifications(req, r.deps.Config.SupabaseServiceRoleKey, rows[0].ID, input.OwnerUserID, input.FriendIDs)
 	writeJSON(w, http.StatusCreated, rows[0])
 }
 

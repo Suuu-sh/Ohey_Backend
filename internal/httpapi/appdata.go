@@ -204,7 +204,9 @@ func (r *router) createFriendRequest(w http.ResponseWriter, req *http.Request, a
 		writeSupabaseError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, firstMap(rows, payload))
+	row := firstMap(rows, payload)
+	r.createFriendRequestReceivedNotification(req, authToken, row)
+	writeJSON(w, http.StatusCreated, row)
 }
 
 func (r *router) updateFriendRequest(w http.ResponseWriter, req *http.Request, authToken string) {
@@ -247,6 +249,7 @@ func (r *router) updateFriendRequest(w http.ResponseWriter, req *http.Request, a
 				writeSupabaseError(w, err)
 				return
 			}
+			r.createFriendRequestAcceptedNotification(req, authToken, rows[0])
 		}
 	}
 	writeJSON(w, http.StatusOK, rows[0])
@@ -340,8 +343,10 @@ func (r *router) reportDrinkLog(w http.ResponseWriter, req *http.Request, authTo
 
 func (r *router) listNotifications(w http.ResponseWriter, req *http.Request, authToken string) {
 	userID := req.Header.Get("X-Nomo-User-ID")
+	r.createTodayReservationReminderNotifications(req, authToken, userID)
+
 	q := url.Values{}
-	q.Set("select", "id,kind,title,message,created_at,read_at,actor_user_id,drink_log_id,actor:profiles!notifications_actor_user_id_fkey(id,user_id,display_name,avatar_url)")
+	q.Set("select", "id,kind,title,message,created_at,read_at,actor_user_id,drink_log_id,friend_request_id,drink_invite_id,notification_date,system_key,actor:profiles!notifications_actor_user_id_fkey(id,user_id,display_name,avatar_url)")
 	q.Set("recipient_user_id", "eq."+userID)
 	q.Set("order", "created_at.desc")
 	q.Set("limit", "50")
@@ -368,11 +373,6 @@ func (r *router) markNotificationsRead(w http.ResponseWriter, req *http.Request,
 }
 
 func (r *router) createDrinkLogLikeNotification(req *http.Request, authToken, logID, actorUserID string) {
-	if r.deps.AdminSupabase == nil {
-		r.deps.Logger.Warn("skip like notification because admin supabase client is not configured")
-		return
-	}
-
 	q := url.Values{}
 	q.Set("select", "id,owner_user_id")
 	q.Set("id", "eq."+logID)
@@ -395,18 +395,11 @@ func (r *router) createDrinkLogLikeNotification(req *http.Request, authToken, lo
 		"recipient_user_id": recipientUserID,
 		"actor_user_id":     actorUserID,
 		"drink_log_id":      logID,
-		"kind":              "drink_log_like",
+		"kind":              notificationKindDrinkLogLike,
 		"title":             "いいねされました",
 		"message":           actorName + "さんがあなたの飲みログにいいねしました。",
 	}
-	var rows []map[string]any
-	if err := r.deps.AdminSupabase.Post(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "notifications", nil, notification, &rows); err != nil {
-		var apiErr supabase.APIError
-		if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusConflict {
-			return
-		}
-		r.deps.Logger.Warn("failed to create like notification", "error", err, "drink_log_id", logID)
-	}
+	r.tryInsertNotification(req, notification, notificationKindDrinkLogLike)
 }
 
 func (r *router) displayNameForNotification(req *http.Request, authToken, userID string) string {
@@ -415,6 +408,16 @@ func (r *router) displayNameForNotification(req *http.Request, authToken, userID
 	q.Set("id", "eq."+userID)
 	q.Set("limit", "1")
 	var profiles []map[string]any
+	if r.deps.AdminSupabase != nil && r.deps.Config.SupabaseServiceRoleKey != "" {
+		if err := r.deps.AdminSupabase.Get(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "profiles", q, &profiles); err == nil && len(profiles) > 0 {
+			if name, ok := profiles[0]["display_name"].(string); ok && strings.TrimSpace(name) != "" {
+				return strings.TrimSpace(name)
+			}
+			if userName, ok := profiles[0]["user_id"].(string); ok && strings.TrimSpace(userName) != "" {
+				return strings.TrimSpace(userName)
+			}
+		}
+	}
 	if err := r.deps.Supabase.Get(req.Context(), authToken, "profiles", q, &profiles); err != nil || len(profiles) == 0 {
 		return "フレンズ"
 	}
@@ -513,7 +516,9 @@ func (r *router) createDrinkInvite(w http.ResponseWriter, req *http.Request, aut
 		writeSupabaseError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, firstMap(rows, payload))
+	row := firstMap(rows, payload)
+	r.createDrinkInviteReceivedNotification(req, authToken, row)
+	writeJSON(w, http.StatusCreated, row)
 }
 
 func (r *router) updateDrinkInvite(w http.ResponseWriter, req *http.Request, authToken string) {
@@ -549,6 +554,9 @@ func (r *router) updateDrinkInvite(w http.ResponseWriter, req *http.Request, aut
 	if len(rows) == 0 {
 		writeError(w, http.StatusNotFound, "drink invite not found")
 		return
+	}
+	if status == "accepted" {
+		r.createDrinkInviteAcceptedNotification(req, authToken, rows[0])
 	}
 	writeJSON(w, http.StatusOK, rows[0])
 }
