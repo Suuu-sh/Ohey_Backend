@@ -1,7 +1,10 @@
 package httpapi
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -11,6 +14,9 @@ import (
 )
 
 const adminEmail = "yisshiki39@gmail.com"
+const officialProfileUserID = "nomo_official"
+const officialProfileDisplayName = "Nomo公式"
+const officialProfileEmail = "nomo-official@official.nomo.app"
 
 var adminUserIDPattern = regexp.MustCompile(`^[A-Za-z0-9_]{3,24}$`)
 
@@ -227,6 +233,14 @@ func (r *router) adminCreateDrinkLog(w http.ResponseWriter, req *http.Request, _
 		return
 	}
 	input.OwnerUserID = strings.TrimSpace(input.OwnerUserID)
+	if input.IsOfficial {
+		officialProfileID, err := r.ensureOfficialProfile(req)
+		if err != nil {
+			writeSupabaseError(w, err)
+			return
+		}
+		input.OwnerUserID = officialProfileID
+	}
 	if input.OwnerUserID == "" {
 		writeError(w, http.StatusBadRequest, "owner_user_id is required")
 		return
@@ -294,6 +308,14 @@ func (r *router) adminUpdateDrinkLog(w http.ResponseWriter, req *http.Request, _
 	}
 	if input.IsOfficial != nil {
 		payload["is_official"] = *input.IsOfficial
+		if *input.IsOfficial && input.OwnerUserID == nil {
+			officialProfileID, err := r.ensureOfficialProfile(req)
+			if err != nil {
+				writeSupabaseError(w, err)
+				return
+			}
+			payload["owner_user_id"] = officialProfileID
+		}
 	}
 	if len(payload) == 0 {
 		writeJSON(w, http.StatusOK, map[string]string{"id": logID})
@@ -307,6 +329,67 @@ func (r *router) adminUpdateDrinkLog(w http.ResponseWriter, req *http.Request, _
 		return
 	}
 	writeJSON(w, http.StatusOK, rows)
+}
+
+func (r *router) ensureOfficialProfile(req *http.Request) (string, error) {
+	q := url.Values{}
+	q.Set("select", "id,user_id,display_name,character_key,avatar_url,is_plus")
+	q.Set("user_id", "eq."+officialProfileUserID)
+	q.Set("limit", "1")
+	var profiles []Profile
+	if err := r.deps.AdminSupabase.Get(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "profiles", q, &profiles); err != nil {
+		return "", err
+	}
+	if len(profiles) > 0 && profiles[0].ID != "" {
+		return profiles[0].ID, nil
+	}
+
+	password, err := randomAdminPassword()
+	if err != nil {
+		return "", err
+	}
+	authPayload := map[string]any{
+		"email":         officialProfileEmail,
+		"password":      password,
+		"email_confirm": true,
+		"user_metadata": map[string]any{
+			"display_name": officialProfileDisplayName,
+			"user_id":      officialProfileUserID,
+		},
+	}
+	var authResp map[string]any
+	if err := r.deps.AdminSupabase.AdminCreateUser(req.Context(), authPayload, &authResp); err != nil {
+		return "", err
+	}
+	createdUserID := authResponseUserID(authResp)
+	if createdUserID == "" {
+		return "", errors.New("official auth user creation returned no id")
+	}
+
+	profilePayload := map[string]any{
+		"id":            createdUserID,
+		"user_id":       officialProfileUserID,
+		"display_name":  officialProfileDisplayName,
+		"character_key": "avatar",
+		"avatar_url":    "",
+		"is_plus":       true,
+	}
+	upsertQ := url.Values{}
+	upsertQ.Set("on_conflict", "id")
+	var createdProfiles []Profile
+	if err := r.deps.AdminSupabase.Upsert(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "profiles", upsertQ, profilePayload, &createdProfiles); err != nil {
+		_ = r.deps.AdminSupabase.AdminDeleteUser(req.Context(), createdUserID)
+		return "", err
+	}
+	return createdUserID, nil
+}
+
+func randomAdminPassword() (string, error) {
+	var bytes [24]byte
+	if _, err := rand.Read(bytes[:]); err != nil {
+		return "", err
+	}
+	return "Nomo!" + hex.EncodeToString(bytes[:]), nil
 }
 
 func (r *router) adminDeleteDrinkLog(w http.ResponseWriter, req *http.Request, _ AuthUser) {
