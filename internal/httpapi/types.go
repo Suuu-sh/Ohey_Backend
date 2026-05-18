@@ -26,6 +26,7 @@ type DrinkLog struct {
 	PlaceName  string    `json:"place_name,omitempty"`
 	Memo       string    `json:"memo,omitempty"`
 	PhotoPath  string    `json:"photo_path,omitempty"`
+	LinkURL    string    `json:"link_url,omitempty"`
 	IsOfficial bool      `json:"is_official"`
 }
 
@@ -77,6 +78,7 @@ type AdminCreateDrinkLogRequest struct {
 	PlaceName   string    `json:"place_name"`
 	Memo        string    `json:"memo"`
 	PhotoPath   string    `json:"photo_path"`
+	LinkURL     string    `json:"link_url"`
 	FriendIDs   []string  `json:"friend_ids"`
 	IsOfficial  bool      `json:"is_official"`
 }
@@ -87,6 +89,7 @@ type AdminUpdateDrinkLogRequest struct {
 	PlaceName   *string    `json:"place_name"`
 	Memo        *string    `json:"memo"`
 	PhotoPath   *string    `json:"photo_path"`
+	LinkURL     *string    `json:"link_url"`
 	IsOfficial  *bool      `json:"is_official"`
 }
 

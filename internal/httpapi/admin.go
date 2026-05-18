@@ -215,7 +215,7 @@ func (r *router) adminDeleteUser(w http.ResponseWriter, req *http.Request, admin
 
 func (r *router) adminListDrinkLogs(w http.ResponseWriter, req *http.Request, _ AuthUser) {
 	q := url.Values{}
-	q.Set("select", "id,owner_user_id,drank_at,place_name,memo,photo_path,is_official,created_at,owner:profiles!drink_logs_owner_user_id_fkey(id,user_id,display_name,avatar_url,is_plus)")
+	q.Set("select", "id,owner_user_id,drank_at,place_name,memo,photo_path,link_url,is_official,created_at,owner:profiles!drink_logs_owner_user_id_fkey(id,user_id,display_name,avatar_url,is_plus)")
 	q.Set("order", "created_at.desc")
 	q.Set("limit", "80")
 	var rows []map[string]any
@@ -255,6 +255,7 @@ func (r *router) adminCreateDrinkLog(w http.ResponseWriter, req *http.Request, _
 		"place_name":    strings.TrimSpace(input.PlaceName),
 		"memo":          strings.TrimSpace(input.Memo),
 		"photo_path":    strings.TrimSpace(input.PhotoPath),
+		"link_url":      strings.TrimSpace(input.LinkURL),
 		"is_official":   input.IsOfficial,
 	}
 	var rows []DrinkLog
@@ -305,6 +306,9 @@ func (r *router) adminUpdateDrinkLog(w http.ResponseWriter, req *http.Request, _
 	}
 	if input.PhotoPath != nil {
 		payload["photo_path"] = strings.TrimSpace(*input.PhotoPath)
+	}
+	if input.LinkURL != nil {
+		payload["link_url"] = strings.TrimSpace(*input.LinkURL)
 	}
 	if input.IsOfficial != nil {
 		payload["is_official"] = *input.IsOfficial
