@@ -347,7 +347,7 @@ func (r *router) listNotifications(w http.ResponseWriter, req *http.Request, aut
 	r.createTodayReservationReminderNotifications(req, authToken, userID)
 
 	q := url.Values{}
-	q.Set("select", "id,kind,title,message,created_at,read_at,actor_user_id,drink_log_id,friend_request_id,drink_invite_id,notification_date,system_key,actor:profiles!notifications_actor_user_id_fkey(id,user_id,display_name,avatar_url),friend_request:friend_requests!notifications_friend_request_id_fkey(id,status)")
+	q.Set("select", "id,kind,title,message,created_at,read_at,actor_user_id,drink_log_id,friend_request_id,drink_invite_id,notification_date,system_key,actor:profiles!notifications_actor_user_id_fkey(id,user_id,display_name,avatar_url),friend_request:friend_requests!notifications_friend_request_id_fkey(id,status),drink_invite:drink_invites!notifications_drink_invite_id_fkey(id,status)")
 	q.Set("recipient_user_id", "eq."+userID)
 	q.Set("order", "created_at.desc")
 	q.Set("limit", "50")
