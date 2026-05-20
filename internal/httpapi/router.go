@@ -285,6 +285,7 @@ func (r *router) createDrinkLog(w http.ResponseWriter, req *http.Request, authTo
 		"place_name":    strings.TrimSpace(input.PlaceName),
 		"memo":          strings.TrimSpace(input.Memo),
 		"photo_path":    strings.TrimSpace(input.PhotoPath),
+		"is_official":   false,
 	}
 	var logs []DrinkLog
 	if err := r.deps.Supabase.Post(req.Context(), authToken, "drink_logs", nil, payload, &logs); err != nil {
