@@ -123,7 +123,10 @@ func (r *router) updateProfile(w http.ResponseWriter, req *http.Request, authTok
 
 func (r *router) listFriends(w http.ResponseWriter, req *http.Request, authToken string) {
 	q := url.Values{}
-	q.Set("select", "user_a_id,user_b_id,is_favorite,user_a:profiles!friendships_user_a_id_fkey(id,user_id,display_name,character_key,avatar_url,is_plus),user_b:profiles!friendships_user_b_id_fkey(id,user_id,display_name,character_key,avatar_url,is_plus)")
+	q.Set(
+		"select",
+		"user_a_id,user_b_id,is_favorite,user_a:profiles!friendships_user_a_id_fkey(id,user_id,display_name,character_key,avatar_url,is_plus),user_b:profiles!friendships_user_b_id_fkey(id,user_id,display_name,character_key,avatar_url,is_plus)",
+	)
 	q.Set("or", "(user_a_id.eq."+req.Header.Get("X-Nomo-User-ID")+",user_b_id.eq."+req.Header.Get("X-Nomo-User-ID")+")")
 	q.Set("order", "created_at.desc")
 	var rows []map[string]any

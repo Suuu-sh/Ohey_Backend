@@ -9,6 +9,7 @@ type Profile struct {
 	CharacterKey string `json:"character_key"`
 	AvatarURL    string `json:"avatar_url,omitempty"`
 	IsPlus       bool   `json:"is_plus"`
+	Status       string `json:"status"`
 }
 
 type Friend struct {
@@ -60,6 +61,7 @@ type AdminCreateUserRequest struct {
 	UserID      string `json:"user_id"`
 	DisplayName string `json:"display_name"`
 	AvatarURL   string `json:"avatar_url"`
+	Status      string `json:"status"`
 	IsPlus      bool   `json:"is_plus"`
 }
 
@@ -69,6 +71,7 @@ type AdminUpdateUserRequest struct {
 	UserID      *string `json:"user_id"`
 	DisplayName *string `json:"display_name"`
 	AvatarURL   *string `json:"avatar_url"`
+	Status      *string `json:"status"`
 	IsPlus      *bool   `json:"is_plus"`
 }
 

@@ -657,14 +657,14 @@ func (r *router) attachTodayStatuses(req *http.Request, authToken string, rows [
 	if len(profiles) == 0 {
 		return nil
 	}
-	ids := make([]string, 0, len(profiles))
+	profileIDs := make([]string, 0, len(profiles))
 	for id := range profiles {
-		ids = append(ids, id)
+		profileIDs = append(profileIDs, id)
 	}
-	sort.Strings(ids)
+	sort.Strings(profileIDs)
 	q := url.Values{}
 	q.Set("select", "user_id,status")
-	q.Set("user_id", "in.("+strings.Join(ids, ",")+")")
+	q.Set("user_id", "in.("+strings.Join(profileIDs, ",")+")")
 	q.Set("status_date", "eq."+dateOnlyParam(req, "date"))
 	var statuses []map[string]any
 	if err := r.deps.Supabase.Get(req.Context(), authToken, "daily_statuses", q, &statuses); err != nil {
@@ -674,7 +674,18 @@ func (r *router) attachTodayStatuses(req *http.Request, authToken string, rows [
 		userID, _ := status["user_id"].(string)
 		statusKey, _ := status["status"].(string)
 		if profile := profiles[userID]; profile != nil {
-			profile["status_key"] = statusKey
+			if strings.TrimSpace(statusKey) != "" {
+				profile["status_key"] = statusKey
+			}
+		}
+	}
+
+	for _, profile := range profiles {
+		if _, hasStatus := profile["status_key"]; hasStatus {
+			continue
+		}
+		if status, ok := profile["status"].(string); ok && strings.TrimSpace(status) != "" {
+			profile["status_key"] = status
 		}
 	}
 	return nil

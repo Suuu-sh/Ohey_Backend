@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -8,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -31,7 +33,10 @@ func (r *router) adminMe(w http.ResponseWriter, req *http.Request, adminUser Aut
 
 func (r *router) adminListUsers(w http.ResponseWriter, req *http.Request, _ AuthUser) {
 	q := url.Values{}
-	q.Set("select", "id,user_id,display_name,character_key,avatar_url,is_plus,created_at,updated_at")
+	q.Set(
+		"select",
+		"id,user_id,display_name,character_key,avatar_url,is_plus,created_at,updated_at",
+	)
 	q.Set("order", "created_at.desc")
 	q.Set("limit", "80")
 	if search := sanitizePostgRESTSearch(req.URL.Query().Get("search")); search != "" {
@@ -42,6 +47,19 @@ func (r *router) adminListUsers(w http.ResponseWriter, req *http.Request, _ Auth
 	if err := r.deps.AdminSupabase.Get(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "profiles", q, &rows); err != nil {
 		writeSupabaseError(w, err)
 		return
+	}
+	statusByUserID, err := r.adminTodayStatuses(req.Context(), rows)
+	if err != nil {
+		writeSupabaseError(w, err)
+		return
+	}
+	for _, row := range rows {
+		id, _ := row["id"].(string)
+		status := statusByUserID[id]
+		if strings.TrimSpace(status) == "" {
+			status = "unselected"
+		}
+		row["status"] = status
 	}
 	writeJSON(w, http.StatusOK, rows)
 }
@@ -57,6 +75,7 @@ func (r *router) adminCreateUser(w http.ResponseWriter, req *http.Request, _ Aut
 	input.UserID = strings.TrimSpace(input.UserID)
 	input.DisplayName = strings.TrimSpace(input.DisplayName)
 	input.AvatarURL = strings.TrimSpace(input.AvatarURL)
+	input.Status = strings.TrimSpace(input.Status)
 	if errMessage := validateAdminProfileInput(input.UserID, input.DisplayName); errMessage != "" {
 		writeError(w, http.StatusBadRequest, errMessage)
 		return
@@ -67,6 +86,13 @@ func (r *router) adminCreateUser(w http.ResponseWriter, req *http.Request, _ Aut
 	}
 	if len(input.Password) < 6 {
 		writeError(w, http.StatusBadRequest, "password must be at least 6 characters")
+		return
+	}
+	if input.Status == "" {
+		input.Status = "unselected"
+	}
+	if !isValidDailyStatus(input.Status) {
+		writeError(w, http.StatusBadRequest, "status is invalid")
 		return
 	}
 
@@ -102,6 +128,11 @@ func (r *router) adminCreateUser(w http.ResponseWriter, req *http.Request, _ Aut
 	q.Set("on_conflict", "id")
 	var profiles []map[string]any
 	if err := r.deps.AdminSupabase.Upsert(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "profiles", q, profilePayload, &profiles); err != nil {
+		_ = r.deps.AdminSupabase.AdminDeleteUser(req.Context(), createdUserID)
+		writeSupabaseError(w, err)
+		return
+	}
+	if err := r.upsertAdminDailyStatus(req.Context(), createdUserID, input.Status); err != nil {
 		_ = r.deps.AdminSupabase.AdminDeleteUser(req.Context(), createdUserID)
 		writeSupabaseError(w, err)
 		return
@@ -168,6 +199,21 @@ func (r *router) adminUpdateUser(w http.ResponseWriter, req *http.Request, _ Aut
 	}
 	if input.IsPlus != nil {
 		profilePayload["is_plus"] = *input.IsPlus
+	}
+	if input.Status != nil {
+		status := strings.TrimSpace(*input.Status)
+		if status == "" {
+			writeError(w, http.StatusBadRequest, "status is required")
+			return
+		}
+		if !isValidDailyStatus(status) {
+			writeError(w, http.StatusBadRequest, "status is invalid")
+			return
+		}
+		if err := r.upsertAdminDailyStatus(req.Context(), targetID, status); err != nil {
+			writeSupabaseError(w, err)
+			return
+		}
 	}
 	if len(userMeta) > 0 {
 		authPayload["user_metadata"] = userMeta
@@ -447,6 +493,49 @@ func (r *router) admin(next func(http.ResponseWriter, *http.Request, AuthUser)) 
 		}
 		next(w, req, authUser)
 	}
+}
+
+func (r *router) adminTodayStatuses(ctx context.Context, rows []map[string]any) (map[string]string, error) {
+	ids := make([]string, 0, len(rows))
+	for _, row := range rows {
+		id, _ := row["id"].(string)
+		if id != "" {
+			ids = append(ids, id)
+		}
+	}
+	if len(ids) == 0 {
+		return map[string]string{}, nil
+	}
+	sort.Strings(ids)
+	statusQuery := url.Values{}
+	statusQuery.Set("select", "user_id,status")
+	statusQuery.Set("user_id", "in.("+strings.Join(ids, ",")+")")
+	statusQuery.Set("status_date", "eq."+time.Now().Format(time.DateOnly))
+	var statuses []map[string]any
+	if err := r.deps.AdminSupabase.Get(ctx, r.deps.Config.SupabaseServiceRoleKey, "daily_statuses", statusQuery, &statuses); err != nil {
+		return nil, err
+	}
+	m := map[string]string{}
+	for _, status := range statuses {
+		userID, _ := status["user_id"].(string)
+		statusKey, _ := status["status"].(string)
+		if userID != "" && strings.TrimSpace(statusKey) != "" {
+			m[userID] = statusKey
+		}
+	}
+	return m, nil
+}
+
+func (r *router) upsertAdminDailyStatus(ctx context.Context, targetUserID, status string) error {
+	q := url.Values{}
+	q.Set("on_conflict", "user_id,status_date")
+	payload := map[string]any{
+		"user_id":     targetUserID,
+		"status_date": time.Now().Format(time.DateOnly),
+		"status":      status,
+	}
+	var rows []map[string]any
+	return r.deps.AdminSupabase.Upsert(ctx, r.deps.Config.SupabaseServiceRoleKey, "daily_statuses", q, payload, &rows)
 }
 
 func (r *router) isAdminUser(user AuthUser) bool {
