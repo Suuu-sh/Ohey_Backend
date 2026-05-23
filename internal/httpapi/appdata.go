@@ -787,11 +787,8 @@ func isValidDailyStatus(status string) bool {
 	switch status {
 	case "unselected",
 		"can_drink_today",
-		"light_drink",
-		"want_drink_hard",
 		"non_alcohol",
 		"liver_rest",
-		"waiting_invite",
 		"has_plans":
 		return true
 	default:
