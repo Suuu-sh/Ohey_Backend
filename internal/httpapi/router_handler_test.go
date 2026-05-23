@@ -570,3 +570,95 @@ func TestRegisterPushTokenScopesToAuthenticatedUser(t *testing.T) {
 		t.Fatalf("push token body is not scoped to auth user: %s", request.Body)
 	}
 }
+
+func TestUpdateProfileValidatesUserIDAndScopesToAuthUser(t *testing.T) {
+	fake := newFakeSupabase(t, func(w http.ResponseWriter, req *http.Request) {
+		if req.URL.Path == "/rest/v1/profiles" && req.Method == http.MethodPatch {
+			writeFakeJSON(w, http.StatusOK, []map[string]any{{"id": testUserID}})
+			return
+		}
+		writeFakeJSON(w, http.StatusOK, []map[string]any{})
+	})
+	router := testRouter(fake)
+
+	invalid := httptest.NewRecorder()
+	router.ServeHTTP(invalid, authedRequest(http.MethodPatch, "/v1/me/profile", `{"user_id":"bad user id"}`))
+	if invalid.Code != http.StatusBadRequest {
+		t.Fatalf("invalid status = %d body = %s", invalid.Code, invalid.Body.String())
+	}
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, authedRequest(http.MethodPatch, "/v1/me/profile", `{"user_id":"valid_user","display_name":"Name"}`))
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+	}
+	request, ok := fake.lastRequest("/rest/v1/profiles")
+	if !ok {
+		t.Fatal("profiles patch request was not sent")
+	}
+	if got := request.Query.Get("id"); got != "eq."+testUserID {
+		t.Fatalf("profile id filter = %q", got)
+	}
+}
+
+func TestMarkNotificationsReadIsScopedToAuthenticatedRecipient(t *testing.T) {
+	fake := newFakeSupabase(t, func(w http.ResponseWriter, req *http.Request) {
+		if req.URL.Path == "/rest/v1/notifications" && req.Method == http.MethodPatch {
+			writeFakeJSON(w, http.StatusOK, []map[string]any{{"id": "notification"}})
+			return
+		}
+		writeFakeJSON(w, http.StatusOK, []map[string]any{})
+	})
+	w := httptest.NewRecorder()
+
+	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPatch, "/v1/notifications/read-all", `{}`))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+	}
+	request, ok := fake.lastRequest("/rest/v1/notifications")
+	if !ok {
+		t.Fatal("notifications patch request was not sent")
+	}
+	if got := request.Query.Get("recipient_user_id"); got != "eq."+testUserID {
+		t.Fatalf("recipient_user_id filter = %q", got)
+	}
+	if got := request.Query.Get("read_at"); got != "is.null" {
+		t.Fatalf("read_at filter = %q", got)
+	}
+}
+
+func TestAdminBackendRequiresServiceRole(t *testing.T) {
+	fake := newFakeSupabase(t, nil)
+	router := NewRouter(Dependencies{
+		Config: config.Config{
+			SupabaseURL:     fake.server.URL,
+			SupabaseAnonKey: "anon-key",
+			AllowedOrigins:  []string{"*"},
+			AdminEmails:     []string{"user@example.com"},
+		},
+		Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Supabase: fake.client(),
+	})
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, authedRequest(http.MethodGet, "/v1/admin/me", ""))
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+	}
+}
+
+func TestAdminDeleteUserRejectsSelfDelete(t *testing.T) {
+	fake := newFakeSupabase(t, nil)
+	w := httptest.NewRecorder()
+
+	testRouter(fake, "user@example.com").ServeHTTP(w, authedRequest(http.MethodDelete, "/v1/admin/users/"+testUserID, ""))
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+	}
+	if _, ok := fake.lastRequest("/auth/v1/admin/users/" + testUserID); ok {
+		t.Fatal("admin delete user request was sent for self-delete")
+	}
+}
