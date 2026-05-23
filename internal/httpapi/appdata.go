@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -485,6 +486,13 @@ func (r *router) createDrinkInvite(w http.ResponseWriter, req *http.Request, aut
 	if inviteDate == "" {
 		inviteDate = time.Now().Format(time.DateOnly)
 	}
+	if blockedMessage, err := r.blockedInviteStatusMessage(req.Context(), authToken, toUserID, inviteDate); err != nil {
+		writeSupabaseError(w, err)
+		return
+	} else if blockedMessage != "" {
+		writeError(w, http.StatusConflict, blockedMessage)
+		return
+	}
 
 	q := url.Values{}
 	q.Set("select", "id,status")
@@ -520,6 +528,30 @@ func (r *router) createDrinkInvite(w http.ResponseWriter, req *http.Request, aut
 	row := firstMap(rows, payload)
 	r.createDrinkInviteReceivedNotification(req, authToken, row)
 	writeJSON(w, http.StatusCreated, row)
+}
+
+func (r *router) blockedInviteStatusMessage(ctx context.Context, authToken, userID, inviteDate string) (string, error) {
+	q := url.Values{}
+	q.Set("select", "status")
+	q.Set("user_id", "eq."+userID)
+	q.Set("status_date", "eq."+inviteDate)
+	q.Set("limit", "1")
+	var rows []map[string]any
+	if err := r.deps.Supabase.Get(ctx, authToken, "daily_statuses", q, &rows); err != nil {
+		return "", err
+	}
+	if len(rows) == 0 {
+		return "", nil
+	}
+	status, _ := rows[0]["status"].(string)
+	switch strings.TrimSpace(status) {
+	case "liver_rest":
+		return "相手が休肝日のため今日は誘えません。", nil
+	case "has_plans":
+		return "相手に予定があるため今日は誘えません。", nil
+	default:
+		return "", nil
+	}
 }
 
 func (r *router) updateDrinkInvite(w http.ResponseWriter, req *http.Request, authToken string) {
