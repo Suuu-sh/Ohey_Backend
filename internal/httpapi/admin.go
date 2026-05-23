@@ -201,13 +201,8 @@ func (r *router) adminUpdateUser(w http.ResponseWriter, req *http.Request, _ Aut
 		userMeta["display_name"] = displayName
 	}
 	if input.Gender != nil {
-		gender := normalizeProfileGender(*input.Gender)
-		if !isValidProfileGender(gender) {
-			writeError(w, http.StatusBadRequest, "gender must be male, female, or unspecified")
-			return
-		}
-		profilePayload["gender"] = gender
-		userMeta["gender"] = gender
+		writeError(w, http.StatusBadRequest, "gender cannot be changed")
+		return
 	}
 	if input.AvatarURL != nil {
 		profilePayload["avatar_url"] = strings.TrimSpace(*input.AvatarURL)

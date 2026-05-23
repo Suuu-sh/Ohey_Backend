@@ -99,10 +99,14 @@ func (r *router) updateProfile(w http.ResponseWriter, req *http.Request, authTok
 		return
 	}
 	allowed := map[string]any{}
-	for _, key := range []string{"display_name", "gender", "character_key", "avatar_url"} {
+	for _, key := range []string{"display_name", "character_key", "avatar_url"} {
 		if value, ok := body[key]; ok {
 			allowed[key] = value
 		}
+	}
+	if _, ok := body["gender"]; ok {
+		writeError(w, http.StatusBadRequest, "gender cannot be changed")
+		return
 	}
 	if value, ok := body["user_id"]; ok {
 		allowed["user_id"] = value
