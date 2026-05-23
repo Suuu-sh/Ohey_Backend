@@ -17,6 +17,7 @@ import (
 type ProfileSaveRequest struct {
 	UserID       string `json:"user_id"`
 	DisplayName  string `json:"display_name"`
+	Gender       string `json:"gender"`
 	CharacterKey string `json:"character_key"`
 	AvatarURL    string `json:"avatar_url"`
 }
@@ -78,7 +79,7 @@ func (r *router) getProfileByUserID(w http.ResponseWriter, req *http.Request, au
 	}
 
 	q := url.Values{}
-	q.Set("select", "id,user_id,display_name,character_key,avatar_url,is_plus")
+	q.Set("select", "id,user_id,display_name,gender,character_key,avatar_url,is_plus")
 	q.Set("user_id", "eq."+userID)
 	q.Set("limit", "1")
 	var rows []Profile
@@ -594,11 +595,12 @@ func (r *router) updateDrinkInvite(w http.ResponseWriter, req *http.Request, aut
 	writeJSON(w, http.StatusOK, rows[0])
 }
 
-const drinkInviteSelect = "id,from_user_id,to_user_id,invite_date,status,from_user:profiles!drink_invites_from_user_id_fkey(id,display_name,user_id,avatar_url),to_user:profiles!drink_invites_to_user_id_fkey(id,display_name,user_id,avatar_url)"
+const drinkInviteSelect = "id,from_user_id,to_user_id,invite_date,status,from_user:profiles!drink_invites_from_user_id_fkey(id,display_name,user_id,gender,avatar_url),to_user:profiles!drink_invites_to_user_id_fkey(id,display_name,user_id,gender,avatar_url)"
 
 func (input *ProfileSaveRequest) normalize() {
 	input.UserID = strings.TrimSpace(input.UserID)
 	input.DisplayName = strings.TrimSpace(input.DisplayName)
+	input.Gender = normalizeProfileGender(input.Gender)
 	input.CharacterKey = strings.TrimSpace(input.CharacterKey)
 	input.AvatarURL = strings.TrimSpace(input.AvatarURL)
 	if input.CharacterKey == "" {
@@ -614,6 +616,9 @@ func (input ProfileSaveRequest) validate() string {
 	if nameLength < 1 || nameLength > 40 {
 		return "display_name must be 1-40 characters"
 	}
+	if !isValidProfileGender(input.Gender) {
+		return "gender must be male, female, or unspecified"
+	}
 	return ""
 }
 
@@ -622,6 +627,7 @@ func (input ProfileSaveRequest) profilePayload(authUserID string) map[string]any
 		"id":            authUserID,
 		"user_id":       input.UserID,
 		"display_name":  input.DisplayName,
+		"gender":        input.Gender,
 		"character_key": input.CharacterKey,
 		"avatar_url":    input.AvatarURL,
 		"updated_at":    time.Now().UTC().Format(time.RFC3339),
@@ -652,6 +658,17 @@ func validateProfilePayload(_ *http.Request, _ string, payload map[string]any) s
 		}
 		payload["display_name"] = displayName
 	}
+	if raw, ok := payload["gender"]; ok {
+		gender, ok := raw.(string)
+		if !ok {
+			return "gender must be a string"
+		}
+		gender = normalizeProfileGender(gender)
+		if !isValidProfileGender(gender) {
+			return "gender must be male, female, or unspecified"
+		}
+		payload["gender"] = gender
+	}
 	if raw, ok := payload["character_key"]; ok {
 		value, ok := raw.(string)
 		if !ok {
@@ -670,6 +687,23 @@ func validateProfilePayload(_ *http.Request, _ string, payload map[string]any) s
 	}
 	payload["updated_at"] = time.Now().UTC().Format(time.RFC3339)
 	return ""
+}
+
+func normalizeProfileGender(value string) string {
+	gender := strings.ToLower(strings.TrimSpace(value))
+	if gender == "" {
+		return "unspecified"
+	}
+	return gender
+}
+
+func isValidProfileGender(value string) bool {
+	switch normalizeProfileGender(value) {
+	case "unspecified", "male", "female":
+		return true
+	default:
+		return false
+	}
 }
 
 func (r *router) attachTodayStatuses(req *http.Request, authToken string, rows []map[string]any) error {
