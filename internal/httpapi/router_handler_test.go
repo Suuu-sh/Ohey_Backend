@@ -903,3 +903,100 @@ func TestMarkNotificationsReadMasksSupabaseError(t *testing.T) {
 		t.Fatalf("raw upstream body leaked: %s", body)
 	}
 }
+
+func TestListFriendsAttachesDrinkStats(t *testing.T) {
+	friendID := otherUserID
+	older := "2026-05-20T10:00:00Z"
+	newer := "2026-05-22T12:30:00Z"
+	fake := newFakeSupabase(t, func(w http.ResponseWriter, req *http.Request) {
+		switch req.URL.Path {
+		case "/rest/v1/friendships":
+			writeFakeJSON(w, http.StatusOK, []map[string]any{{
+				"user_a_id":   testUserID,
+				"user_b_id":   friendID,
+				"is_favorite": true,
+				"user_a":      map[string]any{"id": testUserID, "user_id": "me", "display_name": "Me"},
+				"user_b":      map[string]any{"id": friendID, "user_id": "friend", "display_name": "Friend"},
+			}})
+		case "/rest/v1/daily_statuses":
+			writeFakeJSON(w, http.StatusOK, []map[string]any{})
+		case "/rest/v1/drink_log_friends":
+			if req.URL.Query().Get("profile_id") == "eq."+testUserID {
+				writeFakeJSON(w, http.StatusOK, []map[string]any{{
+					"profile_id": testUserID,
+					"drink_logs": map[string]any{"owner_user_id": friendID, "drank_at": newer},
+				}})
+				return
+			}
+			writeFakeJSON(w, http.StatusOK, []map[string]any{{
+				"profile_id": friendID,
+				"drink_logs": map[string]any{"owner_user_id": testUserID, "drank_at": older},
+			}})
+		default:
+			writeFakeJSON(w, http.StatusOK, []map[string]any{})
+		}
+	})
+	w := httptest.NewRecorder()
+
+	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodGet, "/v1/friends", ""))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+	}
+	var rows []map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &rows); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows = %d body = %s", len(rows), w.Body.String())
+	}
+	friend, ok := rows[0]["user_b"].(map[string]any)
+	if !ok {
+		t.Fatalf("user_b missing: %#v", rows[0])
+	}
+	if got := friend["total_drink_count"]; got != float64(2) {
+		t.Fatalf("total_drink_count = %#v", got)
+	}
+	if got := friend["last_drink_at"]; got != newer {
+		t.Fatalf("last_drink_at = %#v", got)
+	}
+
+	ownedReq, ok := fake.lastRequest("/rest/v1/drink_log_friends")
+	if !ok {
+		t.Fatal("drink_log_friends request was not sent")
+	}
+	if got := ownedReq.Query.Get("select"); got != "profile_id,drink_logs!inner(owner_user_id,drank_at)" {
+		t.Fatalf("select = %q", got)
+	}
+}
+
+func TestListFriendsMasksDrinkStatsSupabaseError(t *testing.T) {
+	fake := newFakeSupabase(t, func(w http.ResponseWriter, req *http.Request) {
+		switch req.URL.Path {
+		case "/rest/v1/friendships":
+			writeFakeJSON(w, http.StatusOK, []map[string]any{{
+				"user_a_id": testUserID,
+				"user_b_id": otherUserID,
+				"user_a":    map[string]any{"id": testUserID, "user_id": "me", "display_name": "Me"},
+				"user_b":    map[string]any{"id": otherUserID, "user_id": "friend", "display_name": "Friend"},
+			}})
+		case "/rest/v1/daily_statuses":
+			writeFakeJSON(w, http.StatusOK, []map[string]any{})
+		case "/rest/v1/drink_log_friends":
+			http.Error(w, `{"secret":"drink-stats-secret","message":"raw upstream detail"}`, http.StatusInternalServerError)
+		default:
+			writeFakeJSON(w, http.StatusOK, []map[string]any{})
+		}
+	})
+	w := httptest.NewRecorder()
+
+	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodGet, "/v1/friends", ""))
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	if strings.Contains(body, "drink-stats-secret") || strings.Contains(body, "raw upstream detail") {
+		t.Fatalf("raw upstream body leaked: %s", body)
+	}
+}
