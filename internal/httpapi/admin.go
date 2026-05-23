@@ -15,7 +15,6 @@ import (
 	"unicode/utf8"
 )
 
-const adminEmail = "yisshiki39@gmail.com"
 const officialProfileUserID = "nomo_official"
 const officialProfileDisplayName = "Nomo公式"
 const officialProfileEmail = "nomo-official@official.nomo.app"
@@ -539,7 +538,16 @@ func (r *router) upsertAdminDailyStatus(ctx context.Context, targetUserID, statu
 }
 
 func (r *router) isAdminUser(user AuthUser) bool {
-	return strings.EqualFold(strings.TrimSpace(user.Email), adminEmail)
+	userEmail := strings.TrimSpace(user.Email)
+	if userEmail == "" {
+		return false
+	}
+	for _, adminEmail := range r.deps.Config.AdminEmails {
+		if strings.EqualFold(userEmail, adminEmail) {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *router) adminInsertDrinkLogFriends(req *http.Request, drinkLogID string, friendIDs []string) error {

@@ -11,5 +11,7 @@ services:
         sync: false
       - key: SUPABASE_ANON_KEY
         sync: false
+      - key: NOMO_ADMIN_EMAILS
+        sync: false
       - key: ALLOWED_ORIGINS
         value: "*"
