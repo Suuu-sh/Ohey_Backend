@@ -283,11 +283,20 @@ func (r *router) createDrinkLog(w http.ResponseWriter, req *http.Request, authTo
 		writeError(w, http.StatusBadRequest, errMessage)
 		return
 	}
+	ownerUserID := req.Header.Get("X-Nomo-User-ID")
+	validFriends, err := r.validateDrinkLogFriendIDs(req, authToken, ownerUserID, friendIDs)
+	if err != nil {
+		writeSupabaseError(w, err)
+		return
+	}
+	if !validFriends {
+		writeError(w, http.StatusForbidden, "friend_ids must be existing friends")
+		return
+	}
 	drankAt := time.Now()
 	if input.DrankAt != nil {
 		drankAt = *input.DrankAt
 	}
-	ownerUserID := req.Header.Get("X-Nomo-User-ID")
 	payload := map[string]any{
 		"owner_user_id": ownerUserID,
 		"drank_at":      drankAt.Format(time.RFC3339),
@@ -315,6 +324,22 @@ func (r *router) createDrinkLog(w http.ResponseWriter, req *http.Request, authTo
 	}
 	r.createDrinkLogTaggedNotifications(req, authToken, logs[0].ID, ownerUserID, friendIDs)
 	writeJSON(w, http.StatusCreated, logs[0])
+}
+
+func (r *router) validateDrinkLogFriendIDs(req *http.Request, authToken, ownerUserID string, friendIDs []string) (bool, error) {
+	for _, friendID := range friendIDs {
+		if friendID == ownerUserID {
+			return false, nil
+		}
+		ok, err := r.friendshipExists(req, authToken, ownerUserID, friendID)
+		if err != nil {
+			return false, err
+		}
+		if !ok {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 func (r *router) deleteDrinkLog(w http.ResponseWriter, req *http.Request, authToken string) {

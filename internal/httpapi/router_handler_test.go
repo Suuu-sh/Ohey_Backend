@@ -259,6 +259,8 @@ func TestCreateDrinkLogValidatesFriendIDsAndCreatesLinks(t *testing.T) {
 	friendID := otherUserID
 	fake := newFakeSupabase(t, func(w http.ResponseWriter, req *http.Request) {
 		switch req.URL.Path {
+		case "/rest/v1/friendships":
+			writeFakeJSON(w, http.StatusOK, []map[string]any{{"id": "friendship"}})
 		case "/rest/v1/drink_logs":
 			writeFakeJSON(w, http.StatusCreated, []map[string]any{{
 				"id":            testLogID,
@@ -304,6 +306,26 @@ func TestCreateDrinkLogRejectsInvalidFriendID(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+	}
+}
+
+func TestCreateDrinkLogRejectsNonFriendTag(t *testing.T) {
+	fake := newFakeSupabase(t, func(w http.ResponseWriter, req *http.Request) {
+		if req.URL.Path == "/rest/v1/friendships" {
+			writeFakeJSON(w, http.StatusOK, []map[string]any{})
+			return
+		}
+		writeFakeJSON(w, http.StatusOK, []map[string]any{})
+	})
+	w := httptest.NewRecorder()
+
+	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPost, "/v1/drink-logs", `{"friend_ids":["`+otherUserID+`"]}`))
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+	}
+	if _, ok := fake.lastRequest("/rest/v1/drink_logs"); ok {
+		t.Fatal("drink log insert was sent for a non-friend tag")
 	}
 }
 
