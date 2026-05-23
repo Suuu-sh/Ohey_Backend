@@ -227,9 +227,15 @@ func (r *router) updateFriendRequest(w http.ResponseWriter, req *http.Request, a
 		return
 	}
 
+	userID := req.Header.Get("X-Nomo-User-ID")
 	q := url.Values{}
 	q.Set("id", "eq."+requestID)
 	q.Set("status", "eq.pending")
+	if status == "cancelled" {
+		q.Set("from_user_id", "eq."+userID)
+	} else {
+		q.Set("to_user_id", "eq."+userID)
+	}
 	payload := map[string]any{
 		"status":       status,
 		"responded_at": time.Now().UTC().Format(time.RFC3339),
