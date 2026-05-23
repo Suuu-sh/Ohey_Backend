@@ -764,6 +764,122 @@ func (r *router) attachTodayStatuses(req *http.Request, authToken string, rows [
 	return nil
 }
 
+func (r *router) attachFriendDrinkStats(req *http.Request, authToken string, rows []map[string]any) error {
+	currentUserID := req.Header.Get("X-Nomo-User-ID")
+	profiles := map[string]map[string]any{}
+	for _, row := range rows {
+		for _, key := range []string{"user_a", "user_b"} {
+			profile, ok := row[key].(map[string]any)
+			if !ok {
+				continue
+			}
+			id, _ := profile["id"].(string)
+			if id != "" && id != currentUserID {
+				profiles[id] = profile
+			}
+		}
+	}
+	if len(profiles) == 0 {
+		return nil
+	}
+
+	friendIDs := make([]string, 0, len(profiles))
+	for id := range profiles {
+		friendIDs = append(friendIDs, id)
+	}
+	sort.Strings(friendIDs)
+
+	stats := make(map[string]*friendDrinkStats, len(friendIDs))
+	for _, id := range friendIDs {
+		stats[id] = &friendDrinkStats{}
+	}
+
+	if err := r.attachOwnedDrinkStats(req, authToken, currentUserID, friendIDs, stats); err != nil {
+		return err
+	}
+	if err := r.attachTaggedDrinkStats(req, authToken, currentUserID, friendIDs, stats); err != nil {
+		return err
+	}
+
+	for id, profile := range profiles {
+		stat := stats[id]
+		if stat == nil {
+			profile["total_drink_count"] = 0
+			continue
+		}
+		profile["total_drink_count"] = stat.count
+		if !stat.lastDrinkAt.IsZero() {
+			profile["last_drink_at"] = stat.lastDrinkAt.Format(time.RFC3339)
+		}
+	}
+	return nil
+}
+
+type friendDrinkStats struct {
+	count       int
+	lastDrinkAt time.Time
+}
+
+func (s *friendDrinkStats) add(drankAt time.Time) {
+	s.count++
+	if drankAt.After(s.lastDrinkAt) {
+		s.lastDrinkAt = drankAt
+	}
+}
+
+func (r *router) attachOwnedDrinkStats(req *http.Request, authToken, currentUserID string, friendIDs []string, stats map[string]*friendDrinkStats) error {
+	q := url.Values{}
+	q.Set("select", "profile_id,drink_logs!inner(owner_user_id,drank_at)")
+	q.Set("profile_id", "in.("+strings.Join(friendIDs, ",")+")")
+	q.Set("drink_logs.owner_user_id", "eq."+currentUserID)
+	var rows []map[string]any
+	if err := r.deps.Supabase.Get(req.Context(), authToken, "drink_log_friends", q, &rows); err != nil {
+		return err
+	}
+	for _, row := range rows {
+		friendID, _ := row["profile_id"].(string)
+		if stat := stats[friendID]; stat != nil {
+			stat.add(embeddedDrinkLogTime(row))
+		}
+	}
+	return nil
+}
+
+func (r *router) attachTaggedDrinkStats(req *http.Request, authToken, currentUserID string, friendIDs []string, stats map[string]*friendDrinkStats) error {
+	q := url.Values{}
+	q.Set("select", "profile_id,drink_logs!inner(owner_user_id,drank_at)")
+	q.Set("profile_id", "eq."+currentUserID)
+	q.Set("drink_logs.owner_user_id", "in.("+strings.Join(friendIDs, ",")+")")
+	var rows []map[string]any
+	if err := r.deps.Supabase.Get(req.Context(), authToken, "drink_log_friends", q, &rows); err != nil {
+		return err
+	}
+	for _, row := range rows {
+		log, ok := row["drink_logs"].(map[string]any)
+		if !ok {
+			continue
+		}
+		friendID, _ := log["owner_user_id"].(string)
+		if stat := stats[friendID]; stat != nil {
+			stat.add(embeddedDrinkLogTime(row))
+		}
+	}
+	return nil
+}
+
+func embeddedDrinkLogTime(row map[string]any) time.Time {
+	log, ok := row["drink_logs"].(map[string]any)
+	if !ok {
+		return time.Time{}
+	}
+	value, _ := log["drank_at"].(string)
+	parsed, err := time.Parse(time.RFC3339, value)
+	if err == nil {
+		return parsed
+	}
+	return time.Time{}
+}
+
 func (r *router) friendshipExists(req *http.Request, authToken, userID, friendID string) (bool, error) {
 	q := url.Values{}
 	q.Set("select", "id")

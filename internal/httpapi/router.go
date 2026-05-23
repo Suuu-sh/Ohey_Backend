@@ -141,6 +141,10 @@ func (r *router) listFriends(w http.ResponseWriter, req *http.Request, authToken
 		writeSupabaseError(w, err)
 		return
 	}
+	if err := r.attachFriendDrinkStats(req, authToken, rows); err != nil {
+		writeSupabaseError(w, err)
+		return
+	}
 	writeJSON(w, http.StatusOK, rows)
 }
 
