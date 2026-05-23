@@ -480,3 +480,93 @@ func TestRegisterPushTokenValidation(t *testing.T) {
 		})
 	}
 }
+
+func TestAdminAccessAllowsConfiguredAdminEmailCaseInsensitive(t *testing.T) {
+	fake := newFakeSupabase(t, nil)
+	w := httptest.NewRecorder()
+
+	testRouter(fake, "USER@EXAMPLE.COM").ServeHTTP(w, authedRequest(http.MethodGet, "/v1/admin/me", ""))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), `"is_admin":true`) {
+		t.Fatalf("unexpected admin response: %s", w.Body.String())
+	}
+}
+
+func TestSupabaseClientErrorsAreMasked(t *testing.T) {
+	fake := newFakeSupabase(t, func(w http.ResponseWriter, req *http.Request) {
+		if req.URL.Path == "/rest/v1/profiles" {
+			http.Error(w, `{"message":"duplicate key secret raw sql detail","token":"secret-token"}`, http.StatusBadRequest)
+			return
+		}
+		writeFakeJSON(w, http.StatusOK, []map[string]any{})
+	})
+	w := httptest.NewRecorder()
+
+	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPatch, "/v1/me/profile", `{"display_name":"Name"}`))
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	if strings.Contains(body, "duplicate key") || strings.Contains(body, "secret-token") || strings.Contains(body, "raw sql") {
+		t.Fatalf("raw upstream client error leaked: %s", body)
+	}
+	if !strings.Contains(body, "request rejected by upstream service") {
+		t.Fatalf("unexpected masked client error: %s", body)
+	}
+}
+
+func TestUpdateDrinkInviteIsScopedToAuthenticatedRecipientAndPending(t *testing.T) {
+	inviteID := "33333333-4444-5555-6666-777777777777"
+	fake := newFakeSupabase(t, func(w http.ResponseWriter, req *http.Request) {
+		if req.URL.Path == "/rest/v1/drink_invites" && req.Method == http.MethodPatch {
+			writeFakeJSON(w, http.StatusOK, []map[string]any{})
+			return
+		}
+		writeFakeJSON(w, http.StatusOK, []map[string]any{})
+	})
+	w := httptest.NewRecorder()
+
+	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPatch, "/v1/drink-invites/"+inviteID, `{"status":"accepted"}`))
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+	}
+	request, ok := fake.lastRequest("/rest/v1/drink_invites")
+	if !ok {
+		t.Fatal("drink_invites request was not sent")
+	}
+	if got := request.Query.Get("to_user_id"); got != "eq."+testUserID {
+		t.Fatalf("to_user_id filter = %q", got)
+	}
+	if got := request.Query.Get("status"); got != "eq.pending" {
+		t.Fatalf("status filter = %q", got)
+	}
+}
+
+func TestRegisterPushTokenScopesToAuthenticatedUser(t *testing.T) {
+	fake := newFakeSupabase(t, func(w http.ResponseWriter, req *http.Request) {
+		if req.URL.Path == "/rest/v1/push_tokens" && req.Method == http.MethodPost {
+			writeFakeJSON(w, http.StatusCreated, []map[string]any{})
+			return
+		}
+		writeFakeJSON(w, http.StatusOK, []map[string]any{})
+	})
+	w := httptest.NewRecorder()
+
+	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPut, "/v1/me/push-token", `{"token":"device-token","platform":"ios"}`))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+	}
+	request, ok := fake.lastRequest("/rest/v1/push_tokens")
+	if !ok {
+		t.Fatal("push_tokens request was not sent")
+	}
+	if !strings.Contains(request.Body, `"user_id":"`+testUserID+`"`) {
+		t.Fatalf("push token body is not scoped to auth user: %s", request.Body)
+	}
+}
