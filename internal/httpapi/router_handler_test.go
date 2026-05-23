@@ -970,7 +970,7 @@ func TestListFriendsAttachesDrinkStats(t *testing.T) {
 	}
 }
 
-func TestListFriendsMasksDrinkStatsSupabaseError(t *testing.T) {
+func TestListFriendsIgnoresDrinkStatsSupabaseError(t *testing.T) {
 	fake := newFakeSupabase(t, func(w http.ResponseWriter, req *http.Request) {
 		switch req.URL.Path {
 		case "/rest/v1/friendships":
@@ -992,11 +992,18 @@ func TestListFriendsMasksDrinkStatsSupabaseError(t *testing.T) {
 
 	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodGet, "/v1/friends", ""))
 
-	if w.Code != http.StatusInternalServerError {
+	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
 	}
 	body := w.Body.String()
 	if strings.Contains(body, "drink-stats-secret") || strings.Contains(body, "raw upstream detail") {
 		t.Fatalf("raw upstream body leaked: %s", body)
+	}
+	var rows []map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &rows); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows = %d body = %s", len(rows), body)
 	}
 }
