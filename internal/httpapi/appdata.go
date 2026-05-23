@@ -685,7 +685,11 @@ func validateProfilePayload(_ *http.Request, _ string, payload map[string]any) s
 			return "avatar_url must be a string"
 		}
 		if ok {
-			payload["avatar_url"] = strings.TrimSpace(value)
+			value = strings.TrimSpace(value)
+			if len(value) > 4096 {
+				return "avatar_url is too long"
+			}
+			payload["avatar_url"] = value
 		}
 	}
 	payload["updated_at"] = time.Now().UTC().Format(time.RFC3339)

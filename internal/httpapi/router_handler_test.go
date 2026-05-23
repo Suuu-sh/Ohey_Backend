@@ -811,3 +811,95 @@ func TestAdminCreateNotificationSendToAllAndConflictPartialResult(t *testing.T) 
 		t.Fatalf("unexpected send_to_all query: %#v", request.Query)
 	}
 }
+
+func TestUpdateProfileRejectsImmutableAndOversizedFields(t *testing.T) {
+	fake := newFakeSupabase(t, nil)
+	router := testRouter(fake)
+
+	for _, tc := range []struct {
+		name string
+		body string
+		want string
+	}{
+		{name: "gender", body: `{"gender":"male"}`, want: "gender cannot be changed"},
+		{name: "display name length", body: `{"display_name":"` + strings.Repeat("名", 41) + `"}`, want: "display_name must be 1-40 characters"},
+		{name: "avatar length", body: `{"avatar_url":"` + strings.Repeat("x", 4097) + `"}`, want: "avatar_url is too long"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, authedRequest(http.MethodPatch, "/v1/me/profile", tc.body))
+			if w.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+			}
+			if !strings.Contains(w.Body.String(), tc.want) {
+				t.Fatalf("body %q does not contain %q", w.Body.String(), tc.want)
+			}
+		})
+	}
+	if _, ok := fake.lastRequest("/rest/v1/profiles"); ok {
+		t.Fatal("invalid profile payload should not reach Supabase")
+	}
+}
+
+func TestAdminCreateNotificationMasksNonConflictInsertError(t *testing.T) {
+	fake := newFakeSupabase(t, func(w http.ResponseWriter, req *http.Request) {
+		if req.URL.Path == "/rest/v1/notifications" && req.Method == http.MethodPost {
+			http.Error(w, `{"secret":"service-role-leak","message":"raw upstream detail"}`, http.StatusInternalServerError)
+			return
+		}
+		writeFakeJSON(w, http.StatusOK, []map[string]any{})
+	})
+	w := httptest.NewRecorder()
+
+	testRouter(fake, "user@example.com").ServeHTTP(w, authedRequest(http.MethodPost, "/v1/admin/notifications", `{"title":"お知らせ","message":"本文","recipient_user_ids":["`+testUserID+`"]}`))
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	if strings.Contains(body, "service-role-leak") || strings.Contains(body, "raw upstream detail") {
+		t.Fatalf("raw upstream body leaked: %s", body)
+	}
+}
+
+func TestRegisterPushTokenMasksSupabaseError(t *testing.T) {
+	fake := newFakeSupabase(t, func(w http.ResponseWriter, req *http.Request) {
+		if req.URL.Path == "/rest/v1/push_tokens" && req.Method == http.MethodPost {
+			http.Error(w, `{"secret":"push-token-secret","message":"raw upstream detail"}`, http.StatusInternalServerError)
+			return
+		}
+		writeFakeJSON(w, http.StatusOK, []map[string]any{})
+	})
+	w := httptest.NewRecorder()
+
+	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPut, "/v1/me/push-token", `{"token":"device-token","platform":"ios"}`))
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	if strings.Contains(body, "push-token-secret") || strings.Contains(body, "raw upstream detail") {
+		t.Fatalf("raw upstream body leaked: %s", body)
+	}
+}
+
+func TestMarkNotificationsReadMasksSupabaseError(t *testing.T) {
+	fake := newFakeSupabase(t, func(w http.ResponseWriter, req *http.Request) {
+		if req.URL.Path == "/rest/v1/notifications" && req.Method == http.MethodPatch {
+			http.Error(w, `{"secret":"notification-secret","message":"raw upstream detail"}`, http.StatusInternalServerError)
+			return
+		}
+		writeFakeJSON(w, http.StatusOK, []map[string]any{})
+	})
+	w := httptest.NewRecorder()
+
+	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPatch, "/v1/notifications/read-all", `{}`))
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	if strings.Contains(body, "notification-secret") || strings.Contains(body, "raw upstream detail") {
+		t.Fatalf("raw upstream body leaked: %s", body)
+	}
+}
