@@ -27,6 +27,8 @@ type DrinkLog struct {
 	ID           string    `json:"id"`
 	DrankAt      time.Time `json:"drank_at"`
 	PlaceName    string    `json:"place_name,omitempty"`
+	PlaceLat     *float64  `json:"place_lat,omitempty"`
+	PlaceLng     *float64  `json:"place_lng,omitempty"`
 	Memo         string    `json:"memo,omitempty"`
 	PhotoPath    string    `json:"photo_path,omitempty"`
 	LinkURL      string    `json:"link_url,omitempty"`
@@ -39,6 +41,8 @@ type CreateDrinkLogRequest struct {
 	DrankOn               string     `json:"drank_on"`
 	TimezoneOffsetMinutes *int       `json:"timezone_offset_minutes"`
 	PlaceName             string     `json:"place_name"`
+	PlaceLat              *float64   `json:"place_lat"`
+	PlaceLng              *float64   `json:"place_lng"`
 	Memo                  string     `json:"memo"`
 	PhotoPath             string     `json:"photo_path"`
 	MarkerRarity          string     `json:"marker_rarity"`
