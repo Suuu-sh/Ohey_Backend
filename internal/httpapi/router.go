@@ -182,7 +182,7 @@ func (r *router) listDrinkLogs(w http.ResponseWriter, req *http.Request, authTok
 		return
 	}
 
-	selectColumns := "id,owner_user_id,drank_at,place_name,memo,photo_path,link_url,is_official,owner:profiles!drink_logs_owner_user_id_fkey(id,user_id,display_name,gender,character_key,avatar_url,is_plus),drink_log_likes(user_id),drink_log_friends(profiles(id,user_id,display_name,gender,character_key,avatar_url,is_plus))"
+	selectColumns := "id,owner_user_id,drank_at,place_name,memo,photo_path,link_url,marker_rarity,is_official,owner:profiles!drink_logs_owner_user_id_fkey(id,user_id,display_name,gender,character_key,avatar_url,is_plus),drink_log_likes(user_id),drink_log_friends(profiles(id,user_id,display_name,gender,character_key,avatar_url,is_plus))"
 	q := url.Values{}
 	q.Set("select", selectColumns)
 	q.Set("owner_user_id", "in.("+strings.Join(visibleUserIDs, ",")+")")
@@ -278,6 +278,15 @@ func drinkLogRowTime(row map[string]any) time.Time {
 	return time.Time{}
 }
 
+func cleanDrinkLogMarkerRarity(value string) string {
+	switch strings.TrimSpace(value) {
+	case "uncommon", "rare", "super_rare", "ultra_rare", "secret":
+		return strings.TrimSpace(value)
+	default:
+		return "normal"
+	}
+}
+
 func (r *router) createDrinkLog(w http.ResponseWriter, req *http.Request, authToken string) {
 	var input CreateDrinkLogRequest
 	if !decodeJSONBody(w, req, &input) {
@@ -308,6 +317,7 @@ func (r *router) createDrinkLog(w http.ResponseWriter, req *http.Request, authTo
 		"place_name":    strings.TrimSpace(input.PlaceName),
 		"memo":          strings.TrimSpace(input.Memo),
 		"photo_path":    strings.TrimSpace(input.PhotoPath),
+		"marker_rarity": cleanDrinkLogMarkerRarity(input.MarkerRarity),
 		"is_official":   false,
 	}
 	var logs []DrinkLog

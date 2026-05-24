@@ -24,21 +24,23 @@ type Friend struct {
 }
 
 type DrinkLog struct {
-	ID         string    `json:"id"`
-	DrankAt    time.Time `json:"drank_at"`
-	PlaceName  string    `json:"place_name,omitempty"`
-	Memo       string    `json:"memo,omitempty"`
-	PhotoPath  string    `json:"photo_path,omitempty"`
-	LinkURL    string    `json:"link_url,omitempty"`
-	IsOfficial bool      `json:"is_official"`
+	ID           string    `json:"id"`
+	DrankAt      time.Time `json:"drank_at"`
+	PlaceName    string    `json:"place_name,omitempty"`
+	Memo         string    `json:"memo,omitempty"`
+	PhotoPath    string    `json:"photo_path,omitempty"`
+	LinkURL      string    `json:"link_url,omitempty"`
+	MarkerRarity string    `json:"marker_rarity,omitempty"`
+	IsOfficial   bool      `json:"is_official"`
 }
 
 type CreateDrinkLogRequest struct {
-	DrankAt   *time.Time `json:"drank_at"`
-	PlaceName string     `json:"place_name"`
-	Memo      string     `json:"memo"`
-	PhotoPath string     `json:"photo_path"`
-	FriendIDs []string   `json:"friend_ids"`
+	DrankAt      *time.Time `json:"drank_at"`
+	PlaceName    string     `json:"place_name"`
+	Memo         string     `json:"memo"`
+	PhotoPath    string     `json:"photo_path"`
+	MarkerRarity string     `json:"marker_rarity"`
+	FriendIDs    []string   `json:"friend_ids"`
 }
 
 type DailyStatusRequest struct {
@@ -80,24 +82,26 @@ type AdminUpdateUserRequest struct {
 }
 
 type AdminCreateDrinkLogRequest struct {
-	OwnerUserID string    `json:"owner_user_id"`
-	DrankAt     time.Time `json:"drank_at"`
-	PlaceName   string    `json:"place_name"`
-	Memo        string    `json:"memo"`
-	PhotoPath   string    `json:"photo_path"`
-	LinkURL     string    `json:"link_url"`
-	FriendIDs   []string  `json:"friend_ids"`
-	IsOfficial  bool      `json:"is_official"`
+	OwnerUserID  string    `json:"owner_user_id"`
+	DrankAt      time.Time `json:"drank_at"`
+	PlaceName    string    `json:"place_name"`
+	Memo         string    `json:"memo"`
+	PhotoPath    string    `json:"photo_path"`
+	LinkURL      string    `json:"link_url"`
+	MarkerRarity string    `json:"marker_rarity"`
+	FriendIDs    []string  `json:"friend_ids"`
+	IsOfficial   bool      `json:"is_official"`
 }
 
 type AdminUpdateDrinkLogRequest struct {
-	OwnerUserID *string    `json:"owner_user_id"`
-	DrankAt     *time.Time `json:"drank_at"`
-	PlaceName   *string    `json:"place_name"`
-	Memo        *string    `json:"memo"`
-	PhotoPath   *string    `json:"photo_path"`
-	LinkURL     *string    `json:"link_url"`
-	IsOfficial  *bool      `json:"is_official"`
+	OwnerUserID  *string    `json:"owner_user_id"`
+	DrankAt      *time.Time `json:"drank_at"`
+	PlaceName    *string    `json:"place_name"`
+	Memo         *string    `json:"memo"`
+	PhotoPath    *string    `json:"photo_path"`
+	LinkURL      *string    `json:"link_url"`
+	MarkerRarity *string    `json:"marker_rarity"`
+	IsOfficial   *bool      `json:"is_official"`
 }
 
 type AdminCreateSystemNotificationRequest struct {
