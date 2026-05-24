@@ -35,12 +35,14 @@ type DrinkLog struct {
 }
 
 type CreateDrinkLogRequest struct {
-	DrankAt      *time.Time `json:"drank_at"`
-	PlaceName    string     `json:"place_name"`
-	Memo         string     `json:"memo"`
-	PhotoPath    string     `json:"photo_path"`
-	MarkerRarity string     `json:"marker_rarity"`
-	FriendIDs    []string   `json:"friend_ids"`
+	DrankAt               *time.Time `json:"drank_at"`
+	DrankOn               string     `json:"drank_on"`
+	TimezoneOffsetMinutes *int       `json:"timezone_offset_minutes"`
+	PlaceName             string     `json:"place_name"`
+	Memo                  string     `json:"memo"`
+	PhotoPath             string     `json:"photo_path"`
+	MarkerRarity          string     `json:"marker_rarity"`
+	FriendIDs             []string   `json:"friend_ids"`
 }
 
 type DailyStatusRequest struct {

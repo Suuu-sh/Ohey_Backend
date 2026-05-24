@@ -311,6 +311,19 @@ func (r *router) createDrinkLog(w http.ResponseWriter, req *http.Request, authTo
 	if input.DrankAt != nil {
 		drankAt = *input.DrankAt
 	}
+	available, errMessage, err := r.dailyDrinkLogAvailable(req, authToken, ownerUserID, input, drankAt)
+	if err != nil {
+		writeSupabaseError(w, err)
+		return
+	}
+	if errMessage != "" {
+		writeError(w, http.StatusBadRequest, errMessage)
+		return
+	}
+	if !available {
+		writeError(w, http.StatusConflict, "投稿は1日1回までです")
+		return
+	}
 	payload := map[string]any{
 		"owner_user_id": ownerUserID,
 		"drank_at":      drankAt.Format(time.RFC3339),
@@ -339,6 +352,50 @@ func (r *router) createDrinkLog(w http.ResponseWriter, req *http.Request, authTo
 	}
 	r.createDrinkLogTaggedNotifications(req, authToken, logs[0].ID, ownerUserID, friendIDs)
 	writeJSON(w, http.StatusCreated, logs[0])
+}
+
+func (r *router) dailyDrinkLogAvailable(req *http.Request, authToken, ownerUserID string, input CreateDrinkLogRequest, drankAt time.Time) (bool, string, error) {
+	start, end, errMessage := drinkLogDayWindow(input, drankAt)
+	if errMessage != "" {
+		return false, errMessage, nil
+	}
+	q := url.Values{}
+	q.Set("select", "id")
+	q.Set("owner_user_id", "eq."+ownerUserID)
+	q.Set("is_official", "eq.false")
+	q.Add("drank_at", "gte."+start.Format(time.RFC3339))
+	q.Add("drank_at", "lt."+end.Format(time.RFC3339))
+	q.Set("limit", "1")
+	var rows []map[string]any
+	if err := r.deps.Supabase.Get(req.Context(), authToken, "drink_logs", q, &rows); err != nil {
+		return false, "", err
+	}
+	return len(rows) == 0, "", nil
+}
+
+func drinkLogDayWindow(input CreateDrinkLogRequest, drankAt time.Time) (time.Time, time.Time, string) {
+	drankOn := strings.TrimSpace(input.DrankOn)
+	if drankOn == "" {
+		utc := drankAt.UTC()
+		start := time.Date(utc.Year(), utc.Month(), utc.Day(), 0, 0, 0, 0, time.UTC)
+		return start, start.AddDate(0, 0, 1), ""
+	}
+
+	day, err := time.Parse(time.DateOnly, drankOn)
+	if err != nil {
+		return time.Time{}, time.Time{}, "drank_on must be YYYY-MM-DD"
+	}
+	offsetMinutes := 0
+	if input.TimezoneOffsetMinutes != nil {
+		offsetMinutes = *input.TimezoneOffsetMinutes
+	}
+	if offsetMinutes < -14*60 || offsetMinutes > 14*60 {
+		return time.Time{}, time.Time{}, "timezone_offset_minutes is out of range"
+	}
+	location := time.FixedZone("client", offsetMinutes*60)
+	start := time.Date(day.Year(), day.Month(), day.Day(), 0, 0, 0, 0, location)
+	end := start.AddDate(0, 0, 1)
+	return start.UTC(), end.UTC(), ""
 }
 
 func (r *router) validateDrinkLogFriendIDs(req *http.Request, authToken, ownerUserID string, friendIDs []string) (bool, error) {

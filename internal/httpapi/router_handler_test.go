@@ -262,6 +262,10 @@ func TestCreateDrinkLogValidatesFriendIDsAndCreatesLinks(t *testing.T) {
 		case "/rest/v1/friendships":
 			writeFakeJSON(w, http.StatusOK, []map[string]any{{"id": "friendship"}})
 		case "/rest/v1/drink_logs":
+			if req.Method == http.MethodGet {
+				writeFakeJSON(w, http.StatusOK, []map[string]any{})
+				return
+			}
 			writeFakeJSON(w, http.StatusCreated, []map[string]any{{
 				"id":            testLogID,
 				"drank_at":      "2026-05-23T10:00:00Z",
@@ -295,6 +299,52 @@ func TestCreateDrinkLogValidatesFriendIDsAndCreatesLinks(t *testing.T) {
 	}
 	if strings.Count(request.Body, friendID) != 1 {
 		t.Fatalf("friend links were not deduplicated: %s", request.Body)
+	}
+}
+
+func TestCreateDrinkLogRejectsExistingLogOnSameLocalDay(t *testing.T) {
+	insertSent := false
+	fake := newFakeSupabase(t, func(w http.ResponseWriter, req *http.Request) {
+		switch req.URL.Path {
+		case "/rest/v1/friendships":
+			writeFakeJSON(w, http.StatusOK, []map[string]any{{"id": "friendship"}})
+		case "/rest/v1/drink_logs":
+			if req.Method == http.MethodGet {
+				query := req.URL.Query()
+				if got := query.Get("owner_user_id"); got != "eq."+testUserID {
+					t.Fatalf("owner_user_id filter = %q", got)
+				}
+				if got := query.Get("is_official"); got != "eq.false" {
+					t.Fatalf("is_official filter = %q", got)
+				}
+				filters := query["drank_at"]
+				if len(filters) != 2 ||
+					filters[0] != "gte.2026-05-23T15:00:00Z" ||
+					filters[1] != "lt.2026-05-24T15:00:00Z" {
+					t.Fatalf("drank_at filters = %#v", filters)
+				}
+				writeFakeJSON(w, http.StatusOK, []map[string]any{{"id": testLogID}})
+				return
+			}
+			insertSent = true
+			writeFakeJSON(w, http.StatusCreated, []map[string]any{})
+		default:
+			writeFakeJSON(w, http.StatusOK, []map[string]any{})
+		}
+	})
+	body := `{"drank_at":"2026-05-24T12:30:00Z","drank_on":"2026-05-24","timezone_offset_minutes":540,"friend_ids":["` + otherUserID + `"]}`
+	w := httptest.NewRecorder()
+
+	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPost, "/v1/drink-logs", body))
+
+	if w.Code != http.StatusConflict {
+		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+	}
+	if insertSent {
+		t.Fatal("drink log insert was sent despite same-day existing log")
+	}
+	if !strings.Contains(w.Body.String(), "1日1回") {
+		t.Fatalf("body does not explain daily limit: %s", w.Body.String())
 	}
 }
 
