@@ -30,6 +30,7 @@ type DrinkLog struct {
 	PlaceLat     *float64  `json:"place_lat,omitempty"`
 	PlaceLng     *float64  `json:"place_lng,omitempty"`
 	Memo         string    `json:"memo,omitempty"`
+	CaptionY     float64   `json:"caption_y"`
 	PhotoPath    string    `json:"photo_path,omitempty"`
 	LinkURL      string    `json:"link_url,omitempty"`
 	MarkerRarity string    `json:"marker_rarity,omitempty"`
@@ -44,6 +45,7 @@ type CreateDrinkLogRequest struct {
 	PlaceLat              *float64   `json:"place_lat"`
 	PlaceLng              *float64   `json:"place_lng"`
 	Memo                  string     `json:"memo"`
+	CaptionY              *float64   `json:"caption_y"`
 	PhotoPath             string     `json:"photo_path"`
 	MarkerRarity          string     `json:"marker_rarity"`
 	FriendIDs             []string   `json:"friend_ids"`
@@ -92,6 +94,7 @@ type AdminCreateDrinkLogRequest struct {
 	DrankAt      time.Time `json:"drank_at"`
 	PlaceName    string    `json:"place_name"`
 	Memo         string    `json:"memo"`
+	CaptionY     *float64  `json:"caption_y"`
 	PhotoPath    string    `json:"photo_path"`
 	LinkURL      string    `json:"link_url"`
 	MarkerRarity string    `json:"marker_rarity"`
@@ -104,6 +107,7 @@ type AdminUpdateDrinkLogRequest struct {
 	DrankAt      *time.Time `json:"drank_at"`
 	PlaceName    *string    `json:"place_name"`
 	Memo         *string    `json:"memo"`
+	CaptionY     *float64   `json:"caption_y"`
 	PhotoPath    *string    `json:"photo_path"`
 	LinkURL      *string    `json:"link_url"`
 	MarkerRarity *string    `json:"marker_rarity"`

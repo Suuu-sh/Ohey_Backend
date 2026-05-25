@@ -269,7 +269,7 @@ func (r *router) adminDeleteUser(w http.ResponseWriter, req *http.Request, admin
 
 func (r *router) adminListDrinkLogs(w http.ResponseWriter, req *http.Request, _ AuthUser) {
 	q := url.Values{}
-	q.Set("select", "id,owner_user_id,drank_at,place_name,place_lat,place_lng,memo,photo_path,link_url,marker_rarity,is_official,created_at,owner:profiles!drink_logs_owner_user_id_fkey(id,user_id,display_name,avatar_url,is_plus)")
+	q.Set("select", "id,owner_user_id,drank_at,place_name,place_lat,place_lng,memo,caption_y,photo_path,link_url,marker_rarity,is_official,created_at,owner:profiles!drink_logs_owner_user_id_fkey(id,user_id,display_name,avatar_url,is_plus)")
 	q.Set("order", "created_at.desc")
 	q.Set("limit", "80")
 	var rows []map[string]any
@@ -320,6 +320,7 @@ func (r *router) adminCreateDrinkLog(w http.ResponseWriter, req *http.Request, _
 		"drank_at":      drankAt.Format(time.RFC3339),
 		"place_name":    strings.TrimSpace(input.PlaceName),
 		"memo":          strings.TrimSpace(input.Memo),
+		"caption_y":     cleanDrinkLogCaptionY(input.CaptionY),
 		"photo_path":    strings.TrimSpace(input.PhotoPath),
 		"link_url":      strings.TrimSpace(input.LinkURL),
 		"marker_rarity": cleanDrinkLogMarkerRarity(input.MarkerRarity),
@@ -369,6 +370,9 @@ func (r *router) adminUpdateDrinkLog(w http.ResponseWriter, req *http.Request, _
 	}
 	if input.Memo != nil {
 		payload["memo"] = strings.TrimSpace(*input.Memo)
+	}
+	if input.CaptionY != nil {
+		payload["caption_y"] = cleanDrinkLogCaptionY(input.CaptionY)
 	}
 	if input.PhotoPath != nil {
 		payload["photo_path"] = strings.TrimSpace(*input.PhotoPath)
