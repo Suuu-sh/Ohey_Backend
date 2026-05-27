@@ -7,19 +7,17 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
-	"regexp"
 	"sort"
 	"strings"
 	"time"
 	"unicode"
-	"unicode/utf8"
+
+	"github.com/yota/nomo/backend/internal/features/profiles"
 )
 
 const officialProfileUserID = "nomo_official"
 const officialProfileDisplayName = "Nomo公式"
 const officialProfileEmail = "nomo-official@official.nomo.app"
-
-var adminUserIDPattern = regexp.MustCompile(`^[A-Za-z0-9_]{3,24}$`)
 
 func (r *router) adminMe(w http.ResponseWriter, req *http.Request, adminUser AuthUser) {
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -78,7 +76,7 @@ func (r *router) adminCreateUser(w http.ResponseWriter, req *http.Request, _ Aut
 	input.Password = strings.TrimSpace(input.Password)
 	input.UserID = strings.TrimSpace(input.UserID)
 	input.DisplayName = strings.TrimSpace(input.DisplayName)
-	input.Gender = normalizeProfileGender(input.Gender)
+	input.Gender = profiles.NormalizeGender(input.Gender)
 	input.AvatarURL = strings.TrimSpace(input.AvatarURL)
 	input.Status = strings.TrimSpace(input.Status)
 	statusDate, errMessage := cleanDateOnlyOrToday(input.StatusDate, "status_date")
@@ -90,7 +88,7 @@ func (r *router) adminCreateUser(w http.ResponseWriter, req *http.Request, _ Aut
 		writeError(w, http.StatusBadRequest, errMessage)
 		return
 	}
-	if !isValidProfileGender(input.Gender) {
+	if !profiles.IsValidGender(input.Gender) {
 		writeError(w, http.StatusBadRequest, "gender must be male, female, or unspecified")
 		return
 	}
@@ -619,12 +617,11 @@ func (r *router) adminInsertDrinkLogFriends(req *http.Request, drinkLogID string
 }
 
 func validateAdminProfileInput(userID, displayName string) string {
-	if !adminUserIDPattern.MatchString(userID) {
-		return "user_id must be 3-24 letters, numbers, or underscores"
+	if _, err := profiles.CleanUserID(userID); err != nil {
+		return err.Error()
 	}
-	nameLength := utf8.RuneCountInString(displayName)
-	if nameLength < 1 || nameLength > 40 {
-		return "display_name must be 1-40 characters"
+	if _, err := profiles.CleanDisplayName(displayName); err != nil {
+		return err.Error()
 	}
 	return ""
 }

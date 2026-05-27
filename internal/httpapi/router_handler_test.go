@@ -750,6 +750,42 @@ func TestUpdateProfileValidatesUserIDAndScopesToAuthUser(t *testing.T) {
 	}
 }
 
+func TestUpsertProfileNormalizesAndScopesToAuthUser(t *testing.T) {
+	fake := newFakeSupabase(t, func(w http.ResponseWriter, req *http.Request) {
+		if req.URL.Path == "/rest/v1/profiles" && req.Method == http.MethodPost {
+			writeFakeJSON(w, http.StatusOK, []map[string]any{})
+			return
+		}
+		writeFakeJSON(w, http.StatusOK, []map[string]any{})
+	})
+	w := httptest.NewRecorder()
+
+	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPut, "/v1/me/profile", `{"user_id":" valid_user ","display_name":" Name ","gender":"","character_key":"","avatar_url":" avatar.png "}`))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+	}
+	request, ok := fake.lastRequest("/rest/v1/profiles")
+	if !ok {
+		t.Fatal("profiles upsert request was not sent")
+	}
+	if got := request.Query.Get("on_conflict"); got != "id" {
+		t.Fatalf("on_conflict = %q", got)
+	}
+	for _, want := range []string{
+		`"id":"` + testUserID + `"`,
+		`"user_id":"valid_user"`,
+		`"display_name":"Name"`,
+		`"gender":"unspecified"`,
+		`"character_key":"avatar"`,
+		`"avatar_url":"avatar.png"`,
+	} {
+		if !strings.Contains(request.Body, want) {
+			t.Fatalf("profile body %s does not contain %s", request.Body, want)
+		}
+	}
+}
+
 func TestMarkNotificationsReadIsScopedToAuthenticatedRecipient(t *testing.T) {
 	fake := newFakeSupabase(t, func(w http.ResponseWriter, req *http.Request) {
 		if req.URL.Path == "/rest/v1/notifications" && req.Method == http.MethodPatch {

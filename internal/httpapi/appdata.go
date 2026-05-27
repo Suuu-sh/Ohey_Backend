@@ -3,15 +3,14 @@ package httpapi
 import (
 	"context"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/yota/nomo/backend/internal/features/drinkinvites"
 	"github.com/yota/nomo/backend/internal/features/drinklogs"
 	"github.com/yota/nomo/backend/internal/features/friends"
 	"github.com/yota/nomo/backend/internal/features/notifications"
+	"github.com/yota/nomo/backend/internal/features/profiles"
 )
 
 type ProfileSaveRequest struct {
@@ -49,48 +48,34 @@ func (r *router) upsertProfile(w http.ResponseWriter, req *http.Request, authTok
 	if !decodeJSONBody(w, req, &input) {
 		return
 	}
-	input.normalize()
-	if errMessage := input.validate(); errMessage != "" {
-		writeError(w, http.StatusBadRequest, errMessage)
+	row, err := r.profileUsecase().BootstrapProfile(req.Context(), profiles.BootstrapUsecaseInput{
+		AuthToken:  authToken,
+		AuthUserID: req.Header.Get("X-Nomo-User-ID"),
+		Request: profiles.BootstrapRequest{
+			UserID:       input.UserID,
+			DisplayName:  input.DisplayName,
+			Gender:       input.Gender,
+			CharacterKey: input.CharacterKey,
+			AvatarURL:    input.AvatarURL,
+		},
+	})
+	if err != nil {
+		writeProfileError(w, err)
 		return
 	}
-
-	payload := input.profilePayload(req.Header.Get("X-Nomo-User-ID"))
-	q := url.Values{}
-	q.Set("on_conflict", "id")
-	var rows []Profile
-	if err := r.deps.Supabase.Upsert(req.Context(), authToken, "profiles", q, payload, &rows); err != nil {
-		writeSupabaseError(w, err)
-		return
-	}
-	if len(rows) == 0 {
-		writeJSON(w, http.StatusOK, payload)
-		return
-	}
-	writeJSON(w, http.StatusOK, rows[0])
+	writeJSON(w, http.StatusOK, row)
 }
 
 func (r *router) getProfileByUserID(w http.ResponseWriter, req *http.Request, authToken string) {
-	userID := strings.TrimSpace(req.PathValue("user_id"))
-	if !adminUserIDPattern.MatchString(userID) {
-		writeError(w, http.StatusBadRequest, "user_id must be 3-24 letters, numbers, or underscores")
+	profile, err := r.profileUsecase().GetProfileByUserID(req.Context(), profiles.GetByUserIDInput{
+		AuthToken: authToken,
+		UserID:    req.PathValue("user_id"),
+	})
+	if err != nil {
+		writeProfileError(w, err)
 		return
 	}
-
-	q := url.Values{}
-	q.Set("select", "id,user_id,display_name,gender,character_key,avatar_url,is_plus")
-	q.Set("user_id", "eq."+userID)
-	q.Set("limit", "1")
-	var rows []Profile
-	if err := r.deps.Supabase.Get(req.Context(), authToken, "profiles", q, &rows); err != nil {
-		writeSupabaseError(w, err)
-		return
-	}
-	if len(rows) == 0 {
-		writeError(w, http.StatusNotFound, "profile not found")
-		return
-	}
-	writeJSON(w, http.StatusOK, rows[0])
+	writeJSON(w, http.StatusOK, profile)
 }
 
 func (r *router) createFriendship(w http.ResponseWriter, req *http.Request, authToken string) {
@@ -450,117 +435,25 @@ func writeDrinkLogError(w http.ResponseWriter, err error) {
 	writeSupabaseError(w, err)
 }
 
-func (input *ProfileSaveRequest) normalize() {
-	input.UserID = strings.TrimSpace(input.UserID)
-	input.DisplayName = strings.TrimSpace(input.DisplayName)
-	input.Gender = normalizeProfileGender(input.Gender)
-	input.CharacterKey = strings.TrimSpace(input.CharacterKey)
-	input.AvatarURL = strings.TrimSpace(input.AvatarURL)
-	if input.CharacterKey == "" {
-		input.CharacterKey = "avatar"
-	}
+func (r *router) profileUsecase() *profiles.Usecase {
+	return profiles.NewUsecase(profiles.Dependencies{
+		Repository: profiles.NewSupabaseRepository(r.deps.Supabase),
+	})
 }
 
-func (input ProfileSaveRequest) validate() string {
-	if !adminUserIDPattern.MatchString(input.UserID) {
-		return "user_id must be 3-24 letters, numbers, or underscores"
-	}
-	nameLength := utf8.RuneCountInString(input.DisplayName)
-	if nameLength < 1 || nameLength > 40 {
-		return "display_name must be 1-40 characters"
-	}
-	if !isValidProfileGender(input.Gender) {
-		return "gender must be male, female, or unspecified"
-	}
-	return ""
-}
-
-func (input ProfileSaveRequest) profilePayload(authUserID string) map[string]any {
-	return map[string]any{
-		"id":            authUserID,
-		"user_id":       input.UserID,
-		"display_name":  input.DisplayName,
-		"gender":        input.Gender,
-		"character_key": input.CharacterKey,
-		"avatar_url":    input.AvatarURL,
-		"updated_at":    time.Now().UTC().Format(time.RFC3339),
-	}
-}
-
-func validateProfilePayload(_ *http.Request, _ string, payload map[string]any) string {
-	if raw, ok := payload["user_id"]; ok {
-		userID, ok := raw.(string)
-		if !ok {
-			return "user_id must be a string"
+func writeProfileError(w http.ResponseWriter, err error) {
+	if kind, ok := profiles.ErrorKindOf(err); ok {
+		switch kind {
+		case profiles.ErrorKindInvalidInput:
+			writeError(w, http.StatusBadRequest, err.Error())
+		case profiles.ErrorKindNotFound:
+			writeError(w, http.StatusNotFound, err.Error())
+		default:
+			writeError(w, http.StatusBadRequest, err.Error())
 		}
-		userID = strings.TrimSpace(userID)
-		if !adminUserIDPattern.MatchString(userID) {
-			return "user_id must be 3-24 letters, numbers, or underscores"
-		}
-		payload["user_id"] = userID
+		return
 	}
-	if raw, ok := payload["display_name"]; ok {
-		displayName, ok := raw.(string)
-		if !ok {
-			return "display_name must be a string"
-		}
-		displayName = strings.TrimSpace(displayName)
-		nameLength := utf8.RuneCountInString(displayName)
-		if nameLength < 1 || nameLength > 40 {
-			return "display_name must be 1-40 characters"
-		}
-		payload["display_name"] = displayName
-	}
-	if raw, ok := payload["gender"]; ok {
-		gender, ok := raw.(string)
-		if !ok {
-			return "gender must be a string"
-		}
-		gender = normalizeProfileGender(gender)
-		if !isValidProfileGender(gender) {
-			return "gender must be male, female, or unspecified"
-		}
-		payload["gender"] = gender
-	}
-	if raw, ok := payload["character_key"]; ok {
-		value, ok := raw.(string)
-		if !ok {
-			return "character_key must be a string"
-		}
-		payload["character_key"] = strings.TrimSpace(value)
-	}
-	if raw, ok := payload["avatar_url"]; ok {
-		value, ok := raw.(string)
-		if !ok && raw != nil {
-			return "avatar_url must be a string"
-		}
-		if ok {
-			value = strings.TrimSpace(value)
-			if len(value) > 4096 {
-				return "avatar_url is too long"
-			}
-			payload["avatar_url"] = value
-		}
-	}
-	payload["updated_at"] = time.Now().UTC().Format(time.RFC3339)
-	return ""
-}
-
-func normalizeProfileGender(value string) string {
-	gender := strings.ToLower(strings.TrimSpace(value))
-	if gender == "" {
-		return "unspecified"
-	}
-	return gender
-}
-
-func isValidProfileGender(value string) bool {
-	switch normalizeProfileGender(value) {
-	case "unspecified", "male", "female":
-		return true
-	default:
-		return false
-	}
+	writeSupabaseError(w, err)
 }
 
 func dateOnlyParam(req *http.Request, name string) string {

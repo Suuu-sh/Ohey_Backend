@@ -11,6 +11,7 @@ import (
 	"github.com/yota/nomo/backend/internal/config"
 	"github.com/yota/nomo/backend/internal/features/drinklogs"
 	"github.com/yota/nomo/backend/internal/features/friends"
+	"github.com/yota/nomo/backend/internal/features/profiles"
 	"github.com/yota/nomo/backend/internal/supabase"
 )
 
@@ -79,19 +80,15 @@ func (r *router) health(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (r *router) getProfile(w http.ResponseWriter, req *http.Request, authToken string) {
-	var rows []Profile
-	q := url.Values{}
-	q.Set("select", "id,user_id,display_name,gender,character_key,avatar_url,is_plus")
-	q.Set("id", "eq."+req.Header.Get("X-Nomo-User-ID"))
-	if err := r.deps.Supabase.Get(req.Context(), authToken, "profiles", q, &rows); err != nil {
-		writeSupabaseError(w, err)
+	profile, err := r.profileUsecase().GetProfile(req.Context(), profiles.AuthInput{
+		AuthToken:  authToken,
+		AuthUserID: req.Header.Get("X-Nomo-User-ID"),
+	})
+	if err != nil {
+		writeProfileError(w, err)
 		return
 	}
-	if len(rows) == 0 {
-		writeError(w, http.StatusNotFound, "profile not found")
-		return
-	}
-	writeJSON(w, http.StatusOK, rows[0])
+	writeJSON(w, http.StatusOK, profile)
 }
 
 func (r *router) updateProfile(w http.ResponseWriter, req *http.Request, authToken string) {
@@ -99,28 +96,13 @@ func (r *router) updateProfile(w http.ResponseWriter, req *http.Request, authTok
 	if !decodeJSONBody(w, req, &body) {
 		return
 	}
-	allowed := map[string]any{}
-	for _, key := range []string{"display_name", "character_key", "avatar_url"} {
-		if value, ok := body[key]; ok {
-			allowed[key] = value
-		}
-	}
-	if _, ok := body["gender"]; ok {
-		writeError(w, http.StatusBadRequest, "gender cannot be changed")
-		return
-	}
-	if value, ok := body["user_id"]; ok {
-		allowed["user_id"] = value
-	}
-	if errMessage := validateProfilePayload(req, authToken, allowed); errMessage != "" {
-		writeError(w, http.StatusBadRequest, errMessage)
-		return
-	}
-	q := url.Values{}
-	q.Set("id", "eq."+req.Header.Get("X-Nomo-User-ID"))
-	var rows []Profile
-	if err := r.deps.Supabase.Patch(req.Context(), authToken, "profiles", q, allowed, &rows); err != nil {
-		writeSupabaseError(w, err)
+	rows, err := r.profileUsecase().UpdateProfile(req.Context(), profiles.UpdateInput{
+		AuthToken:  authToken,
+		AuthUserID: req.Header.Get("X-Nomo-User-ID"),
+		Body:       body,
+	})
+	if err != nil {
+		writeProfileError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, rows)
