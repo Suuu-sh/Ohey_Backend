@@ -58,6 +58,7 @@ func (r *router) routes() {
 	r.mux.HandleFunc("PUT /v1/daily-status", r.auth(r.upsertDailyStatus))
 	r.mux.HandleFunc("GET /v1/drink-invites/today-reservations", r.auth(r.listTodayReservations))
 	r.mux.HandleFunc("GET /v1/drink-invites/incoming-pending", r.auth(r.listIncomingPendingInvites))
+	r.mux.HandleFunc("GET /v1/drink-invites/outgoing-active", r.auth(r.listOutgoingActiveInvites))
 	r.mux.HandleFunc("POST /v1/drink-invites", r.auth(r.createDrinkInvite))
 	r.mux.HandleFunc("PATCH /v1/drink-invites/{id}", r.auth(r.updateDrinkInvite))
 	r.mux.HandleFunc("GET /v1/admin/me", r.admin(r.adminMe))

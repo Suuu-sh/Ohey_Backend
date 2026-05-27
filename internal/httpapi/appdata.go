@@ -471,6 +471,23 @@ func (r *router) listIncomingPendingInvites(w http.ResponseWriter, req *http.Req
 	writeJSON(w, http.StatusOK, rows)
 }
 
+func (r *router) listOutgoingActiveInvites(w http.ResponseWriter, req *http.Request, authToken string) {
+	userID := req.Header.Get("X-Nomo-User-ID")
+	date := dateOnlyParam(req, "date")
+	q := url.Values{}
+	q.Set("select", drinkInviteSelect)
+	q.Set("invite_date", "eq."+date)
+	q.Set("from_user_id", "eq."+userID)
+	q.Set("status", "in.(pending,accepted)")
+	q.Set("order", "created_at.desc")
+	var rows []map[string]any
+	if err := r.deps.Supabase.Get(req.Context(), authToken, "drink_invites", q, &rows); err != nil {
+		writeSupabaseError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, rows)
+}
+
 func (r *router) createDrinkInvite(w http.ResponseWriter, req *http.Request, authToken string) {
 	var input DrinkInviteRequest
 	if !decodeJSONBody(w, req, &input) {

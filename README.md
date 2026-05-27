@@ -45,6 +45,7 @@ Authenticated requests must include:
 - `PUT /v1/daily-status`
 - `GET /v1/drink-invites/today-reservations?date=YYYY-MM-DD`
 - `GET /v1/drink-invites/incoming-pending?date=YYYY-MM-DD`
+- `GET /v1/drink-invites/outgoing-active?date=YYYY-MM-DD`
 - `POST /v1/drink-invites`
 - `PATCH /v1/drink-invites/{id}`
 - `GET /v1/notifications`
