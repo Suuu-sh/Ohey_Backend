@@ -537,6 +537,26 @@ internal/features/drinkinvites/
 
 ## Migration Priority
 
+## Current Migration Status
+
+2026-05-28 時点で、以下は `internal/features/<feature>` に domain/usecase/repository を持つ形へ移行済み。
+
+- `drinkinvites`
+- `drinklogs`
+- `friends`
+- `notifications`
+- `media`
+- `profiles`
+
+移行済み feature でも、既存 route との接続のために `internal/httpapi` が薄い adapter として残る場合がある。
+この状態は許容するが、新しい業務ルールや Supabase query は `internal/httpapi` に戻さない。
+
+未移行または慎重に扱うもの:
+
+- `admin`
+  - service role を使うため、通常 user feature と同じ slice に混ぜない。
+  - user 向け profile validation を再利用する場合も、service role 境界は admin 側に残す。
+
 ### 1. Drink Invites
 
 理由:
@@ -580,6 +600,64 @@ internal/features/drinkinvites/
 
 - 比較的 CRUD 寄り
 - 最初から重く分ける価値は低い
+- ただし auth user id と公開 `user_id` が混同されると事故が大きいため、user bootstrap / profile update の制約は domain/usecase に集約する
+
+#### Profiles / User Bootstrap の方針
+
+`profiles` は CRUD 寄りだが、認証境界に近いので Feature Slice 化する価値がある。
+特に以下の混同を避ける。
+
+- Supabase Auth の UUID: DB の `profiles.id`。常に authenticated user から取る。
+- 公開ユーザーID: DB の `profiles.user_id`。ユーザーが入力する handle。
+
+実装方針:
+
+- `internal/features/profiles/domain.go` を profile 入力制約の正本にする。
+- `BootstrapProfile` は初回作成/再送用の upsert として扱う。
+- bootstrap payload の `id` は request body ではなく authenticated user id から作る。
+- `UpdateProfile` は authenticated user id に紐づく profile だけを patch する。
+- 通常 user API では caller の Supabase JWT を使い、RLS を最終防衛線にする。
+- admin API が同じ制約を使う場合も、service role 境界は admin 側に残す。
+
+現在の profile 制約:
+
+| 項目 | 制約 |
+| --- | --- |
+| `id` | authenticated user id。UUID 必須。request body から受け取らない |
+| `user_id` | 3〜24文字。英数字と `_` のみ。前後空白は trim |
+| `display_name` | 1〜40文字。前後空白は trim |
+| `gender` | bootstrap 時のみ設定可能。空は `unspecified`。許可値は `unspecified` / `male` / `female` |
+| `character_key` | bootstrap では空なら `avatar`。更新時は文字列として trim |
+| `avatar_url` | `string` または `null`。前後空白は trim。最大 4096 byte |
+| `updated_at` | backend の現在時刻で必ず更新 |
+
+更新制約:
+
+- `gender` の変更は拒否する。
+- 更新できる field は `user_id`, `display_name`, `character_key`, `avatar_url` に限定する。
+- unknown field は repository payload に入れない。
+- validation error は feature error として返し、handler で HTTP status に変換する。
+
+この判断のメリット:
+
+- auth user UUID と公開 `user_id` の取り違えを防げる。
+- 初回作成と更新で同じ制約を使える。
+- admin など別入口でも同じ validation を参照しやすい。
+- profile 周りの事故を usecase/domain test で固定できる。
+
+デメリット:
+
+- CRUD 寄りの処理としてはファイル数が増える。
+- `internal/httpapi` の adapter と `internal/features/profiles` が一時的に混在する。
+- `gender` など更新不可 field を変更したくなった場合、product decision と migration が必要になる。
+
+今後 profile field を増やす場合は、以下を同じ変更で更新する。
+
+1. `internal/features/profiles/domain.go`
+2. `internal/features/profiles/usecase_test.go`
+3. `internal/features/profiles/supabase_repository.go`
+4. 必要な `internal/httpapi` adapter
+5. この docs の制約表
 
 ### 6. Admin
 
