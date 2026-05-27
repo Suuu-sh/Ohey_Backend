@@ -50,6 +50,7 @@ func (r *router) routes() {
 	r.mux.HandleFunc("PUT /v1/drink-logs/{id}/like", r.auth(r.likeDrinkLog))
 	r.mux.HandleFunc("DELETE /v1/drink-logs/{id}/like", r.auth(r.unlikeDrinkLog))
 	r.mux.HandleFunc("POST /v1/drink-logs/{id}/report", r.auth(r.reportDrinkLog))
+	r.mux.HandleFunc("POST /v1/media/upload-url", r.auth(r.createMediaUploadURL))
 	r.mux.HandleFunc("GET /v1/notifications", r.auth(r.listNotifications))
 	r.mux.HandleFunc("PATCH /v1/notifications/read-all", r.auth(r.markNotificationsRead))
 	r.mux.HandleFunc("PUT /v1/me/push-token", r.auth(r.registerPushToken))
