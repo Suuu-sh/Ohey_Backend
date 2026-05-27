@@ -188,6 +188,74 @@ func hasAllowedPhotoExtension(path string) bool {
 	return false
 }
 
+type ReportReason string
+
+const (
+	ReportReasonSpam          ReportReason = "spam"
+	ReportReasonHarassment    ReportReason = "harassment"
+	ReportReasonInappropriate ReportReason = "inappropriate"
+	ReportReasonViolence      ReportReason = "violence"
+	ReportReasonMinorSafety   ReportReason = "minor_safety"
+	ReportReasonOther         ReportReason = "other"
+)
+
+func CleanReportReason(value string) (ReportReason, error) {
+	reason := ReportReason(strings.ToLower(strings.TrimSpace(value)))
+	if reason == "" {
+		return ReportReasonOther, nil
+	}
+	switch reason {
+	case ReportReasonSpam, ReportReasonHarassment, ReportReasonInappropriate, ReportReasonViolence, ReportReasonMinorSafety, ReportReasonOther:
+		return reason, nil
+	default:
+		return "", UserError{Kind: ErrorKindInvalidInput, Message: "report reason is invalid"}
+	}
+}
+
+type ModerationStatus string
+
+const (
+	ModerationStatusPending   ModerationStatus = "pending"
+	ModerationStatusReviewing ModerationStatus = "reviewing"
+	ModerationStatusResolved  ModerationStatus = "resolved"
+	ModerationStatusDismissed ModerationStatus = "dismissed"
+)
+
+func CleanModerationStatus(value string) (ModerationStatus, error) {
+	status := ModerationStatus(strings.ToLower(strings.TrimSpace(value)))
+	switch status {
+	case ModerationStatusPending, ModerationStatusReviewing, ModerationStatusResolved, ModerationStatusDismissed:
+		return status, nil
+	default:
+		return "", UserError{Kind: ErrorKindInvalidInput, Message: "moderation status is invalid"}
+	}
+}
+
+type Report struct {
+	ID             string
+	DrinkLogID     string
+	ReporterUserID string
+	Reason         ReportReason
+	Status         ModerationStatus
+}
+
+func (r Report) EffectiveStatus() ModerationStatus {
+	if r.Status == "" {
+		return ModerationStatusPending
+	}
+	return r.Status
+}
+
+func NewReportBody(report Report, duplicate bool) map[string]any {
+	return map[string]any{
+		"reported":  true,
+		"duplicate": duplicate,
+		"hidden":    true,
+		"reason":    string(report.Reason),
+		"status":    string(report.EffectiveStatus()),
+	}
+}
+
 type NewDrinkLog struct {
 	OwnerUserID  string
 	DrankAt      time.Time

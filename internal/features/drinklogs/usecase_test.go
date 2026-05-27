@@ -26,7 +26,10 @@ type fakeRepository struct {
 	deletedLog     map[string]any
 	likeCreated    bool
 	likeState      LikeState
-	reportExists   bool
+	hiddenIDs      map[string]bool
+	report         *Report
+	reportOwnerID  string
+	createdReport  Report
 
 	newLog NewDrinkLog
 	links  []string
@@ -98,13 +101,27 @@ func (f *fakeRepository) LikeState(context.Context, string, string, string) (Lik
 	return f.likeState, nil
 }
 
-func (f *fakeRepository) ReportExists(context.Context, string, string, string) (bool, error) {
-	f.calls = append(f.calls, "report_exists")
-	return f.reportExists, nil
+func (f *fakeRepository) HiddenDrinkLogIDs(context.Context, string, string) (map[string]bool, error) {
+	f.calls = append(f.calls, "hidden_reports")
+	if f.hiddenIDs != nil {
+		return f.hiddenIDs, nil
+	}
+	return map[string]bool{}, nil
 }
 
-func (f *fakeRepository) CreateReport(context.Context, string, string, string, string) error {
+func (f *fakeRepository) DrinkLogOwnerUserID(context.Context, string, string) (string, error) {
+	f.calls = append(f.calls, "log_owner")
+	return f.reportOwnerID, nil
+}
+
+func (f *fakeRepository) FindReport(context.Context, string, string, string) (*Report, error) {
+	f.calls = append(f.calls, "find_report")
+	return f.report, nil
+}
+
+func (f *fakeRepository) CreateReport(_ context.Context, _ string, report Report) error {
 	f.calls = append(f.calls, "create_report")
+	f.createdReport = report
 	return nil
 }
 
@@ -250,6 +267,76 @@ func TestLikeDrinkLogNotifiesOnlyWhenLikeCreated(t *testing.T) {
 				t.Fatalf("liked notifications = %d, want %d", notifier.liked, tc.wantNotified)
 			}
 		})
+	}
+}
+
+func TestReportDrinkLogCreatesModerationReportAndHidesPost(t *testing.T) {
+	repo := &fakeRepository{reportOwnerID: otherUserID}
+	usecase := NewUsecase(Dependencies{Repository: repo})
+
+	result, err := usecase.ReportDrinkLog(context.Background(), ReportInput{
+		AuthToken:      testAuthToken,
+		LogID:          testLogID,
+		ReporterUserID: testUserID,
+		Reason:         " harassment ",
+	})
+	if err != nil {
+		t.Fatalf("ReportDrinkLog returned error: %v", err)
+	}
+	if !result.Created || result.Body["duplicate"] != false || result.Body["hidden"] != true || result.Body["reason"] != "harassment" {
+		t.Fatalf("result = %#v", result)
+	}
+	if repo.createdReport.DrinkLogID != testLogID || repo.createdReport.ReporterUserID != testUserID || repo.createdReport.Reason != ReportReasonHarassment {
+		t.Fatalf("created report = %#v", repo.createdReport)
+	}
+	if want := []string{"log_owner", "find_report", "create_report"}; !reflect.DeepEqual(repo.calls, want) {
+		t.Fatalf("calls = %v, want %v", repo.calls, want)
+	}
+}
+
+func TestReportDrinkLogRejectsOwnLog(t *testing.T) {
+	repo := &fakeRepository{reportOwnerID: testUserID}
+	usecase := NewUsecase(Dependencies{Repository: repo})
+
+	_, err := usecase.ReportDrinkLog(context.Background(), ReportInput{AuthToken: testAuthToken, LogID: testLogID, ReporterUserID: testUserID})
+	assertUserError(t, err, ErrorKindForbidden, "cannot report your own drink log")
+	if want := []string{"log_owner"}; !reflect.DeepEqual(repo.calls, want) {
+		t.Fatalf("calls = %v, want %v", repo.calls, want)
+	}
+}
+
+func TestReportDrinkLogReturnsDuplicateForExistingReport(t *testing.T) {
+	repo := &fakeRepository{reportOwnerID: otherUserID, report: &Report{ID: "report-id", DrinkLogID: testLogID, ReporterUserID: testUserID, Reason: ReportReasonSpam}}
+	usecase := NewUsecase(Dependencies{Repository: repo})
+
+	result, err := usecase.ReportDrinkLog(context.Background(), ReportInput{AuthToken: testAuthToken, LogID: testLogID, ReporterUserID: testUserID, Reason: "spam"})
+	if err != nil {
+		t.Fatalf("ReportDrinkLog returned error: %v", err)
+	}
+	if result.Created || result.Body["duplicate"] != true || result.Body["status"] != "pending" {
+		t.Fatalf("result = %#v", result)
+	}
+	if want := []string{"log_owner", "find_report"}; !reflect.DeepEqual(repo.calls, want) {
+		t.Fatalf("calls = %v, want %v", repo.calls, want)
+	}
+}
+
+func TestListDrinkLogsExcludesHiddenReportedRows(t *testing.T) {
+	repo := &fakeRepository{
+		logs: []map[string]any{
+			{"id": "visible", "drank_at": "2026-05-24T12:00:00Z", "drink_log_likes": []any{}},
+			{"id": "hidden", "drank_at": "2026-05-24T13:00:00Z", "drink_log_likes": []any{}},
+		},
+		hiddenIDs: map[string]bool{"hidden": true},
+	}
+	usecase := NewUsecase(Dependencies{Repository: repo})
+
+	rows, err := usecase.ListDrinkLogs(context.Background(), ListInput{AuthToken: testAuthToken, UserID: testUserID})
+	if err != nil {
+		t.Fatalf("ListDrinkLogs returned error: %v", err)
+	}
+	if len(rows) != 1 || rows[0]["id"] != "visible" {
+		t.Fatalf("rows = %#v", rows)
 	}
 }
 

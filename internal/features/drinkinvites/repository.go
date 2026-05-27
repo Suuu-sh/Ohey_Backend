@@ -15,7 +15,6 @@ type Repository interface {
 	UpdatePendingInviteStatus(ctx context.Context, authToken, inviteID, recipientUserID string, status InviteStatus, respondedAt time.Time) (map[string]any, error)
 }
 
-type Notifier interface {
-	DrinkInviteReceived(ctx context.Context, authToken string, inviteRow map[string]any)
-	DrinkInviteAccepted(ctx context.Context, authToken string, inviteRow map[string]any)
+type EventPublisher interface {
+	Publish(ctx context.Context, authToken string, event DomainEvent)
 }

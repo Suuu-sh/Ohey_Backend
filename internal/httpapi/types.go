@@ -116,6 +116,11 @@ type AdminUpdateDrinkLogRequest struct {
 	IsOfficial   *bool      `json:"is_official"`
 }
 
+type AdminUpdateDrinkLogReportRequest struct {
+	Status         string `json:"status"`
+	ModerationNote string `json:"moderation_note"`
+}
+
 type AdminCreateSystemNotificationRequest struct {
 	Title            string   `json:"title"`
 	Message          string   `json:"message"`

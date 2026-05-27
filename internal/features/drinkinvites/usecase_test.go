@@ -79,17 +79,12 @@ func (f *fakeRepository) UpdatePendingInviteStatus(_ context.Context, _ string, 
 	return f.updated, nil
 }
 
-type fakeNotifier struct {
-	received int
-	accepted int
+type fakePublisher struct {
+	events []DomainEvent
 }
 
-func (f *fakeNotifier) DrinkInviteReceived(context.Context, string, map[string]any) {
-	f.received++
-}
-
-func (f *fakeNotifier) DrinkInviteAccepted(context.Context, string, map[string]any) {
-	f.accepted++
+func (f *fakePublisher) Publish(_ context.Context, _ string, event DomainEvent) {
+	f.events = append(f.events, event)
 }
 
 func TestCreateDrinkInviteRejectsSelfInviteBeforeRepositoryAccess(t *testing.T) {
@@ -145,8 +140,8 @@ func TestCreateDrinkInviteRejectsExistingAcceptedInvite(t *testing.T) {
 
 func TestCreateDrinkInviteCreatesPendingInviteAndNotifiesRecipient(t *testing.T) {
 	repo := &fakeRepository{}
-	notifier := &fakeNotifier{}
-	usecase := NewUsecase(Dependencies{Repository: repo, Notifier: notifier})
+	publisher := &fakePublisher{}
+	usecase := NewUsecase(Dependencies{Repository: repo, Publisher: publisher})
 
 	row, err := usecase.CreateDrinkInvite(context.Background(), CreateInput{
 		AuthToken:  testAuthToken,
@@ -163,8 +158,8 @@ func TestCreateDrinkInviteCreatesPendingInviteAndNotifiesRecipient(t *testing.T)
 	if repo.createdInvite.InviteDate != "2026-05-23" || repo.createdInvite.FromUserID != testUserID || repo.createdInvite.ToUserID != otherUserID {
 		t.Fatalf("created invite = %#v", repo.createdInvite)
 	}
-	if notifier.received != 1 {
-		t.Fatalf("received notifications = %d, want 1", notifier.received)
+	if len(publisher.events) != 1 || publisher.events[0].Kind != EventDrinkInviteCreated || publisher.events[0].Invite.ToUserID != otherUserID {
+		t.Fatalf("events = %#v", publisher.events)
 	}
 	if want := []string{"daily_status", "find_active", "create"}; !reflect.DeepEqual(repo.calls, want) {
 		t.Fatalf("repository calls = %v, want %v", repo.calls, want)
@@ -173,11 +168,11 @@ func TestCreateDrinkInviteCreatesPendingInviteAndNotifiesRecipient(t *testing.T)
 
 func TestUpdateDrinkInviteAcceptedNotifiesRequester(t *testing.T) {
 	respondedAt := time.Date(2026, 5, 23, 12, 34, 56, 0, time.FixedZone("JST", 9*60*60))
-	repo := &fakeRepository{updated: map[string]any{"id": testInviteID, "status": string(InviteStatusAccepted)}}
-	notifier := &fakeNotifier{}
+	repo := &fakeRepository{updated: map[string]any{"id": testInviteID, "from_user_id": otherUserID, "to_user_id": testUserID, "invite_date": "2026-05-23", "status": string(InviteStatusAccepted)}}
+	publisher := &fakePublisher{}
 	usecase := NewUsecase(Dependencies{
 		Repository: repo,
-		Notifier:   notifier,
+		Publisher:  publisher,
 		Now:        func() time.Time { return respondedAt },
 	})
 
@@ -199,15 +194,15 @@ func TestUpdateDrinkInviteAcceptedNotifiesRequester(t *testing.T) {
 	if got := repo.updatedInvite.respondedAt; !got.Equal(respondedAt.UTC()) {
 		t.Fatalf("respondedAt = %s, want %s", got, respondedAt.UTC())
 	}
-	if notifier.accepted != 1 {
-		t.Fatalf("accepted notifications = %d, want 1", notifier.accepted)
+	if len(publisher.events) != 1 || publisher.events[0].Kind != EventDrinkInviteAccepted {
+		t.Fatalf("events = %#v", publisher.events)
 	}
 }
 
 func TestUpdateDrinkInviteRejectedDoesNotNotify(t *testing.T) {
-	repo := &fakeRepository{updated: map[string]any{"id": testInviteID, "status": string(InviteStatusRejected)}}
-	notifier := &fakeNotifier{}
-	usecase := NewUsecase(Dependencies{Repository: repo, Notifier: notifier})
+	repo := &fakeRepository{updated: map[string]any{"id": testInviteID, "from_user_id": otherUserID, "to_user_id": testUserID, "invite_date": "2026-05-23", "status": string(InviteStatusRejected)}}
+	publisher := &fakePublisher{}
+	usecase := NewUsecase(Dependencies{Repository: repo, Publisher: publisher})
 
 	_, err := usecase.UpdateDrinkInvite(context.Background(), UpdateInput{
 		AuthToken:       testAuthToken,
@@ -218,8 +213,8 @@ func TestUpdateDrinkInviteRejectedDoesNotNotify(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpdateDrinkInvite returned error: %v", err)
 	}
-	if notifier.accepted != 0 {
-		t.Fatalf("accepted notifications = %d, want 0", notifier.accepted)
+	if len(publisher.events) != 0 {
+		t.Fatalf("events = %#v, want none", publisher.events)
 	}
 }
 

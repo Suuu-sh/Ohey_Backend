@@ -7,13 +7,13 @@ import (
 
 type Dependencies struct {
 	Repository Repository
-	Notifier   Notifier
+	Publisher  EventPublisher
 	Now        func() time.Time
 }
 
 type Usecase struct {
 	repository Repository
-	notifier   Notifier
+	publisher  EventPublisher
 	now        func() time.Time
 }
 
@@ -22,7 +22,7 @@ func NewUsecase(deps Dependencies) *Usecase {
 	if now == nil {
 		now = time.Now
 	}
-	return &Usecase{repository: deps.Repository, notifier: deps.Notifier, now: now}
+	return &Usecase{repository: deps.Repository, publisher: deps.Publisher, now: now}
 }
 
 type ListInput struct {
@@ -98,8 +98,10 @@ func (u *Usecase) CreateDrinkInvite(ctx context.Context, input CreateInput) (map
 	if err != nil {
 		return nil, err
 	}
-	if u.notifier != nil {
-		u.notifier.DrinkInviteReceived(ctx, input.AuthToken, row)
+	if u.publisher != nil {
+		if event, ok := NewDrinkInviteCreatedEvent(row); ok {
+			u.publisher.Publish(ctx, input.AuthToken, event)
+		}
 	}
 	return row, nil
 }
@@ -125,8 +127,10 @@ func (u *Usecase) UpdateDrinkInvite(ctx context.Context, input UpdateInput) (map
 	if row == nil {
 		return nil, UserError{Kind: ErrorKindNotFound, Message: "drink invite not found"}
 	}
-	if status == InviteStatusAccepted && u.notifier != nil {
-		u.notifier.DrinkInviteAccepted(ctx, input.AuthToken, row)
+	if status == InviteStatusAccepted && u.publisher != nil {
+		if event, ok := NewDrinkInviteAcceptedEvent(row); ok {
+			u.publisher.Publish(ctx, input.AuthToken, event)
+		}
 	}
 	return row, nil
 }

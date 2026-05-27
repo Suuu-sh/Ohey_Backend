@@ -8,7 +8,9 @@ import (
 
 	"github.com/yota/nomo/backend/internal/features/drinkinvites"
 	"github.com/yota/nomo/backend/internal/features/drinklogs"
+	"github.com/yota/nomo/backend/internal/features/friendgroups"
 	"github.com/yota/nomo/backend/internal/features/friends"
+	"github.com/yota/nomo/backend/internal/features/homefeed"
 	"github.com/yota/nomo/backend/internal/features/notifications"
 	"github.com/yota/nomo/backend/internal/features/profiles"
 )
@@ -97,6 +99,35 @@ func (r *router) createFriendship(w http.ResponseWriter, req *http.Request, auth
 		return
 	}
 	writeJSON(w, http.StatusOK, row)
+}
+
+func (r *router) listFriendGroups(w http.ResponseWriter, req *http.Request, authToken string) {
+	groups, err := r.friendGroupsUsecase().ListFriendGroups(req.Context(), friendgroups.AuthInput{
+		AuthToken: authToken,
+		UserID:    req.Header.Get("X-Nomo-User-ID"),
+	})
+	if err != nil {
+		writeFriendGroupsError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, groups)
+}
+
+func (r *router) saveFriendGroups(w http.ResponseWriter, req *http.Request, authToken string) {
+	var input friendgroups.SaveInputBody
+	if !decodeJSONBody(w, req, &input) {
+		return
+	}
+	groups, err := r.friendGroupsUsecase().SaveFriendGroups(req.Context(), friendgroups.SaveInput{
+		AuthToken: authToken,
+		UserID:    req.Header.Get("X-Nomo-User-ID"),
+		Body:      input,
+	})
+	if err != nil {
+		writeFriendGroupsError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, groups)
 }
 
 func (r *router) getFriendRequestStatus(w http.ResponseWriter, req *http.Request, authToken string) {
@@ -194,6 +225,18 @@ func (r *router) reportDrinkLog(w http.ResponseWriter, req *http.Request, authTo
 		return
 	}
 	writeJSON(w, http.StatusOK, result.Body)
+}
+
+func (r *router) listHomeFeed(w http.ResponseWriter, req *http.Request, authToken string) {
+	rows, err := r.homeFeedUsecase().ListHomeFeed(req.Context(), homefeed.ListInput{
+		AuthToken: authToken,
+		UserID:    req.Header.Get("X-Nomo-User-ID"),
+	})
+	if err != nil {
+		writeHomeFeedError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, rows)
 }
 
 func (r *router) listNotifications(w http.ResponseWriter, req *http.Request, authToken string) {
@@ -304,7 +347,7 @@ func (r *router) updateDrinkInvite(w http.ResponseWriter, req *http.Request, aut
 func (r *router) drinkInviteUsecase(req *http.Request) *drinkinvites.Usecase {
 	return drinkinvites.NewUsecase(drinkinvites.Dependencies{
 		Repository: drinkinvites.NewSupabaseRepository(r.deps.Supabase),
-		Notifier:   drinkInviteNotifier{router: r, req: req},
+		Publisher:  drinkInviteEventPublisher{router: r, req: req},
 	})
 }
 
@@ -335,23 +378,22 @@ func (n friendRequestNotifier) FriendRequestAccepted(_ context.Context, authToke
 	n.router.createFriendRequestAcceptedNotification(n.req, authToken, requestRow)
 }
 
-type drinkInviteNotifier struct {
+type drinkInviteEventPublisher struct {
 	router *router
 	req    *http.Request
 }
 
-func (n drinkInviteNotifier) DrinkInviteReceived(_ context.Context, authToken string, inviteRow map[string]any) {
-	if n.router == nil || n.req == nil {
+func (p drinkInviteEventPublisher) Publish(_ context.Context, authToken string, event drinkinvites.DomainEvent) {
+	if p.router == nil || p.req == nil {
 		return
 	}
-	n.router.createDrinkInviteReceivedNotification(n.req, authToken, inviteRow)
-}
-
-func (n drinkInviteNotifier) DrinkInviteAccepted(_ context.Context, authToken string, inviteRow map[string]any) {
-	if n.router == nil || n.req == nil {
-		return
+	row := event.InviteRow()
+	switch event.Kind {
+	case drinkinvites.EventDrinkInviteCreated:
+		p.router.createDrinkInviteReceivedNotification(p.req, authToken, row)
+	case drinkinvites.EventDrinkInviteAccepted:
+		p.router.createDrinkInviteAcceptedNotification(p.req, authToken, row)
 	}
-	n.router.createDrinkInviteAcceptedNotification(n.req, authToken, inviteRow)
 }
 
 func writeDrinkInviteError(w http.ResponseWriter, err error) {
@@ -427,6 +469,46 @@ func writeDrinkLogError(w http.ResponseWriter, err error) {
 			writeError(w, http.StatusNotFound, err.Error())
 		case drinklogs.ErrorKindUpstream:
 			writeError(w, http.StatusBadGateway, "upstream service error")
+		default:
+			writeError(w, http.StatusBadRequest, err.Error())
+		}
+		return
+	}
+	writeSupabaseError(w, err)
+}
+
+func (r *router) friendGroupsUsecase() *friendgroups.Usecase {
+	return friendgroups.NewUsecase(friendgroups.Dependencies{
+		Repository: friendgroups.NewSupabaseRepository(r.deps.Supabase),
+	})
+}
+
+func writeFriendGroupsError(w http.ResponseWriter, err error) {
+	if kind, ok := friendgroups.ErrorKindOf(err); ok {
+		switch kind {
+		case friendgroups.ErrorKindInvalidInput:
+			writeError(w, http.StatusBadRequest, err.Error())
+		case friendgroups.ErrorKindForbidden:
+			writeError(w, http.StatusForbidden, err.Error())
+		default:
+			writeError(w, http.StatusBadRequest, err.Error())
+		}
+		return
+	}
+	writeSupabaseError(w, err)
+}
+
+func (r *router) homeFeedUsecase() *homefeed.Usecase {
+	return homefeed.NewUsecase(homefeed.Dependencies{
+		Repository: homefeed.NewSupabaseRepository(r.deps.Supabase),
+	})
+}
+
+func writeHomeFeedError(w http.ResponseWriter, err error) {
+	if kind, ok := homefeed.ErrorKindOf(err); ok {
+		switch kind {
+		case homefeed.ErrorKindInvalidInput:
+			writeError(w, http.StatusBadRequest, err.Error())
 		default:
 			writeError(w, http.StatusBadRequest, err.Error())
 		}

@@ -17,8 +17,10 @@ type Repository interface {
 	CreateLike(ctx context.Context, authToken, logID, userID string) (bool, error)
 	DeleteLike(ctx context.Context, authToken, logID, userID string) error
 	LikeState(ctx context.Context, authToken, logID, userID string) (LikeState, error)
-	ReportExists(ctx context.Context, authToken, logID, reporterUserID string) (bool, error)
-	CreateReport(ctx context.Context, authToken, logID, reporterUserID, reason string) error
+	HiddenDrinkLogIDs(ctx context.Context, authToken, userID string) (map[string]bool, error)
+	DrinkLogOwnerUserID(ctx context.Context, authToken, logID string) (string, error)
+	FindReport(ctx context.Context, authToken, logID, reporterUserID string) (*Report, error)
+	CreateReport(ctx context.Context, authToken string, report Report) error
 }
 
 type Notifier interface {

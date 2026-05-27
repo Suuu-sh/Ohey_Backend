@@ -185,21 +185,66 @@ func (r *SupabaseRepository) LikeState(ctx context.Context, authToken, logID, us
 	return LikeState{LikeCount: len(likes), LikedByMe: likedByMe}, nil
 }
 
-func (r *SupabaseRepository) ReportExists(ctx context.Context, authToken, logID, reporterUserID string) (bool, error) {
+func (r *SupabaseRepository) HiddenDrinkLogIDs(ctx context.Context, authToken, userID string) (map[string]bool, error) {
 	q := url.Values{}
-	q.Set("select", "id")
+	q.Set("select", "drink_log_id")
+	q.Set("reporter_user_id", "eq."+userID)
+	var rows []map[string]any
+	if err := r.client.Get(ctx, authToken, "drink_log_reports", q, &rows); err != nil {
+		return nil, err
+	}
+	hidden := make(map[string]bool, len(rows))
+	for _, row := range rows {
+		id, _ := row["drink_log_id"].(string)
+		if id != "" {
+			hidden[id] = true
+		}
+	}
+	return hidden, nil
+}
+
+func (r *SupabaseRepository) DrinkLogOwnerUserID(ctx context.Context, authToken, logID string) (string, error) {
+	q := url.Values{}
+	q.Set("select", "owner_user_id")
+	q.Set("id", "eq."+logID)
+	q.Set("limit", "1")
+	var rows []map[string]any
+	if err := r.client.Get(ctx, authToken, "drink_logs", q, &rows); err != nil {
+		return "", err
+	}
+	if len(rows) == 0 {
+		return "", nil
+	}
+	ownerUserID, _ := rows[0]["owner_user_id"].(string)
+	return ownerUserID, nil
+}
+
+func (r *SupabaseRepository) FindReport(ctx context.Context, authToken, logID, reporterUserID string) (*Report, error) {
+	q := url.Values{}
+	q.Set("select", "id,drink_log_id,reporter_user_id,reason")
 	q.Set("drink_log_id", "eq."+logID)
 	q.Set("reporter_user_id", "eq."+reporterUserID)
 	q.Set("limit", "1")
 	var rows []map[string]any
 	if err := r.client.Get(ctx, authToken, "drink_log_reports", q, &rows); err != nil {
-		return false, err
+		return nil, err
 	}
-	return len(rows) > 0, nil
+	if len(rows) == 0 {
+		return nil, nil
+	}
+	row := rows[0]
+	reason, _ := CleanReportReason(stringValue(row, "reason"))
+	return &Report{
+		ID:             stringValue(row, "id"),
+		DrinkLogID:     stringValue(row, "drink_log_id"),
+		ReporterUserID: stringValue(row, "reporter_user_id"),
+		Reason:         reason,
+		Status:         ModerationStatusPending,
+	}, nil
 }
 
-func (r *SupabaseRepository) CreateReport(ctx context.Context, authToken, logID, reporterUserID, reason string) error {
-	payload := map[string]any{"drink_log_id": logID, "reporter_user_id": reporterUserID, "reason": reason}
+func (r *SupabaseRepository) CreateReport(ctx context.Context, authToken string, report Report) error {
+	payload := map[string]any{"drink_log_id": report.DrinkLogID, "reporter_user_id": report.ReporterUserID, "reason": string(report.Reason)}
 	var rows []map[string]any
 	if err := r.client.Post(ctx, authToken, "drink_log_reports", nil, payload, &rows); err != nil {
 		var apiErr supabase.APIError
@@ -209,6 +254,26 @@ func (r *SupabaseRepository) CreateReport(ctx context.Context, authToken, logID,
 		return err
 	}
 	return nil
+}
+
+func stringValue(row map[string]any, key string) string {
+	value, _ := row[key].(string)
+	return value
+}
+
+func HideRowsByID(rows []map[string]any, hiddenIDs map[string]bool) []map[string]any {
+	if len(hiddenIDs) == 0 {
+		return rows
+	}
+	filtered := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
+		id, _ := row["id"].(string)
+		if id != "" && hiddenIDs[id] {
+			continue
+		}
+		filtered = append(filtered, row)
+	}
+	return filtered
 }
 
 func AppendUniqueRows(rows []map[string]any, extraRows ...map[string]any) []map[string]any {

@@ -103,6 +103,62 @@ func ExistingInviteConflictMessage(status InviteStatus) string {
 	return "すでに招待中です。"
 }
 
+type DomainEventKind string
+
+const (
+	EventDrinkInviteCreated  DomainEventKind = "drink_invite.created"
+	EventDrinkInviteAccepted DomainEventKind = "drink_invite.accepted"
+)
+
+type DrinkInvite struct {
+	ID         string
+	FromUserID string
+	ToUserID   string
+	InviteDate string
+	Status     InviteStatus
+}
+
+type DomainEvent struct {
+	Kind   DomainEventKind
+	Invite DrinkInvite
+}
+
+func DrinkInviteFromRow(row map[string]any) DrinkInvite {
+	id, _ := row["id"].(string)
+	fromUserID, _ := row["from_user_id"].(string)
+	toUserID, _ := row["to_user_id"].(string)
+	inviteDate, _ := row["invite_date"].(string)
+	status, _ := row["status"].(string)
+	return DrinkInvite{ID: id, FromUserID: fromUserID, ToUserID: toUserID, InviteDate: inviteDate, Status: InviteStatus(status)}
+}
+
+func NewDrinkInviteCreatedEvent(row map[string]any) (DomainEvent, bool) {
+	invite := DrinkInviteFromRow(row)
+	if invite.ID == "" || invite.FromUserID == "" || invite.ToUserID == "" || invite.FromUserID == invite.ToUserID {
+		return DomainEvent{}, false
+	}
+	return DomainEvent{Kind: EventDrinkInviteCreated, Invite: invite}, true
+}
+
+func NewDrinkInviteAcceptedEvent(row map[string]any) (DomainEvent, bool) {
+	invite := DrinkInviteFromRow(row)
+	if invite.ID == "" || invite.FromUserID == "" || invite.ToUserID == "" || invite.FromUserID == invite.ToUserID {
+		return DomainEvent{}, false
+	}
+	invite.Status = InviteStatusAccepted
+	return DomainEvent{Kind: EventDrinkInviteAccepted, Invite: invite}, true
+}
+
+func (e DomainEvent) InviteRow() map[string]any {
+	return map[string]any{
+		"id":           e.Invite.ID,
+		"from_user_id": e.Invite.FromUserID,
+		"to_user_id":   e.Invite.ToUserID,
+		"invite_date":  e.Invite.InviteDate,
+		"status":       string(e.Invite.Status),
+	}
+}
+
 type NewInvite struct {
 	FromUserID string
 	ToUserID   string

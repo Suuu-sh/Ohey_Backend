@@ -773,3 +773,126 @@ internal/features/drinkinvites/
 > 複雑な feature は Feature Slice 型の軽量 Clean Architecture に寄せる。  
 > ただしフル DDD は目的化しない。  
 > 業務ルールが増える場所だけ domain/usecase/test に集め、Supabase/RLS の強みは維持する。
+
+## 2026-05-28 追加方針: Home Feed / Domain Event / Moderation / Friend Groups
+
+### Home Feed endpoint
+
+Home の表示判断は今後 `GET /v1/home/feed` を優先する。
+既存 `GET /v1/drink-logs` はカレンダーやプロフィールなどの raw drink log 一覧として残し、Home 専用の整形は `internal/features/homefeed` に閉じ込める。
+
+Backend が返す feed row には従来の drink log fields に加えて `feed_item` を付ける。
+`feed_item` は以下を持つ。
+
+- `post_kind`: `mine` / `friend` / `official`
+- `author_name`
+- `displayable`
+- `owned_by_me`
+- `can_like` / `can_report` / `can_delete`
+- `like_count` / `liked_by_me`
+- `photo_path` / `caption_y` / `link_url`
+- `accent_seed` / `tilt` / `prop`
+
+判断理由:
+
+- Mobile が friend list を別途見て feed 表示可否を再判定しなくてよくなる。
+- Home UI のカード表現を変える時、Backend の `feed_item` contract を見ればよい。
+- 将来ランキング、レコメンド、非表示、広告/公式投稿の差し込みを `homefeed` usecase に集約できる。
+
+Trade-off:
+
+- `drinklogs` と `homefeed` で似た Supabase query が一部重複する。
+- `feed_item` が UI 寄りになりすぎると Backend が presentation 詳細を持ちすぎる。
+
+対策:
+
+- Backend は色そのものや layout pixel ではなく、`post_kind`, `accent_seed`, `can_report` のような意味/判断を返す。
+- raw `drink_logs` contract は残し、Home 専用整形は `/v1/home/feed` に限定する。
+
+### drink_invites domain event
+
+`drinkinvites` では、invite 作成・承認時に notification を直接呼ばない。
+usecase は `DomainEvent` を発行し、HTTP adapter が event を notification usecase へ橋渡しする。
+
+現在の event:
+
+- `drink_invite.created`
+- `drink_invite.accepted`
+
+判断理由:
+
+- push 以外に analytics / reminder / activity log を後から足しやすい。
+- usecase の責務が「招待の状態変更」と「イベント発行」までに絞られる。
+- notification の保存・push 送信は subscriber 側に閉じ込められる。
+
+Trade-off:
+
+- 初期実装では in-process event なので、永続 event queue ではない。
+- notification 失敗時の retry はまだ保証しない。
+
+今後 event の信頼性が必要になったら、outbox table か job queue を追加する。
+
+### Report / Moderation
+
+通報は `drink_log_reports` を以下の2つの意味で扱う。
+
+1. moderation queue item
+2. reporter にとっての feed 非表示 signal
+
+Backend 方針:
+
+- report reason は domain で許可値に正規化する。
+- 同じ user が同じ drink log を通報した場合は duplicate として扱い、追加 insert しない。
+- 自分の投稿は通報できない。
+- `homefeed` / `drinklogs` は reporter が通報済みの drink log を除外する。
+- admin は `GET /v1/admin/drink-log-reports` で確認し、migration 適用後は `PATCH /v1/admin/drink-log-reports/{id}` で `status` を更新する。
+
+現在の allowed reason:
+
+- `spam`
+- `harassment`
+- `inappropriate`
+- `violence`
+- `minor_safety`
+- `other`
+
+現在の moderation status:
+
+- `pending`
+- `reviewing`
+- `resolved`
+- `dismissed`
+
+Trade-off:
+
+- report 作成と非表示が同じ table に載るため、将来「通報せず非表示だけ」が必要になったら別 table が必要になる。
+- admin moderation columns は migration 適用前の環境では更新できない。
+
+### Custom Friend Groups
+
+Custom friend groups は Backend API を追加し、Mobile は Backend sync を優先しつつ、migration rollout 中は local cache に fallback する。
+
+Endpoint:
+
+- `GET /v1/friend-groups`
+- `PUT /v1/friend-groups`
+
+Backend model:
+
+- `friend_groups`
+- `friend_group_members`
+
+判断理由:
+
+- 機種変更・複数端末で group が同期できる。
+- group member は既存 friendship であることを usecase と RLS の両方で確認する。
+- `client_id` を持たせ、Mobile 既存 local id と互換にする。
+- 正規化 table にしておくことで、将来の共有 group に拡張しやすい。
+
+Trade-off:
+
+- local-only より保存経路が増える。
+- migration 未適用時は Backend sync が no-op/fallback になる。
+- snapshot 保存は複数 PostgREST call で構成され、完全な transaction ではない。
+
+今後、グループ共有・権限・招待制が必要になったら、`friend_groups.owner_user_id` に加えて membership/role table を追加する。

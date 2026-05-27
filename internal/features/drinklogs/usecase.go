@@ -89,7 +89,12 @@ func (u *Usecase) ListDrinkLogs(ctx context.Context, input ListInput) ([]map[str
 	if err != nil {
 		return nil, err
 	}
+	hiddenIDs, err := u.repository.HiddenDrinkLogIDs(ctx, input.AuthToken, userID)
+	if err != nil {
+		return nil, err
+	}
 	rows = AppendUniqueRows(rows, officialRows...)
+	rows = HideRowsByID(rows, hiddenIDs)
 	AttachLikeState(rows, userID)
 	SortRowsByDrankAtDesc(rows)
 	return rows, nil
@@ -221,22 +226,32 @@ func (u *Usecase) ReportDrinkLog(ctx context.Context, input ReportInput) (Report
 	if err != nil {
 		return ReportResult{}, err
 	}
-	exists, err := u.repository.ReportExists(ctx, input.AuthToken, logID, reporterUserID)
+	reason, err := CleanReportReason(input.Reason)
 	if err != nil {
 		return ReportResult{}, err
 	}
-	body := map[string]any{"reported": true}
-	if exists {
-		return ReportResult{Created: false, Body: body}, nil
-	}
-	reason := strings.TrimSpace(input.Reason)
-	if reason == "" {
-		reason = "other"
-	}
-	if err := u.repository.CreateReport(ctx, input.AuthToken, logID, reporterUserID, reason); err != nil {
+	ownerUserID, err := u.repository.DrinkLogOwnerUserID(ctx, input.AuthToken, logID)
+	if err != nil {
 		return ReportResult{}, err
 	}
-	return ReportResult{Created: true, Body: body}, nil
+	if ownerUserID == "" {
+		return ReportResult{}, UserError{Kind: ErrorKindNotFound, Message: "drink log not found"}
+	}
+	if ownerUserID == reporterUserID {
+		return ReportResult{}, UserError{Kind: ErrorKindForbidden, Message: "cannot report your own drink log"}
+	}
+	existing, err := u.repository.FindReport(ctx, input.AuthToken, logID, reporterUserID)
+	if err != nil {
+		return ReportResult{}, err
+	}
+	if existing != nil {
+		return ReportResult{Created: false, Body: NewReportBody(*existing, true)}, nil
+	}
+	report := Report{DrinkLogID: logID, ReporterUserID: reporterUserID, Reason: reason, Status: ModerationStatusPending}
+	if err := u.repository.CreateReport(ctx, input.AuthToken, report); err != nil {
+		return ReportResult{}, err
+	}
+	return ReportResult{Created: true, Body: NewReportBody(report, false)}, nil
 }
 
 func cleanLikeInput(input LikeInput) (string, string, error) {
