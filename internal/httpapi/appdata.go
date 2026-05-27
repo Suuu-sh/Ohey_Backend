@@ -11,6 +11,7 @@ import (
 
 	"github.com/yota/nomo/backend/internal/features/drinkinvites"
 	"github.com/yota/nomo/backend/internal/features/drinklogs"
+	"github.com/yota/nomo/backend/internal/features/notifications"
 )
 
 type ProfileSaveRequest struct {
@@ -312,92 +313,28 @@ func (r *router) reportDrinkLog(w http.ResponseWriter, req *http.Request, authTo
 }
 
 func (r *router) listNotifications(w http.ResponseWriter, req *http.Request, authToken string) {
-	userID := req.Header.Get("X-Nomo-User-ID")
-	r.createTodayReservationReminderNotifications(req, authToken, userID)
-
-	q := url.Values{}
-	q.Set("select", "id,kind,title,message,created_at,read_at,actor_user_id,drink_log_id,friend_request_id,drink_invite_id,notification_date,system_key,actor:profiles!notifications_actor_user_id_fkey(id,user_id,display_name,avatar_url),friend_request:friend_requests!notifications_friend_request_id_fkey(id,status),drink_invite:drink_invites!notifications_drink_invite_id_fkey(id,status)")
-	q.Set("recipient_user_id", "eq."+userID)
-	q.Set("order", "created_at.desc")
-	q.Set("limit", "50")
-	var rows []map[string]any
-	if err := r.deps.Supabase.Get(req.Context(), authToken, "notifications", q, &rows); err != nil {
-		writeSupabaseError(w, err)
+	rows, err := r.notificationUsecase(req).ListNotifications(req.Context(), notifications.ListInput{
+		AuthToken: authToken,
+		UserID:    req.Header.Get("X-Nomo-User-ID"),
+		Date:      dateOnlyParam(req, "date"),
+	})
+	if err != nil {
+		writeNotificationError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, rows)
 }
 
 func (r *router) markNotificationsRead(w http.ResponseWriter, req *http.Request, authToken string) {
-	userID := req.Header.Get("X-Nomo-User-ID")
-	now := time.Now().UTC().Format(time.RFC3339)
-	q := url.Values{}
-	q.Set("recipient_user_id", "eq."+userID)
-	q.Set("read_at", "is.null")
-	var rows []map[string]any
-	if err := r.deps.Supabase.Patch(req.Context(), authToken, "notifications", q, map[string]any{"read_at": now}, &rows); err != nil {
-		writeSupabaseError(w, err)
+	updatedCount, err := r.notificationUsecase(req).MarkAllRead(req.Context(), notifications.MarkReadInput{
+		AuthToken: authToken,
+		UserID:    req.Header.Get("X-Nomo-User-ID"),
+	})
+	if err != nil {
+		writeNotificationError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"updated_count": len(rows)})
-}
-
-func (r *router) createDrinkLogLikeNotification(req *http.Request, authToken, logID, actorUserID string) {
-	q := url.Values{}
-	q.Set("select", "id,owner_user_id")
-	q.Set("id", "eq."+logID)
-	q.Set("limit", "1")
-	var logs []map[string]any
-	if err := r.deps.Supabase.Get(req.Context(), authToken, "drink_logs", q, &logs); err != nil {
-		r.deps.Logger.Warn("failed to fetch drink log for like notification", "error", err, "drink_log_id", logID)
-		return
-	}
-	if len(logs) == 0 {
-		return
-	}
-	recipientUserID, _ := logs[0]["owner_user_id"].(string)
-	if recipientUserID == "" || recipientUserID == actorUserID {
-		return
-	}
-
-	actorName := r.displayNameForNotification(req, authToken, actorUserID)
-	notification := map[string]any{
-		"recipient_user_id": recipientUserID,
-		"actor_user_id":     actorUserID,
-		"drink_log_id":      logID,
-		"kind":              notificationKindDrinkLogLike,
-		"title":             "思い出にいいねされました",
-		"message":           actorName + "さんがあなたの思い出にいいねしました。",
-	}
-	r.tryInsertNotification(req, notification, notificationKindDrinkLogLike)
-}
-
-func (r *router) displayNameForNotification(req *http.Request, authToken, userID string) string {
-	q := url.Values{}
-	q.Set("select", "display_name,user_id")
-	q.Set("id", "eq."+userID)
-	q.Set("limit", "1")
-	var profiles []map[string]any
-	if r.deps.AdminSupabase != nil && r.deps.Config.SupabaseServiceRoleKey != "" {
-		if err := r.deps.AdminSupabase.Get(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "profiles", q, &profiles); err == nil && len(profiles) > 0 {
-			if name, ok := profiles[0]["display_name"].(string); ok && strings.TrimSpace(name) != "" {
-				return strings.TrimSpace(name)
-			}
-			if userName, ok := profiles[0]["user_id"].(string); ok && strings.TrimSpace(userName) != "" {
-				return strings.TrimSpace(userName)
-			}
-		}
-	}
-	if err := r.deps.Supabase.Get(req.Context(), authToken, "profiles", q, &profiles); err != nil || len(profiles) == 0 {
-		return "フレンズ"
-	}
-	if name, ok := profiles[0]["display_name"].(string); ok && strings.TrimSpace(name) != "" {
-		return strings.TrimSpace(name)
-	}
-	if userName, ok := profiles[0]["user_id"].(string); ok && strings.TrimSpace(userName) != "" {
-		return strings.TrimSpace(userName)
-	}
-	return "フレンズ"
+	writeJSON(w, http.StatusOK, map[string]any{"updated_count": updatedCount})
 }
 
 func (r *router) listTodayReservations(w http.ResponseWriter, req *http.Request, authToken string) {

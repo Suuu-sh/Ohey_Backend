@@ -1,230 +1,41 @@
 package httpapi
 
 import (
-	"errors"
 	"net/http"
-	"net/url"
-	"strings"
-	"time"
 
-	"github.com/yota/nomo/backend/internal/supabase"
+	"github.com/yota/nomo/backend/internal/features/notifications"
 )
 
-const (
-	notificationKindDrinkLogLike             = "drink_log_like"
-	notificationKindFriendRequestReceived    = "friend_request_received"
-	notificationKindFriendRequestAccepted    = "friend_request_accepted"
-	notificationKindDrinkInviteReceived      = "drink_invite_received"
-	notificationKindDrinkInviteAccepted      = "drink_invite_accepted"
-	notificationKindTodayReservationReminder = "today_reservation_reminder"
-	notificationKindDrinkLogTagged           = "drink_log_tagged"
-	notificationKindSystem                   = "system"
-)
-
-func (r *router) insertNotification(req *http.Request, payload map[string]any) (bool, error) {
-	if r.deps.AdminSupabase == nil || r.deps.Config.SupabaseServiceRoleKey == "" {
-		return false, errors.New("admin supabase client is not configured")
-	}
-	var rows []map[string]any
-	if err := r.deps.AdminSupabase.Post(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "notifications", nil, payload, &rows); err != nil {
-		var apiErr supabase.APIError
-		if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusConflict {
-			return false, nil
-		}
-		return false, err
-	}
-	return true, nil
-}
-
-func (r *router) tryInsertNotification(req *http.Request, payload map[string]any, event string) {
-	created, err := r.insertNotification(req, payload)
-	if err != nil {
-		r.logNotificationWarning("failed to create notification", event, err)
-		return
-	}
-	if created {
-		r.sendPushForNotification(req, payload, event)
-	}
-}
-
-func (r *router) sendPushForNotification(req *http.Request, payload map[string]any, event string) {
-	if r.deps.FCM == nil || r.deps.AdminSupabase == nil || r.deps.Config.SupabaseServiceRoleKey == "" {
-		return
-	}
-	recipientID, _ := payload["recipient_user_id"].(string)
-	title, _ := payload["title"].(string)
-	message, _ := payload["message"].(string)
-	if recipientID == "" || title == "" || message == "" {
-		return
-	}
-	q := url.Values{}
-	q.Set("select", "token")
-	q.Set("user_id", "eq."+recipientID)
-	var rows []map[string]any
-	if err := r.deps.AdminSupabase.Get(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "push_tokens", q, &rows); err != nil {
-		r.logNotificationWarning("failed to fetch push tokens", event, err)
-		return
-	}
-	data := map[string]string{"kind": event}
-	for _, key := range []string{"drink_log_id", "friend_request_id", "drink_invite_id"} {
-		if value, ok := payload[key].(string); ok && value != "" {
-			data[key] = value
-		}
-	}
-	for _, row := range rows {
-		token, _ := row["token"].(string)
-		if token == "" {
-			continue
-		}
-		if err := r.deps.FCM.Send(req.Context(), token, title, message, data); err != nil {
-			r.logNotificationWarning("failed to send push notification", event, err)
-		}
-	}
-}
-
-func (r *router) logNotificationWarning(message, event string, err error) {
-	if r.deps.Logger == nil {
-		return
-	}
-	r.deps.Logger.Warn(message, "event", event, "error", err)
+func (r *router) notificationUsecase(_ *http.Request) *notifications.Usecase {
+	return notifications.NewUsecase(notifications.Dependencies{
+		Repository: notifications.NewSupabaseRepository(r.deps.Supabase, r.deps.AdminSupabase, r.deps.Config.SupabaseServiceRoleKey),
+		PushSender: r.deps.FCM,
+		Logger:     r.deps.Logger,
+	})
 }
 
 func (r *router) createFriendRequestReceivedNotification(req *http.Request, authToken string, requestRow map[string]any) {
-	requestID, _ := requestRow["id"].(string)
-	fromUserID, _ := requestRow["from_user_id"].(string)
-	toUserID, _ := requestRow["to_user_id"].(string)
-	if requestID == "" || fromUserID == "" || toUserID == "" || fromUserID == toUserID {
-		return
-	}
-	actorName := r.displayNameForNotification(req, authToken, fromUserID)
-	r.tryInsertNotification(req, map[string]any{
-		"recipient_user_id": toUserID,
-		"actor_user_id":     fromUserID,
-		"friend_request_id": requestID,
-		"kind":              notificationKindFriendRequestReceived,
-		"title":             "フレンズ申請が届きました",
-		"message":           actorName + "さんからフレンズ申請が届きました。",
-	}, notificationKindFriendRequestReceived)
+	r.notificationUsecase(req).NotifyFriendRequestReceived(req.Context(), authToken, requestRow)
 }
 
 func (r *router) createFriendRequestAcceptedNotification(req *http.Request, authToken string, requestRow map[string]any) {
-	requestID, _ := requestRow["id"].(string)
-	fromUserID, _ := requestRow["from_user_id"].(string)
-	toUserID, _ := requestRow["to_user_id"].(string)
-	if requestID == "" || fromUserID == "" || toUserID == "" || fromUserID == toUserID {
-		return
-	}
-	actorName := r.displayNameForNotification(req, authToken, toUserID)
-	r.tryInsertNotification(req, map[string]any{
-		"recipient_user_id": fromUserID,
-		"actor_user_id":     toUserID,
-		"friend_request_id": requestID,
-		"kind":              notificationKindFriendRequestAccepted,
-		"title":             "フレンズ申請が承認されました",
-		"message":           actorName + "さんとフレンズになりました。",
-	}, notificationKindFriendRequestAccepted)
+	r.notificationUsecase(req).NotifyFriendRequestAccepted(req.Context(), authToken, requestRow)
 }
 
 func (r *router) createDrinkInviteReceivedNotification(req *http.Request, authToken string, inviteRow map[string]any) {
-	inviteID, _ := inviteRow["id"].(string)
-	fromUserID, _ := inviteRow["from_user_id"].(string)
-	toUserID, _ := inviteRow["to_user_id"].(string)
-	inviteDate, _ := inviteRow["invite_date"].(string)
-	if inviteID == "" || fromUserID == "" || toUserID == "" || fromUserID == toUserID {
-		return
-	}
-	actorName := r.displayNameForNotification(req, authToken, fromUserID)
-	r.tryInsertNotification(req, map[string]any{
-		"recipient_user_id": toUserID,
-		"actor_user_id":     fromUserID,
-		"drink_invite_id":   inviteID,
-		"notification_date": dateOrNil(inviteDate),
-		"kind":              notificationKindDrinkInviteReceived,
-		"title":             "お誘いが届きました",
-		"message":           actorName + "さんから" + inviteDatePhrase(inviteDate) + "のお誘いが届きました。",
-	}, notificationKindDrinkInviteReceived)
+	r.notificationUsecase(req).NotifyDrinkInviteReceived(req.Context(), authToken, inviteRow)
 }
 
 func (r *router) createDrinkInviteAcceptedNotification(req *http.Request, authToken string, inviteRow map[string]any) {
-	inviteID, _ := inviteRow["id"].(string)
-	fromUserID, _ := inviteRow["from_user_id"].(string)
-	toUserID, _ := inviteRow["to_user_id"].(string)
-	inviteDate, _ := inviteRow["invite_date"].(string)
-	if inviteID == "" || fromUserID == "" || toUserID == "" || fromUserID == toUserID {
-		return
-	}
-	actorName := r.displayNameForNotification(req, authToken, toUserID)
-	r.tryInsertNotification(req, map[string]any{
-		"recipient_user_id": fromUserID,
-		"actor_user_id":     toUserID,
-		"drink_invite_id":   inviteID,
-		"notification_date": dateOrNil(inviteDate),
-		"kind":              notificationKindDrinkInviteAccepted,
-		"title":             "お誘いが承認されました",
-		"message":           actorName + "さんが" + inviteDatePhrase(inviteDate) + "のお誘いを承認しました。",
-	}, notificationKindDrinkInviteAccepted)
+	r.notificationUsecase(req).NotifyDrinkInviteAccepted(req.Context(), authToken, inviteRow)
 }
 
 func (r *router) createDrinkLogTaggedNotifications(req *http.Request, authToken, logID, ownerUserID string, friendIDs []string) {
-	if logID == "" || ownerUserID == "" || len(friendIDs) == 0 {
-		return
-	}
-	actorName := r.displayNameForNotification(req, authToken, ownerUserID)
-	seen := map[string]bool{}
-	for _, rawID := range friendIDs {
-		friendID := strings.TrimSpace(rawID)
-		if friendID == "" || friendID == ownerUserID || seen[friendID] {
-			continue
-		}
-		seen[friendID] = true
-		r.tryInsertNotification(req, map[string]any{
-			"recipient_user_id": friendID,
-			"actor_user_id":     ownerUserID,
-			"drink_log_id":      logID,
-			"kind":              notificationKindDrinkLogTagged,
-			"title":             "思い出に追加されました",
-			"message":           actorName + "さんがあなたを一緒に過ごしたフレンズに追加しました。",
-		}, notificationKindDrinkLogTagged)
-	}
+	r.notificationUsecase(req).NotifyDrinkLogTagged(req.Context(), authToken, logID, ownerUserID, friendIDs)
 }
 
-func (r *router) createTodayReservationReminderNotifications(req *http.Request, authToken, userID string) {
-	if userID == "" {
-		return
-	}
-	date := dateOnlyParam(req, "date")
-	q := url.Values{}
-	q.Set("select", "id,from_user_id,to_user_id,invite_date,status")
-	q.Set("invite_date", "eq."+date)
-	q.Set("status", "eq.accepted")
-	q.Set("or", "(from_user_id.eq."+userID+",to_user_id.eq."+userID+")")
-	var invites []map[string]any
-	if err := r.deps.Supabase.Get(req.Context(), authToken, "drink_invites", q, &invites); err != nil {
-		r.logNotificationWarning("failed to fetch today reservations for notification", notificationKindTodayReservationReminder, err)
-		return
-	}
-	for _, invite := range invites {
-		inviteID, _ := invite["id"].(string)
-		fromUserID, _ := invite["from_user_id"].(string)
-		toUserID, _ := invite["to_user_id"].(string)
-		actorUserID := fromUserID
-		if actorUserID == userID {
-			actorUserID = toUserID
-		}
-		if inviteID == "" || actorUserID == "" || actorUserID == userID {
-			continue
-		}
-		actorName := r.displayNameForNotification(req, authToken, actorUserID)
-		r.tryInsertNotification(req, map[string]any{
-			"recipient_user_id": userID,
-			"actor_user_id":     actorUserID,
-			"drink_invite_id":   inviteID,
-			"notification_date": date,
-			"kind":              notificationKindTodayReservationReminder,
-			"title":             "今日の予定があります",
-			"message":           actorName + "さんとの予定が今日あります。",
-		}, notificationKindTodayReservationReminder)
-	}
+func (r *router) createDrinkLogLikeNotification(req *http.Request, authToken, logID, actorUserID string) {
+	r.notificationUsecase(req).NotifyDrinkLogLiked(req.Context(), authToken, logID, actorUserID)
 }
 
 func (r *router) adminCreateNotification(w http.ResponseWriter, req *http.Request, _ AuthUser) {
@@ -232,111 +43,31 @@ func (r *router) adminCreateNotification(w http.ResponseWriter, req *http.Reques
 	if !decodeJSONBody(w, req, &input) {
 		return
 	}
-	title := shortText(input.Title, 80)
-	message := shortText(input.Message, 500)
-	if title == "" {
-		writeError(w, http.StatusBadRequest, "title is required")
-		return
-	}
-	if message == "" {
-		writeError(w, http.StatusBadRequest, "message is required")
-		return
-	}
-	recipientIDs, errMessage, err := r.notificationRecipientIDs(req, input)
-	if errMessage != "" {
-		writeError(w, http.StatusBadRequest, errMessage)
-		return
-	}
-	if err != nil {
-		writeSupabaseError(w, err)
-		return
-	}
-	if len(recipientIDs) == 0 {
-		writeError(w, http.StatusBadRequest, "recipient_user_ids or send_to_all is required")
-		return
-	}
-
-	createdCount := 0
-	for _, recipientID := range recipientIDs {
-		payload := map[string]any{
-			"recipient_user_id": recipientID,
-			"kind":              notificationKindSystem,
-			"title":             title,
-			"message":           message,
-		}
-		if systemKey := strings.TrimSpace(input.SystemKey); systemKey != "" {
-			payload["system_key"] = systemKey
-		}
-		created, err := r.insertNotification(req, payload)
-		if err != nil {
-			writeSupabaseError(w, err)
-			return
-		}
-		if created {
-			createdCount++
-		}
-	}
-	writeJSON(w, http.StatusCreated, map[string]any{
-		"recipient_count": len(recipientIDs),
-		"created_count":   createdCount,
+	result, err := r.notificationUsecase(req).CreateSystemNotifications(req.Context(), notifications.CreateSystemInput{
+		Title:            input.Title,
+		Message:          input.Message,
+		RecipientUserIDs: input.RecipientUserIDs,
+		SendToAll:        input.SendToAll,
+		SystemKey:        input.SystemKey,
 	})
-}
-
-func (r *router) notificationRecipientIDs(req *http.Request, input AdminCreateSystemNotificationRequest) ([]string, string, error) {
-	seen := map[string]bool{}
-	ids := make([]string, 0, len(input.RecipientUserIDs))
-	add := func(id string) {
-		if id != "" && !seen[id] {
-			seen[id] = true
-			ids = append(ids, id)
-		}
-	}
-	inputIDs, errMessage := cleanUUIDs(input.RecipientUserIDs, "recipient user id")
-	if errMessage != "" {
-		return nil, errMessage, nil
-	}
-	for _, id := range inputIDs {
-		add(id)
-	}
-	if !input.SendToAll {
-		return ids, "", nil
-	}
-	q := url.Values{}
-	q.Set("select", "id")
-	q.Set("order", "created_at.desc")
-	q.Set("limit", "10000")
-	var profiles []map[string]any
-	if err := r.deps.AdminSupabase.Get(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "profiles", q, &profiles); err != nil {
-		return nil, "", err
-	}
-	for _, profile := range profiles {
-		id, _ := profile["id"].(string)
-		if cleanID, errMessage := cleanUUID(id, "recipient user id"); errMessage == "" {
-			add(cleanID)
-		}
-	}
-	return ids, "", nil
-}
-
-func dateOrNil(value string) any {
-	trimmed := strings.TrimSpace(value)
-	if trimmed == "" {
-		return nil
-	}
-	return trimmed
-}
-
-func inviteDatePhrase(value string) string {
-	trimmed := strings.TrimSpace(value)
-	if trimmed == "" {
-		return "今日"
-	}
-	if trimmed == time.Now().Format(time.DateOnly) {
-		return "今日"
-	}
-	parsed, err := time.Parse(time.DateOnly, trimmed)
 	if err != nil {
-		return trimmed
+		writeNotificationError(w, err)
+		return
 	}
-	return parsed.Format("1/2")
+	writeJSON(w, http.StatusCreated, result)
+}
+
+func writeNotificationError(w http.ResponseWriter, err error) {
+	if kind, ok := notifications.ErrorKindOf(err); ok {
+		switch kind {
+		case notifications.ErrorKindInvalidInput:
+			writeError(w, http.StatusBadRequest, err.Error())
+		case notifications.ErrorKindUpstream:
+			writeError(w, http.StatusBadGateway, "upstream service error")
+		default:
+			writeError(w, http.StatusBadRequest, err.Error())
+		}
+		return
+	}
+	writeSupabaseError(w, err)
 }
