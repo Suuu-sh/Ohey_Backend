@@ -10,6 +10,7 @@ import (
 
 	"github.com/yota/nomo/backend/internal/config"
 	"github.com/yota/nomo/backend/internal/features/drinklogs"
+	"github.com/yota/nomo/backend/internal/features/friends"
 	"github.com/yota/nomo/backend/internal/supabase"
 )
 
@@ -126,53 +127,34 @@ func (r *router) updateProfile(w http.ResponseWriter, req *http.Request, authTok
 }
 
 func (r *router) listFriends(w http.ResponseWriter, req *http.Request, authToken string) {
-	q := url.Values{}
-	q.Set(
-		"select",
-		"user_a_id,user_b_id,is_favorite,user_a:profiles!friendships_user_a_id_fkey(id,user_id,display_name,gender,character_key,avatar_url,is_plus),user_b:profiles!friendships_user_b_id_fkey(id,user_id,display_name,gender,character_key,avatar_url,is_plus)",
-	)
-	q.Set("or", "(user_a_id.eq."+req.Header.Get("X-Nomo-User-ID")+",user_b_id.eq."+req.Header.Get("X-Nomo-User-ID")+")")
-	q.Set("order", "created_at.desc")
-	var rows []map[string]any
-	if err := r.deps.Supabase.Get(req.Context(), authToken, "friendships", q, &rows); err != nil {
-		writeSupabaseError(w, err)
+	rows, err := r.friendsUsecase(req).ListFriends(req.Context(), friends.ListInput{
+		AuthToken: authToken,
+		UserID:    req.Header.Get("X-Nomo-User-ID"),
+		Date:      dateOnlyParam(req, "date"),
+	})
+	if err != nil {
+		writeFriendsError(w, err)
 		return
-	}
-	if err := r.attachTodayStatuses(req, authToken, rows); err != nil {
-		writeSupabaseError(w, err)
-		return
-	}
-	if err := r.attachFriendDrinkStats(req, authToken, rows); err != nil {
-		if r.deps.Logger != nil {
-			r.deps.Logger.Warn("failed to attach friend drink stats", "error", err)
-		}
 	}
 	writeJSON(w, http.StatusOK, rows)
 }
 
 func (r *router) updateFriendFavorite(w http.ResponseWriter, req *http.Request, authToken string) {
-	friendID, errMessage := cleanUUID(req.PathValue("id"), "friend id")
-	if errMessage != "" {
-		writeError(w, http.StatusBadRequest, errMessage)
-		return
-	}
 	var input FriendFavoriteRequest
 	if !decodeJSONBody(w, req, &input) {
 		return
 	}
-	userID := req.Header.Get("X-Nomo-User-ID")
-	q := url.Values{}
-	q.Set("or", "(and(user_a_id.eq."+userID+",user_b_id.eq."+friendID+"),and(user_a_id.eq."+friendID+",user_b_id.eq."+userID+"))")
-	var rows []map[string]any
-	if err := r.deps.Supabase.Patch(req.Context(), authToken, "friendships", q, map[string]any{"is_favorite": input.IsFavorite}, &rows); err != nil {
-		writeSupabaseError(w, err)
+	row, err := r.friendsUsecase(req).UpdateFriendFavorite(req.Context(), friends.FavoriteInput{
+		AuthToken:  authToken,
+		UserID:     req.Header.Get("X-Nomo-User-ID"),
+		FriendID:   req.PathValue("id"),
+		IsFavorite: input.IsFavorite,
+	})
+	if err != nil {
+		writeFriendsError(w, err)
 		return
 	}
-	if len(rows) == 0 {
-		writeError(w, http.StatusNotFound, "friendship not found")
-		return
-	}
-	writeJSON(w, http.StatusOK, rows[0])
+	writeJSON(w, http.StatusOK, row)
 }
 
 func (r *router) listDrinkLogs(w http.ResponseWriter, req *http.Request, authToken string) {
