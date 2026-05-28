@@ -120,7 +120,7 @@ func BuildFeedItem(row map[string]any, currentUserID string) (FeedItem, bool) {
 		RankScore:   RankScore(row, currentUserID),
 		AccentSeed:  accentSeed(id),
 		Tilt:        tiltForID(id),
-		Prop:        "beer",
+		Prop:        "memory",
 		Sparkles: []FeedOffset{
 			{X: 12, Y: 18},
 			{X: 54, Y: 2},

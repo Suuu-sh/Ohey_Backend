@@ -54,7 +54,7 @@ func TestListHomeFeedShapesDisplayableItemsAndHidesReports(t *testing.T) {
 		memories: []map[string]any{
 			{
 				"id": "mine", "owner_user_id": testUserID, "happened_at": "2026-05-24T12:00:00Z", "photo_path": "users/me/memories/a.jpg", "caption_y": 0.7,
-				"memo": " hello ", "place_name": " bar ", "owner": map[string]any{"display_name": "Me"}, "memory_likes": []any{map[string]any{"user_id": testUserID}},
+				"memo": " hello ", "place_name": " spot ", "owner": map[string]any{"display_name": "Me"}, "memory_likes": []any{map[string]any{"user_id": testUserID}},
 			},
 			{"id": "hidden", "owner_user_id": friendUserID, "happened_at": "2026-05-24T13:00:00Z", "photo_path": "users/friend/memories/a.jpg", "owner": map[string]any{"display_name": "Friend"}},
 			{"id": "no-photo", "owner_user_id": friendUserID, "happened_at": "2026-05-24T14:00:00Z", "owner": map[string]any{"display_name": "Friend"}},
@@ -77,7 +77,7 @@ func TestListHomeFeedShapesDisplayableItemsAndHidesReports(t *testing.T) {
 	if !ok {
 		t.Fatalf("feed_item = %#v", items[1]["feed_item"])
 	}
-	if feed.PostKind != "mine" || !feed.OwnedByMe || feed.AuthorName != "Me" || feed.Body != "hello" || feed.Place != "bar" {
+	if feed.PostKind != "mine" || !feed.OwnedByMe || feed.AuthorName != "Me" || feed.Body != "hello" || feed.Place != "spot" {
 		t.Fatalf("feed item = %#v", feed)
 	}
 	if feed.LikeCount != 1 || !feed.LikedByMe || !feed.CanDelete || feed.CanReport {

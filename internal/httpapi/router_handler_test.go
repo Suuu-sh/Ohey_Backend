@@ -457,7 +457,7 @@ func TestCreateMemoryValidatesFriendIDsAndCreatesLinks(t *testing.T) {
 				"id":            testMemoryID,
 				"happened_at":   "2026-05-23T10:00:00Z",
 				"owner_user_id": testUserID,
-				"place_name":    "Test Bar",
+				"place_name":    "Test Place",
 				"memo":          "memo",
 				"photo_path":    "",
 				"is_official":   false,
@@ -472,7 +472,7 @@ func TestCreateMemoryValidatesFriendIDsAndCreatesLinks(t *testing.T) {
 			writeFakeJSON(w, http.StatusOK, []map[string]any{})
 		}
 	})
-	body := `{"happened_at":"2026-05-23T10:00:00Z","place_name":" Test Bar ","memo":"memo","friend_ids":["` + friendID + `","` + friendID + `"]}`
+	body := `{"happened_at":"2026-05-23T10:00:00Z","place_name":" Test Place ","memo":"memo","friend_ids":["` + friendID + `","` + friendID + `"]}`
 	w := httptest.NewRecorder()
 
 	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPost, "/v1/memories", body))
