@@ -13,6 +13,21 @@ Last updated: 2026-05-28
 
 Admin endpoint は backend 側で `NOMO_ADMIN_EMAILS` に一致する Supabase Auth user のみ許可します。
 
+## Rate limit / Abuse control
+
+Authenticated write endpoints return `429 Too Many Requests` with `Retry-After` when the per-user limit is exceeded.
+
+Current in-memory limits:
+
+- `POST /v1/drink-logs/{id}/report`: 10 / hour
+- `POST /v1/drink-invites`: 20 / hour
+- `POST /v1/friend-requests`: 20 / hour
+- `POST /v1/media/upload-url`: 30 / hour
+- `POST /v1/user-blocks`: 30 / hour
+- `POST /v1/user-mutes`: 60 / hour
+
+Render single instance 前提の軽量 limiter。複数 instance / 大規模化時は Redis / DB backed limiter に置き換える。
+
 ## Home Feed
 
 ### `GET /v1/home/feed`
@@ -138,6 +153,24 @@ Drink log 削除時は Backend が `nomo-photos` object cleanup を best-effort 
 指定 user の `users/<user_id>/drink_logs` prefix を Storage から確認し、`drink_logs.photo_path` に存在しない object path を候補として返す。実削除はしない。
 
 ## Notifications / Outbox
+
+### `PUT /v1/me/push-token`
+
+Current device token を登録 / refresh する。
+
+```json
+{"token":"<fcm-token>","platform":"ios"}
+```
+
+### `DELETE /v1/me/push-token`
+
+Logout / token refresh 時に current or previous device token を best-effort で削除する。
+
+```json
+{"token":"<fcm-token>"}
+```
+
+FCM が token-specific invalid response を返した場合、Backend は service role で `push_tokens` から対象 token を削除する。
 
 Domain events:
 

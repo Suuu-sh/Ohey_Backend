@@ -720,6 +720,33 @@ func TestRegisterPushTokenScopesToAuthenticatedUser(t *testing.T) {
 	}
 }
 
+func TestUnregisterPushTokenScopesToAuthenticatedUser(t *testing.T) {
+	fake := newFakeSupabase(t, func(w http.ResponseWriter, req *http.Request) {
+		if req.URL.Path == "/rest/v1/push_tokens" && req.Method == http.MethodDelete {
+			writeFakeJSON(w, http.StatusOK, []map[string]any{{"token": "device-token"}})
+			return
+		}
+		writeFakeJSON(w, http.StatusOK, []map[string]any{})
+	})
+	w := httptest.NewRecorder()
+
+	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodDelete, "/v1/me/push-token", `{"token":"device-token"}`))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+	}
+	request, ok := fake.lastRequest("/rest/v1/push_tokens")
+	if !ok {
+		t.Fatal("push_tokens delete request was not sent")
+	}
+	if got := request.Query.Get("token"); got != "eq.device-token" {
+		t.Fatalf("token filter = %q", got)
+	}
+	if got := request.Query.Get("user_id"); got != "eq."+testUserID {
+		t.Fatalf("user_id filter = %q", got)
+	}
+}
+
 func TestUpdateProfileValidatesUserIDAndScopesToAuthUser(t *testing.T) {
 	fake := newFakeSupabase(t, func(w http.ResponseWriter, req *http.Request) {
 		if req.URL.Path == "/rest/v1/profiles" && req.Method == http.MethodPatch {

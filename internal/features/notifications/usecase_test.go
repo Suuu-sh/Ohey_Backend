@@ -26,6 +26,7 @@ type fakeRepository struct {
 	invites          []DrinkInvite
 	allProfileIDs    []string
 	pushTokens       []string
+	deletedTokens    []string
 	createReturn     []bool
 	createCalls      int
 	listCalled       bool
@@ -77,13 +78,29 @@ func (f *fakeRepository) PushTokens(_ context.Context, recipientUserID string) (
 	return f.pushTokens, nil
 }
 
+func (f *fakeRepository) DeletePushToken(_ context.Context, token string) error {
+	f.deletedTokens = append(f.deletedTokens, token)
+	return nil
+}
+
 type fakePushSender struct {
 	sent []map[string]string
+	err  error
 }
 
 func (f *fakePushSender) Send(_ context.Context, token, title, body string, data map[string]string) error {
 	f.sent = append(f.sent, map[string]string{"token": token, "title": title, "body": body, "kind": data["kind"], "drink_log_id": data["drink_log_id"]})
-	return nil
+	return f.err
+}
+
+type fakeInvalidPushTokenError struct{}
+
+func (fakeInvalidPushTokenError) Error() string {
+	return "invalid push token"
+}
+
+func (fakeInvalidPushTokenError) InvalidPushToken() bool {
+	return true
 }
 
 func TestNotifyFriendRequestReceivedCreatesProductCopy(t *testing.T) {
@@ -150,6 +167,22 @@ func TestNotifyDrinkLogLikedSkipsSelfAndPushesOnCreated(t *testing.T) {
 				t.Fatalf("pushes = %d, want %d", len(push.sent), tc.wantPushes)
 			}
 		})
+	}
+}
+
+func TestInvalidPushTokenIsDeletedAfterSendFailure(t *testing.T) {
+	repo := &fakeRepository{
+		drinkLogOwnerID: otherUserID,
+		createReturn:    []bool{true},
+		pushTokens:      []string{"bad-token"},
+	}
+	push := &fakePushSender{err: fakeInvalidPushTokenError{}}
+	usecase := NewUsecase(Dependencies{Repository: repo, PushSender: push})
+
+	usecase.NotifyDrinkLogLiked(context.Background(), testAuthToken, testLogID, testUserID)
+
+	if len(repo.deletedTokens) != 1 || repo.deletedTokens[0] != "bad-token" {
+		t.Fatalf("deletedTokens = %#v, want bad-token", repo.deletedTokens)
 	}
 }
 

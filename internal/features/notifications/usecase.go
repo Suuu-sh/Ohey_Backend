@@ -2,6 +2,7 @@ package notifications
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 )
@@ -318,12 +319,26 @@ func (u *Usecase) tryCreateAndPush(ctx context.Context, authToken string, notifi
 	for _, token := range tokens {
 		if err := u.pushSender.Send(ctx, token, notification.Title, notification.Message, notification.PushData()); err != nil {
 			u.warn("failed to send push notification", notification.Kind, err)
+			if isInvalidPushTokenError(err) {
+				if deleteErr := u.repository.DeletePushToken(ctx, token); deleteErr != nil {
+					u.warn("failed to delete invalid push token", notification.Kind, deleteErr)
+				}
+			}
 			if firstErr == nil {
 				firstErr = err
 			}
 		}
 	}
 	return firstErr
+}
+
+type invalidPushTokenError interface {
+	InvalidPushToken() bool
+}
+
+func isInvalidPushTokenError(err error) bool {
+	var tokenErr invalidPushTokenError
+	return errors.As(err, &tokenErr) && tokenErr.InvalidPushToken()
 }
 
 func (u *Usecase) warn(message string, event Kind, err error) {

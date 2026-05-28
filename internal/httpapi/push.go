@@ -36,6 +36,20 @@ type fcmSender struct {
 	expires time.Time
 }
 
+type fcmSendError struct {
+	status       int
+	body         string
+	invalidToken bool
+}
+
+func (e fcmSendError) Error() string {
+	return fmt.Sprintf("fcm send failed: status=%d body=%s", e.status, e.body)
+}
+
+func (e fcmSendError) InvalidPushToken() bool {
+	return e.invalidToken
+}
+
 func newFCMSender(raw string, httpClient *http.Client) (*fcmSender, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -95,9 +109,21 @@ func (s *fcmSender) Send(ctx context.Context, token, title, body string, data ma
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("fcm send failed: status=%d body=%s", resp.StatusCode, string(respBody))
+		body := string(respBody)
+		return fcmSendError{status: resp.StatusCode, body: body, invalidToken: isInvalidFCMPushTokenResponse(resp.StatusCode, body)}
 	}
 	return nil
+}
+
+func isInvalidFCMPushTokenResponse(status int, body string) bool {
+	normalized := strings.ToUpper(body)
+	if strings.Contains(normalized, "UNREGISTERED") ||
+		strings.Contains(normalized, "SENDER_ID_MISMATCH") {
+		return true
+	}
+	return status == http.StatusBadRequest &&
+		strings.Contains(normalized, "INVALID_ARGUMENT") &&
+		strings.Contains(normalized, "TOKEN")
 }
 
 func (s *fcmSender) accessToken(ctx context.Context) (string, error) {

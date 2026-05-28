@@ -165,6 +165,16 @@ func (r *SupabaseRepository) PushTokens(ctx context.Context, recipientUserID str
 	return tokens, nil
 }
 
+func (r *SupabaseRepository) DeletePushToken(ctx context.Context, token string) error {
+	if r.adminClient == nil || r.serviceRoleKey == "" || strings.TrimSpace(token) == "" {
+		return nil
+	}
+	q := url.Values{}
+	q.Set("token", "eq."+token)
+	var rows []map[string]any
+	return r.adminClient.Delete(ctx, r.serviceRoleKey, "push_tokens", q, &rows)
+}
+
 func displayNameFromProfile(profile map[string]any) string {
 	if name, ok := profile["display_name"].(string); ok && strings.TrimSpace(name) != "" {
 		return strings.TrimSpace(name)

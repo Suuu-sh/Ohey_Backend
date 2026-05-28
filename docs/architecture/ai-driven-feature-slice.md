@@ -1132,3 +1132,91 @@ Trade-off:
 
 API contract は `/docs/api/backend-api-contract.md` に分離した。
 今後 endpoint / request / response を変える時は、実装と同じ commit でこの contract を更新する。
+
+## 2026-05-28 Operational hardening follow-up
+
+### Supabase migration / RLS verification
+
+Added a static Supabase migration contract verifier in Mobile (`scripts/verify_supabase_rls_contract.py`).
+
+判断理由:
+
+- Nomo の Supabase migrations は Mobile repository 側で管理され、GitHub Actions が dev / production に順次適用する。
+- 今回は production 適用を行わず、migration file と RLS contract の破れを先に検出できるようにした。
+- `friend_groups`, `friend_group_members`, `user_blocks`, `user_mutes`, `feed_hidden_drink_logs`, `notification_outbox`, `drink_log_reports`, `push_tokens` を重点確認する。
+
+Trade-off:
+
+- static verifier は実 DB への適用成功を完全保証しない。DB 実適用は GitHub Actions / Supabase migration workflow の責務。
+- Supabase CLI がローカルに無い場合でも確認できる一方、Postgres の全 SQL syntax check ではない。
+
+### Rate limit / abuse control
+
+Authenticated write endpoints に user/action 単位の in-memory fixed-window limiter を追加した。
+
+対象:
+
+- report 連打
+- invite 連打
+- friend request 連打
+- upload-url 連打
+- block / mute 連打
+
+判断理由:
+
+- 公開直後の悪用・誤タップ・簡易 DoS を低コストに抑える。
+- 現状の Render は単一 instance 前提なので、まずは DB schema を増やさない in-memory で十分。
+- `429` + `Retry-After` を返すことで Mobile / Admin が後から UX を整えやすい。
+
+Trade-off:
+
+- instance restart で bucket はリセットされる。
+- 複数 instance 化したら per-instance limit になるため、Redis / DB backed limiter に置き換える。
+- 厳密な abuse 防止ではなく、初期公開向けの摩擦追加。
+
+### Push token lifecycle
+
+Mobile / Backend の push token lifecycle を整理した。
+
+- Mobile startup/login: `PUT /v1/me/push-token`
+- Firebase token refresh: new token 登録 + previous token best-effort 削除
+- logout: current token best-effort 削除
+- FCM invalid token response: Backend が `push_tokens` から token を削除
+
+判断理由:
+
+- 端末変更・再インストール・ログアウト後の古い token に push し続ける事故を減らす。
+- FCM の token-specific failure はユーザー操作なしで cleanup する方が運用負荷が低い。
+
+Trade-off:
+
+- logout cleanup は best-effort。オフライン/logout 失敗時は残る可能性がある。
+- FCM auth/config 系 failure は token 問題ではないため削除しない。outbox / logs で調査する。
+
+### Admin moderation UI minimum
+
+Mobile Admin に pending report queue を追加し、`reviewing` / `resolved` / `dismissed` へ更新できるようにした。
+
+判断理由:
+
+- 公開後、通報が DB に溜まるだけだと運用できない。
+- 最小 UI で状態遷移だけ先に入れておくと、後から詳細確認・非表示・削除 action を追加しやすい。
+
+Trade-off:
+
+- 現時点では詳細 evidence / image preview / bulk action はない。
+- `moderation_note` は固定文言。必要になったら編集欄を追加する。
+
+### Manual notification outbox operations
+
+Render cron は課金対象のため production 未使用とし、manual runbook を追加した。
+
+判断理由:
+
+- ユーザー数が少ない段階で paid cron を常時動かさない。
+- ただし failed/pending outbox を手動で処理できるように operational docs を固定する。
+
+Trade-off:
+
+- cron なし期間は自動再送保証がない。
+- 通知信頼性が要求される規模になったら Render cron / external scheduler / DB-backed worker を再検討する。

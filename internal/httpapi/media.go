@@ -26,6 +26,9 @@ func (r *router) createMediaUploadURL(w http.ResponseWriter, req *http.Request, 
 	if !decodeJSONBody(w, req, &input) {
 		return
 	}
+	if !r.enforceRateLimit(w, req, rateLimitCreateUploadURL) {
+		return
+	}
 	result, err := r.mediaUsecase().CreateUploadURL(req.Context(), media.UploadRequest{
 		Kind:          input.Kind,
 		UserID:        req.Header.Get("X-Nomo-User-ID"),

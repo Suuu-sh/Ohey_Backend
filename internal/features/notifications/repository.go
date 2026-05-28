@@ -14,6 +14,7 @@ type Repository interface {
 	TodayAcceptedInvites(ctx context.Context, authToken, userID, date string) ([]DrinkInvite, error)
 	AllProfileIDs(ctx context.Context) ([]string, error)
 	PushTokens(ctx context.Context, recipientUserID string) ([]string, error)
+	DeletePushToken(ctx context.Context, token string) error
 }
 
 type PushSender interface {

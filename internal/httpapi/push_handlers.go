@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -49,4 +50,38 @@ func (r *router) registerPushToken(w http.ResponseWriter, req *http.Request, aut
 		return
 	}
 	writeJSON(w, http.StatusOK, firstMap(rows, payload))
+}
+
+func (r *router) unregisterPushToken(w http.ResponseWriter, req *http.Request, authToken string) {
+	token := strings.TrimSpace(req.URL.Query().Get("token"))
+	if token == "" && req.Body != nil {
+		var input PushTokenRequest
+		if !decodeJSONBody(w, req, &input) {
+			return
+		}
+		token = strings.TrimSpace(input.Token)
+	}
+	if token == "" {
+		writeError(w, http.StatusBadRequest, "token is required")
+		return
+	}
+	if len(token) > 4096 {
+		writeError(w, http.StatusBadRequest, "token is too long")
+		return
+	}
+
+	q := url.Values{}
+	q.Set("token", "eq."+token)
+	q.Set("user_id", "eq."+req.Header.Get("X-Nomo-User-ID"))
+	var rows []map[string]any
+	if r.deps.AdminSupabase != nil && r.deps.Config.SupabaseServiceRoleKey != "" {
+		if err := r.deps.AdminSupabase.Delete(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "push_tokens", q, &rows); err != nil {
+			writeSupabaseError(w, err)
+			return
+		}
+	} else if err := r.deps.Supabase.Delete(req.Context(), authToken, "push_tokens", q, &rows); err != nil {
+		writeSupabaseError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"deleted": true, "deleted_count": len(rows)})
 }

@@ -24,12 +24,13 @@ type Dependencies struct {
 }
 
 type router struct {
-	deps Dependencies
-	mux  *http.ServeMux
+	deps        Dependencies
+	mux         *http.ServeMux
+	rateLimiter *actionRateLimiter
 }
 
 func NewRouter(deps Dependencies) http.Handler {
-	r := &router{deps: deps, mux: http.NewServeMux()}
+	r := &router{deps: deps, mux: http.NewServeMux(), rateLimiter: newActionRateLimiter(timeNow)}
 	r.routes()
 	return r.withCORS(r.mux)
 }
@@ -66,6 +67,7 @@ func (r *router) routes() {
 	r.mux.HandleFunc("GET /v1/notifications", r.auth(r.listNotifications))
 	r.mux.HandleFunc("PATCH /v1/notifications/read-all", r.auth(r.markNotificationsRead))
 	r.mux.HandleFunc("PUT /v1/me/push-token", r.auth(r.registerPushToken))
+	r.mux.HandleFunc("DELETE /v1/me/push-token", r.auth(r.unregisterPushToken))
 	r.mux.HandleFunc("GET /v1/daily-status", r.auth(r.getDailyStatus))
 	r.mux.HandleFunc("PUT /v1/daily-status", r.auth(r.upsertDailyStatus))
 	r.mux.HandleFunc("GET /v1/daily-statuses/month", r.auth(r.listMonthlyDailyStatuses))

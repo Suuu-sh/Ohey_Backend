@@ -161,6 +161,9 @@ func (r *router) createFriendRequest(w http.ResponseWriter, req *http.Request, a
 	if !decodeJSONBody(w, req, &input) {
 		return
 	}
+	if !r.enforceRateLimit(w, req, rateLimitCreateFriendRequest) {
+		return
+	}
 	row, err := r.friendsUsecase(req).CreateFriendRequest(req.Context(), friends.CreateFriendRequestInput{
 		AuthToken:  authToken,
 		FromUserID: req.Header.Get("X-Nomo-User-ID"),
@@ -223,6 +226,9 @@ func (r *router) reportDrinkLog(w http.ResponseWriter, req *http.Request, authTo
 	if !decodeJSONBody(w, req, &input) {
 		return
 	}
+	if !r.enforceRateLimit(w, req, rateLimitReportDrinkLog) {
+		return
+	}
 	result, err := r.drinkLogUsecase(req).ReportDrinkLog(req.Context(), drinklogs.ReportInput{
 		AuthToken:      authToken,
 		LogID:          req.PathValue("id"),
@@ -243,6 +249,9 @@ func (r *router) reportDrinkLog(w http.ResponseWriter, req *http.Request, authTo
 func (r *router) blockUser(w http.ResponseWriter, req *http.Request, authToken string) {
 	var input UserSafetyUserRequest
 	if !decodeJSONBody(w, req, &input) {
+		return
+	}
+	if !r.enforceRateLimit(w, req, rateLimitBlockUser) {
 		return
 	}
 	row, err := r.userSafetyUsecase().BlockUser(req.Context(), usersafety.UserTargetInput{
@@ -273,6 +282,9 @@ func (r *router) unblockUser(w http.ResponseWriter, req *http.Request, authToken
 func (r *router) muteUser(w http.ResponseWriter, req *http.Request, authToken string) {
 	var input UserSafetyUserRequest
 	if !decodeJSONBody(w, req, &input) {
+		return
+	}
+	if !r.enforceRateLimit(w, req, rateLimitMuteUser) {
 		return
 	}
 	row, err := r.userSafetyUsecase().MuteUser(req.Context(), usersafety.UserTargetInput{
@@ -420,6 +432,9 @@ func (r *router) listOutgoingActiveInvites(w http.ResponseWriter, req *http.Requ
 func (r *router) createDrinkInvite(w http.ResponseWriter, req *http.Request, authToken string) {
 	var input DrinkInviteRequest
 	if !decodeJSONBody(w, req, &input) {
+		return
+	}
+	if !r.enforceRateLimit(w, req, rateLimitCreateDrinkInvite) {
 		return
 	}
 	row, err := r.drinkInviteUsecase(req).CreateDrinkInvite(req.Context(), drinkinvites.CreateInput{
