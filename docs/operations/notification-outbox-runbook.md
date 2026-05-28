@@ -29,7 +29,7 @@ Never expose `SUPABASE_SERVICE_ROLE_KEY` or Firebase service-account values to M
 curl -sS \
   -H "Authorization: Bearer $ADMIN_ACCESS_TOKEN" \
   -H "X-Ohey-User-ID: $ADMIN_USER_ID" \
-  "https://nomo-backend-nezf.onrender.com/v1/admin/notification-outbox?status=failed" | jq .
+  "https://ohey-backend.onrender.com/v1/admin/notification-outbox?status=failed" | jq .
 ```
 
 Supported `status` values:
@@ -54,7 +54,7 @@ Check:
 curl -sS -X POST \
   -H "Authorization: Bearer $ADMIN_ACCESS_TOKEN" \
   -H "X-Ohey-User-ID: $ADMIN_USER_ID" \
-  "https://nomo-backend-nezf.onrender.com/v1/admin/notification-outbox/process?limit=50" | jq .
+  "https://ohey-backend.onrender.com/v1/admin/notification-outbox/process?limit=50" | jq .
 ```
 
 Expected response:

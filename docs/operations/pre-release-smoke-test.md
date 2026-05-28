@@ -28,7 +28,7 @@ python3 scripts/ohey_supabase_runtime_check.py
 Run Backend API smoke against dev/prod Render:
 
 ```bash
-OHEY_BACKEND_URL=https://dev-nomo-backend.onrender.com \
+OHEY_BACKEND_URL=https://dev-ohey-backend.onrender.com \
 SUPABASE_URL=... \
 SUPABASE_PUBLISHABLE_KEY=... \
 OHEY_SMOKE_EMAIL=... \
@@ -99,8 +99,8 @@ Production で `--mutating` を使う場合は、専用 smoke account を使う�
 
 ### 2026-05-28 dev Backend/API smoke after memories/invites rename
 
-- Backend/Supabase target: `https://dev-nomo-backend.onrender.com` + dev-ohey Supabase.
-- Render service: `dev-ohey-backend` (legacy generated URL: `https://dev-nomo-backend.onrender.com`) live on Backend commit `e867637` (`Remove remaining drink-specific feed naming`).
+- Backend/Supabase target: `https://dev-ohey-backend.onrender.com` + dev-ohey Supabase.
+- Render service: `dev-ohey-backend` (generated URL: `https://dev-ohey-backend.onrender.com`) live on Backend commit `e867637` (`Remove remaining drink-specific feed naming`).
 - GitHub Actions: latest `Supabase Dev Migrate` run on `development` succeeded: https://github.com/Suuu-sh/Ohey_Mobile/actions/runs/26572788398
 - Executed with prepared dev users: login, profile bootstrap, daily status/month endpoint, friendship, signed photo upload URL, actual signed Storage upload, memory create, memory list, home feed with uploaded photo (`feed_prop = memory`), like, report, hide/unhide, invite create/list/accept/reservations, mute/unmute, block/unblock, user report, notifications list.
 - Verified old REST tables return missing: `drink_logs`, `drink_invites`, `drink_log_reports`, `feed_hidden_drink_logs`.
