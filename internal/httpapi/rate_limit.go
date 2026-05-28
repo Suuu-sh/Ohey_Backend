@@ -35,6 +35,11 @@ var (
 		Limit:  10,
 		Window: time.Hour,
 	}
+	rateLimitReportUser = rateLimitPolicy{
+		Action: "user_report",
+		Limit:  10,
+		Window: time.Hour,
+	}
 	rateLimitCreateDrinkInvite = rateLimitPolicy{
 		Action: "drink_invite_create",
 		Limit:  20,

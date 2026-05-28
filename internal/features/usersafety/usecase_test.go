@@ -14,6 +14,7 @@ const (
 
 type fakeRepository struct {
 	blocked UserRelation
+	report  UserReport
 	hidden  HiddenDrinkLog
 	cleaned UserRelation
 }
@@ -33,6 +34,10 @@ func (f *fakeRepository) MuteUser(context.Context, string, UserRelation) (map[st
 	return nil, nil
 }
 func (f *fakeRepository) UnmuteUser(context.Context, string, UserRelation) error { return nil }
+func (f *fakeRepository) ReportUser(_ context.Context, _ string, report UserReport) (map[string]any, error) {
+	f.report = report
+	return map[string]any{"reported_user_id": report.ReportedUserID, "reason": report.Reason}, nil
+}
 func (f *fakeRepository) HideDrinkLog(_ context.Context, _ string, hidden HiddenDrinkLog) (map[string]any, error) {
 	f.hidden = hidden
 	return map[string]any{"drink_log_id": hidden.DrinkLogID}, nil
@@ -76,6 +81,39 @@ func TestListBlockedUsersCleansUserID(t *testing.T) {
 	if len(rows) != 1 || rows[0]["id"] != otherUserID {
 		t.Fatalf("rows = %#v", rows)
 	}
+}
+
+func TestReportUserCleansReason(t *testing.T) {
+	repo := &fakeRepository{}
+	usecase := NewUsecase(Dependencies{Repository: repo})
+
+	row, err := usecase.ReportUser(context.Background(), UserTargetInput{
+		AuthToken:    testAuthToken,
+		ActorUserID:  testUserID,
+		TargetUserID: otherUserID,
+		Reason:       "  SPAM ",
+	})
+	if err != nil {
+		t.Fatalf("ReportUser returned error: %v", err)
+	}
+	if repo.report.ReporterUserID != testUserID || repo.report.ReportedUserID != otherUserID || repo.report.Reason != "spam" {
+		t.Fatalf("report = %#v", repo.report)
+	}
+	if row["reported_user_id"] != otherUserID || row["reason"] != "spam" {
+		t.Fatalf("row = %#v", row)
+	}
+}
+
+func TestReportUserRejectsInvalidReason(t *testing.T) {
+	usecase := NewUsecase(Dependencies{Repository: &fakeRepository{}})
+
+	_, err := usecase.ReportUser(context.Background(), UserTargetInput{
+		AuthToken:    testAuthToken,
+		ActorUserID:  testUserID,
+		TargetUserID: otherUserID,
+		Reason:       "bad_reason",
+	})
+	assertUserError(t, err, ErrorKindInvalidInput, "report reason is invalid")
 }
 
 func TestHideDrinkLogCleansIDs(t *testing.T) {

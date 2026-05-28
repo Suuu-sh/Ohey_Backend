@@ -53,7 +53,26 @@ type UserRelation struct {
 	TargetUserID string
 }
 
+type UserReport struct {
+	ReporterUserID string
+	ReportedUserID string
+	Reason         string
+}
+
 type HiddenDrinkLog struct {
 	UserID     string
 	DrinkLogID string
+}
+
+func CleanReportReason(value string) (string, error) {
+	reason := strings.ToLower(strings.TrimSpace(value))
+	if reason == "" {
+		return "other", nil
+	}
+	switch reason {
+	case "spam", "harassment", "inappropriate", "violence", "minor_safety", "other":
+		return reason, nil
+	default:
+		return "", UserError{Kind: ErrorKindInvalidInput, Message: "report reason is invalid"}
+	}
 }

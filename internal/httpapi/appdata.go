@@ -52,6 +52,7 @@ type UserSafetyUserRequest struct {
 	BlockedUserID string `json:"blocked_user_id"`
 	MutedUserID   string `json:"muted_user_id"`
 	UserID        string `json:"user_id"`
+	Reason        string `json:"reason"`
 }
 
 type FeedHiddenDrinkLogRequest struct {
@@ -360,6 +361,27 @@ func (r *router) unmuteUser(w http.ResponseWriter, req *http.Request, authToken 
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"unmuted": true})
+}
+
+func (r *router) reportUser(w http.ResponseWriter, req *http.Request, authToken string) {
+	var input UserSafetyUserRequest
+	if !decodeJSONBody(w, req, &input) {
+		return
+	}
+	if !r.enforceRateLimit(w, req, rateLimitReportUser) {
+		return
+	}
+	row, err := r.userSafetyUsecase().ReportUser(req.Context(), usersafety.UserTargetInput{
+		AuthToken:    authToken,
+		ActorUserID:  req.Header.Get("X-Nomo-User-ID"),
+		TargetUserID: firstNonEmpty(input.TargetUserID, input.UserID),
+		Reason:       input.Reason,
+	})
+	if err != nil {
+		writeUserSafetyError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, row)
 }
 
 func (r *router) hideDrinkLogFromFeed(w http.ResponseWriter, req *http.Request, authToken string) {

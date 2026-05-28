@@ -64,6 +64,7 @@ func (r *router) routes() {
 	r.mux.HandleFunc("POST /v1/user-mutes", r.auth(r.muteUser))
 	r.mux.HandleFunc("GET /v1/user-mutes", r.auth(r.listMutedUsers))
 	r.mux.HandleFunc("DELETE /v1/user-mutes/{id}", r.auth(r.unmuteUser))
+	r.mux.HandleFunc("POST /v1/user-reports", r.auth(r.reportUser))
 	r.mux.HandleFunc("POST /v1/feed-hidden-drink-logs", r.auth(r.hideDrinkLogFromFeed))
 	r.mux.HandleFunc("DELETE /v1/feed-hidden-drink-logs/{id}", r.auth(r.unhideDrinkLogFromFeed))
 	r.mux.HandleFunc("POST /v1/media/upload-url", r.auth(r.createMediaUploadURL))

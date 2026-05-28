@@ -82,6 +82,23 @@ func (r *SupabaseRepository) UnmuteUser(ctx context.Context, authToken string, r
 	return r.client.Delete(ctx, authToken, "user_mutes", q, &ignored)
 }
 
+func (r *SupabaseRepository) ReportUser(ctx context.Context, authToken string, report UserReport) (map[string]any, error) {
+	payload := map[string]any{
+		"reporter_user_id": report.ReporterUserID,
+		"reported_user_id": report.ReportedUserID,
+		"reason":           report.Reason,
+		"status":           "pending",
+		"updated_at":       time.Now().UTC().Format(time.RFC3339),
+	}
+	q := url.Values{}
+	q.Set("on_conflict", "reporter_user_id,reported_user_id")
+	var rows []map[string]any
+	if err := r.client.Upsert(ctx, authToken, "user_reports", q, payload, &rows); err != nil {
+		return nil, err
+	}
+	return firstMap(rows, payload), nil
+}
+
 func (r *SupabaseRepository) HideDrinkLog(ctx context.Context, authToken string, hidden HiddenDrinkLog) (map[string]any, error) {
 	payload := map[string]any{"user_id": hidden.UserID, "drink_log_id": hidden.DrinkLogID}
 	q := url.Values{}

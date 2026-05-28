@@ -18,6 +18,7 @@ type UserTargetInput struct {
 	AuthToken    string
 	ActorUserID  string
 	TargetUserID string
+	Reason       string
 }
 
 type ListInput struct {
@@ -84,6 +85,22 @@ func (u *Usecase) UnmuteUser(ctx context.Context, input UserTargetInput) error {
 		return err
 	}
 	return u.repository.UnmuteUser(ctx, input.AuthToken, relation)
+}
+
+func (u *Usecase) ReportUser(ctx context.Context, input UserTargetInput) (map[string]any, error) {
+	relation, err := cleanUserRelation(input)
+	if err != nil {
+		return nil, err
+	}
+	reason, err := CleanReportReason(input.Reason)
+	if err != nil {
+		return nil, err
+	}
+	return u.repository.ReportUser(ctx, input.AuthToken, UserReport{
+		ReporterUserID: relation.ActorUserID,
+		ReportedUserID: relation.TargetUserID,
+		Reason:         reason,
+	})
 }
 
 func (u *Usecase) HideDrinkLog(ctx context.Context, input DrinkLogInput) (map[string]any, error) {
