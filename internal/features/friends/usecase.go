@@ -54,6 +54,12 @@ type CreateFriendRequestInput struct {
 	FriendID   string
 }
 
+type ListFriendRequestsInput struct {
+	AuthToken string
+	UserID    string
+	Direction string
+}
+
 type UpdateFriendRequestInput struct {
 	AuthToken string
 	RequestID string
@@ -162,6 +168,18 @@ func (u *Usecase) GetFriendRequestStatus(ctx context.Context, input FriendInput)
 		}
 	}
 	return FriendRequestStatus{AlreadyFriend: alreadyFriend, RequestState: requestState, RequestID: requestID}, nil
+}
+
+func (u *Usecase) ListFriendRequests(ctx context.Context, input ListFriendRequestsInput) ([]map[string]any, error) {
+	userID, err := CleanUUID(input.UserID, "user id")
+	if err != nil {
+		return nil, err
+	}
+	direction, err := NormalizeRequestDirection(input.Direction)
+	if err != nil {
+		return nil, err
+	}
+	return u.repository.ListPendingFriendRequests(ctx, input.AuthToken, userID, direction)
 }
 
 func (u *Usecase) CreateFriendRequest(ctx context.Context, input CreateFriendRequestInput) (map[string]any, error) {

@@ -47,6 +47,7 @@ func (r *router) routes() {
 	r.mux.HandleFunc("PUT /v1/friends/{id}/favorite", r.auth(r.updateFriendFavorite))
 	r.mux.HandleFunc("GET /v1/friend-groups", r.auth(r.listFriendGroups))
 	r.mux.HandleFunc("PUT /v1/friend-groups", r.auth(r.saveFriendGroups))
+	r.mux.HandleFunc("GET /v1/friend-requests", r.auth(r.listFriendRequests))
 	r.mux.HandleFunc("GET /v1/friend-requests/status", r.auth(r.getFriendRequestStatus))
 	r.mux.HandleFunc("POST /v1/friend-requests", r.auth(r.createFriendRequest))
 	r.mux.HandleFunc("PATCH /v1/friend-requests/{id}", r.auth(r.updateFriendRequest))

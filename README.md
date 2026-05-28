@@ -42,6 +42,7 @@ Authenticated requests must include:
 - `POST /v1/friends`
 - `DELETE /v1/friends/{id}`
 - `PUT /v1/friends/{id}/favorite`
+- `GET /v1/friend-requests?direction=all|incoming|outgoing`
 - `GET /v1/friend-requests/status?friend_id={id}`
 - `POST /v1/friend-requests`
 - `PATCH /v1/friend-requests/{id}`

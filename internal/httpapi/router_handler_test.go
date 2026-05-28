@@ -368,6 +368,46 @@ func TestGetFriendRequestStatusReturnsRequestID(t *testing.T) {
 	}
 }
 
+func TestListFriendRequestsScopesDirection(t *testing.T) {
+	fake := newFakeSupabase(t, func(w http.ResponseWriter, req *http.Request) {
+		if req.URL.Path == "/rest/v1/friend_requests" && req.Method == http.MethodGet {
+			writeFakeJSON(w, http.StatusOK, []map[string]any{{
+				"id":           testRequestID,
+				"from_user_id": otherUserID,
+				"to_user_id":   testUserID,
+				"status":       "pending",
+				"from_user": map[string]any{
+					"id":           otherUserID,
+					"user_id":      "friend_1",
+					"display_name": "Friend",
+				},
+			}})
+			return
+		}
+		writeFakeJSON(w, http.StatusOK, []map[string]any{})
+	})
+	w := httptest.NewRecorder()
+
+	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodGet, "/v1/friend-requests?direction=incoming", ""))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+	}
+	request, ok := fake.lastRequest("/rest/v1/friend_requests")
+	if !ok {
+		t.Fatal("friend_requests request was not sent")
+	}
+	if got := request.Query.Get("status"); got != "eq.pending" {
+		t.Fatalf("status filter = %q", got)
+	}
+	if got := request.Query.Get("to_user_id"); got != "eq."+testUserID {
+		t.Fatalf("to_user_id filter = %q", got)
+	}
+	if !strings.Contains(request.Query.Get("select"), "from_user:profiles") {
+		t.Fatalf("select missing embedded profile: %q", request.Query.Get("select"))
+	}
+}
+
 func TestListBlockedUsersReturnsTargetProfiles(t *testing.T) {
 	fake := newFakeSupabase(t, func(w http.ResponseWriter, req *http.Request) {
 		switch req.URL.Path {

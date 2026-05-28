@@ -63,6 +63,27 @@ func NormalizeRequestStatus(value string) (RequestStatus, error) {
 	}
 }
 
+type RequestDirection string
+
+const (
+	RequestDirectionAll      RequestDirection = "all"
+	RequestDirectionIncoming RequestDirection = "incoming"
+	RequestDirectionOutgoing RequestDirection = "outgoing"
+)
+
+func NormalizeRequestDirection(value string) (RequestDirection, error) {
+	direction := RequestDirection(strings.TrimSpace(value))
+	if direction == "" {
+		return RequestDirectionAll, nil
+	}
+	switch direction {
+	case RequestDirectionAll, RequestDirectionIncoming, RequestDirectionOutgoing:
+		return direction, nil
+	default:
+		return "", UserError{Kind: ErrorKindInvalidInput, Message: "direction must be all, incoming, or outgoing"}
+	}
+}
+
 func OrderedPair(a, b string) (string, string) {
 	if a < b {
 		return a, b

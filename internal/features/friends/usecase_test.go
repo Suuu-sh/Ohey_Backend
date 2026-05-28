@@ -73,6 +73,11 @@ func (f *fakeRepository) BlockExistsBetweenUsers(context.Context, string, string
 	return f.blocked, nil
 }
 
+func (f *fakeRepository) ListPendingFriendRequests(context.Context, string, string, RequestDirection) ([]map[string]any, error) {
+	f.calls = append(f.calls, "list_requests")
+	return []map[string]any{{"id": testRequestID}}, nil
+}
+
 func (f *fakeRepository) PendingFriendRequestBetween(context.Context, string, string, string) (map[string]any, error) {
 	f.calls = append(f.calls, "pending")
 	return f.pendingRequest, nil
@@ -150,6 +155,22 @@ func TestGetFriendRequestStatusIncludesPendingRequestID(t *testing.T) {
 	}
 	if status.RequestState != "outgoing" || status.RequestID != testRequestID {
 		t.Fatalf("status = %#v", status)
+	}
+}
+
+func TestListFriendRequestsDefaultsToAll(t *testing.T) {
+	repo := &fakeRepository{}
+	usecase := NewUsecase(Dependencies{Repository: repo})
+
+	rows, err := usecase.ListFriendRequests(context.Background(), ListFriendRequestsInput{AuthToken: testAuthToken, UserID: testUserID})
+	if err != nil {
+		t.Fatalf("ListFriendRequests returned error: %v", err)
+	}
+	if len(rows) != 1 || rows[0]["id"] != testRequestID {
+		t.Fatalf("rows = %#v", rows)
+	}
+	if want := []string{"list_requests"}; !reflect.DeepEqual(repo.calls, want) {
+		t.Fatalf("calls = %v, want %v", repo.calls, want)
 	}
 }
 

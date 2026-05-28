@@ -169,6 +169,19 @@ func (r *router) getFriendRequestStatus(w http.ResponseWriter, req *http.Request
 	writeJSON(w, http.StatusOK, status)
 }
 
+func (r *router) listFriendRequests(w http.ResponseWriter, req *http.Request, authToken string) {
+	rows, err := r.friendsUsecase(req).ListFriendRequests(req.Context(), friends.ListFriendRequestsInput{
+		AuthToken: authToken,
+		UserID:    req.Header.Get("X-Nomo-User-ID"),
+		Direction: req.URL.Query().Get("direction"),
+	})
+	if err != nil {
+		writeFriendsError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, rows)
+}
+
 func (r *router) createFriendRequest(w http.ResponseWriter, req *http.Request, authToken string) {
 	var input FriendIDRequest
 	if !decodeJSONBody(w, req, &input) {

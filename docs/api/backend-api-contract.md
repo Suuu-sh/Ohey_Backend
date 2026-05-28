@@ -116,6 +116,17 @@ Response:
 
 `request_state` は `none` / `self` / `outgoing` / `incoming`。pending request がある場合は `request_id` を返す。
 
+### `GET /v1/friend-requests?direction=all|incoming|outgoing`
+
+設定画面の申請管理用。pending friend request を新しい順で返す。`direction` 省略時は `all`。
+
+各 row は raw fields に加えて以下を持ちます。
+
+- `from_user`
+- `to_user`
+
+Mobile は `X-Nomo-User-ID` と `from_user_id` / `to_user_id` を比較し、送信中 / 受信中に分けて表示する。
+
 ### `POST /v1/friend-requests`
 
 Body:

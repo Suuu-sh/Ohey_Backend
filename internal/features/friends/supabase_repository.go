@@ -13,6 +13,7 @@ import (
 )
 
 const friendshipSelectColumns = "user_a_id,user_b_id,is_favorite,user_a:profiles!friendships_user_a_id_fkey(id,user_id,display_name,gender,character_key,avatar_url,is_plus),user_b:profiles!friendships_user_b_id_fkey(id,user_id,display_name,gender,character_key,avatar_url,is_plus)"
+const friendRequestSelectColumns = "id,from_user_id,to_user_id,status,created_at,responded_at,from_user:profiles!friend_requests_from_user_id_fkey(id,user_id,display_name,gender,character_key,avatar_url,is_plus),to_user:profiles!friend_requests_to_user_id_fkey(id,user_id,display_name,gender,character_key,avatar_url,is_plus)"
 
 type SupabaseRepository struct {
 	client         *supabase.Client
@@ -251,6 +252,26 @@ func (r *SupabaseRepository) BlockExistsBetweenUsers(ctx context.Context, authTo
 		return false, err
 	}
 	return len(rows) > 0, nil
+}
+
+func (r *SupabaseRepository) ListPendingFriendRequests(ctx context.Context, authToken, userID string, direction RequestDirection) ([]map[string]any, error) {
+	q := url.Values{}
+	q.Set("select", friendRequestSelectColumns)
+	q.Set("status", "eq.pending")
+	switch direction {
+	case RequestDirectionIncoming:
+		q.Set("to_user_id", "eq."+userID)
+	case RequestDirectionOutgoing:
+		q.Set("from_user_id", "eq."+userID)
+	default:
+		q.Set("or", "(from_user_id.eq."+userID+",to_user_id.eq."+userID+")")
+	}
+	q.Set("order", "created_at.desc")
+	var rows []map[string]any
+	if err := r.client.Get(ctx, authToken, "friend_requests", q, &rows); err != nil {
+		return nil, err
+	}
+	return rows, nil
 }
 
 func (r *SupabaseRepository) PendingFriendRequestBetween(ctx context.Context, authToken, userID, friendID string) (map[string]any, error) {
