@@ -58,6 +58,11 @@ func (f *fakeRepository) UpsertFriendshipPair(context.Context, string, string, s
 	return map[string]any{"id": "friendship"}, nil
 }
 
+func (f *fakeRepository) DeleteFriendship(context.Context, string, string, string) (map[string]any, error) {
+	f.calls = append(f.calls, "delete")
+	return f.friendshipRow, nil
+}
+
 func (f *fakeRepository) FriendshipExists(context.Context, string, string, string) (bool, error) {
 	f.calls = append(f.calls, "exists")
 	return f.alreadyFriend, nil
@@ -127,6 +132,33 @@ func TestGetFriendRequestStatusSelf(t *testing.T) {
 	if len(repo.calls) != 0 {
 		t.Fatalf("calls = %v, want none", repo.calls)
 	}
+}
+
+func TestGetFriendRequestStatusIncludesPendingRequestID(t *testing.T) {
+	repo := &fakeRepository{
+		pendingRequest: map[string]any{
+			"id":           testRequestID,
+			"from_user_id": testUserID,
+			"to_user_id":   otherUserID,
+		},
+	}
+	usecase := NewUsecase(Dependencies{Repository: repo})
+
+	status, err := usecase.GetFriendRequestStatus(context.Background(), FriendInput{AuthToken: testAuthToken, UserID: testUserID, FriendID: otherUserID})
+	if err != nil {
+		t.Fatalf("GetFriendRequestStatus returned error: %v", err)
+	}
+	if status.RequestState != "outgoing" || status.RequestID != testRequestID {
+		t.Fatalf("status = %#v", status)
+	}
+}
+
+func TestDeleteFriendshipRequiresExistingRow(t *testing.T) {
+	repo := &fakeRepository{}
+	usecase := NewUsecase(Dependencies{Repository: repo})
+
+	_, err := usecase.DeleteFriendship(context.Background(), FriendInput{AuthToken: testAuthToken, UserID: testUserID, FriendID: otherUserID})
+	assertUserError(t, err, ErrorKindNotFound, "friendship not found")
 }
 
 func TestCreateFriendRequestRejectsExistingFriendBeforeInsert(t *testing.T) {

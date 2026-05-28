@@ -73,6 +73,7 @@ func OrderedPair(a, b string) (string, string) {
 type FriendRequestStatus struct {
 	AlreadyFriend bool   `json:"already_friend"`
 	RequestState  string `json:"request_state"`
+	RequestID     string `json:"request_id,omitempty"`
 }
 
 type FriendRequest struct {

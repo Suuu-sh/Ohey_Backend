@@ -15,11 +15,13 @@ import (
 const friendshipSelectColumns = "user_a_id,user_b_id,is_favorite,user_a:profiles!friendships_user_a_id_fkey(id,user_id,display_name,gender,character_key,avatar_url,is_plus),user_b:profiles!friendships_user_b_id_fkey(id,user_id,display_name,gender,character_key,avatar_url,is_plus)"
 
 type SupabaseRepository struct {
-	client *supabase.Client
+	client         *supabase.Client
+	adminClient    *supabase.Client
+	serviceRoleKey string
 }
 
-func NewSupabaseRepository(client *supabase.Client) *SupabaseRepository {
-	return &SupabaseRepository{client: client}
+func NewSupabaseRepository(client *supabase.Client, adminClient *supabase.Client, serviceRoleKey string) *SupabaseRepository {
+	return &SupabaseRepository{client: client, adminClient: adminClient, serviceRoleKey: serviceRoleKey}
 }
 
 func (r *SupabaseRepository) ListFriendships(ctx context.Context, authToken, userID string) ([]map[string]any, error) {
@@ -206,6 +208,22 @@ func (r *SupabaseRepository) UpsertFriendshipPair(ctx context.Context, authToken
 		return row, nil
 	}
 	return payload, nil
+}
+
+func (r *SupabaseRepository) DeleteFriendship(ctx context.Context, authToken, userID, friendID string) (map[string]any, error) {
+	q := url.Values{}
+	q.Set("or", "(and(user_a_id.eq."+userID+",user_b_id.eq."+friendID+"),and(user_a_id.eq."+friendID+",user_b_id.eq."+userID+"))")
+	client := r.adminClient
+	token := r.serviceRoleKey
+	if client == nil || strings.TrimSpace(token) == "" {
+		client = r.client
+		token = authToken
+	}
+	var rows []map[string]any
+	if err := client.Delete(ctx, token, "friendships", q, &rows); err != nil {
+		return nil, err
+	}
+	return firstMap(rows), nil
 }
 
 func (r *SupabaseRepository) FriendshipExists(ctx context.Context, authToken, userID, friendID string) (bool, error) {

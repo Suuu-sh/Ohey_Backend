@@ -316,6 +316,92 @@ func TestUpdateFriendRequestIsScopedToAuthenticatedParticipant(t *testing.T) {
 	}
 }
 
+func TestDeleteFriendshipIsScopedToAuthenticatedUserPair(t *testing.T) {
+	fake := newFakeSupabase(t, func(w http.ResponseWriter, req *http.Request) {
+		if req.URL.Path == "/rest/v1/friendships" && req.Method == http.MethodDelete {
+			writeFakeJSON(w, http.StatusOK, []map[string]any{{"id": "friendship"}})
+			return
+		}
+		writeFakeJSON(w, http.StatusOK, []map[string]any{})
+	})
+	w := httptest.NewRecorder()
+
+	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodDelete, "/v1/friends/"+otherUserID, ""))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+	}
+	request, ok := fake.lastRequest("/rest/v1/friendships")
+	if !ok || request.Method != http.MethodDelete {
+		t.Fatalf("friendship delete request = %#v", request)
+	}
+	filter := request.Query.Get("or")
+	if !strings.Contains(filter, testUserID) || !strings.Contains(filter, otherUserID) {
+		t.Fatalf("friendship delete filter = %q", filter)
+	}
+}
+
+func TestGetFriendRequestStatusReturnsRequestID(t *testing.T) {
+	fake := newFakeSupabase(t, func(w http.ResponseWriter, req *http.Request) {
+		switch req.URL.Path {
+		case "/rest/v1/friendships":
+			writeFakeJSON(w, http.StatusOK, []map[string]any{})
+		case "/rest/v1/friend_requests":
+			writeFakeJSON(w, http.StatusOK, []map[string]any{{
+				"id":           testRequestID,
+				"from_user_id": testUserID,
+				"to_user_id":   otherUserID,
+			}})
+		default:
+			writeFakeJSON(w, http.StatusOK, []map[string]any{})
+		}
+	})
+	w := httptest.NewRecorder()
+
+	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodGet, "/v1/friend-requests/status?friend_id="+otherUserID, ""))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), `"request_id":"`+testRequestID+`"`) {
+		t.Fatalf("body missing request_id: %s", w.Body.String())
+	}
+}
+
+func TestListBlockedUsersReturnsTargetProfiles(t *testing.T) {
+	fake := newFakeSupabase(t, func(w http.ResponseWriter, req *http.Request) {
+		switch req.URL.Path {
+		case "/rest/v1/user_blocks":
+			writeFakeJSON(w, http.StatusOK, []map[string]any{{
+				"blocked_user_id": otherUserID,
+				"created_at":      "2026-05-28T00:00:00Z",
+			}})
+		case "/rest/v1/profiles":
+			writeFakeJSON(w, http.StatusOK, []map[string]any{{
+				"id":           otherUserID,
+				"user_id":      "friend_1",
+				"display_name": "Friend",
+			}})
+		default:
+			writeFakeJSON(w, http.StatusOK, []map[string]any{})
+		}
+	})
+	w := httptest.NewRecorder()
+
+	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodGet, "/v1/user-blocks", ""))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+	}
+	request, ok := fake.lastRequest("/rest/v1/user_blocks")
+	if !ok || request.Query.Get("blocker_user_id") != "eq."+testUserID {
+		t.Fatalf("user_blocks request = %#v", request)
+	}
+	if !strings.Contains(w.Body.String(), `"target_user_id":"`+otherUserID+`"`) {
+		t.Fatalf("body missing target_user_id: %s", w.Body.String())
+	}
+}
+
 func TestCreateDrinkLogValidatesFriendIDsAndCreatesLinks(t *testing.T) {
 	friendID := otherUserID
 	fake := newFakeSupabase(t, func(w http.ResponseWriter, req *http.Request) {
@@ -872,6 +958,27 @@ func TestAdminDeleteUserRejectsSelfDelete(t *testing.T) {
 	}
 	if _, ok := fake.lastRequest("/auth/v1/admin/users/" + testUserID); ok {
 		t.Fatal("admin delete user request was sent for self-delete")
+	}
+}
+
+func TestDeleteOwnAccountUsesAdminAuthDelete(t *testing.T) {
+	fake := newFakeSupabase(t, func(w http.ResponseWriter, req *http.Request) {
+		if req.URL.Path == "/auth/v1/admin/users/"+testUserID && req.Method == http.MethodDelete {
+			writeFakeJSON(w, http.StatusOK, map[string]any{})
+			return
+		}
+		writeFakeJSON(w, http.StatusOK, []map[string]any{})
+	})
+	w := httptest.NewRecorder()
+
+	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodDelete, "/v1/me/account", ""))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+	}
+	request, ok := fake.lastRequest("/auth/v1/admin/users/" + testUserID)
+	if !ok || request.Method != http.MethodDelete {
+		t.Fatalf("admin delete request = %#v", request)
 	}
 }
 

@@ -13,6 +13,10 @@ Last updated: 2026-05-28
 
 Admin endpoint は backend 側で `NOMO_ADMIN_EMAILS` に一致する Supabase Auth user のみ許可します。
 
+### `DELETE /v1/me/account`
+
+ログイン中の本人アカウントを削除する。Backend が caller JWT と `X-Nomo-User-ID` の一致を検証した後、trusted server 側の Supabase service role で Auth user を削除する。Mobile は呼び出し前に push token unregister を best-effort で実行し、成功後は local session を破棄する。
+
 ## Rate limit / Abuse control
 
 Authenticated write endpoints return `429 Too Many Requests` with `Retry-After` when the per-user limit is exceeded.
@@ -82,6 +86,60 @@ Allowed status:
 
 Calendar 用。自分の月次 status rows を返す。
 
+## Friends
+
+### `GET /v1/friends`
+
+自分の friendships を返す。`date=YYYY-MM-DD` 指定時はその日の friend status を付与する。
+
+### `POST /v1/friends`
+
+Body:
+
+```json
+{"friend_id":"<uuid>"}
+```
+
+互いに block 関係がない場合、指定 user と friendship を作成する。
+
+### `DELETE /v1/friends/{user_id}`
+
+指定 user との friendship を解除する。Backend は caller が参加者であることを検証した上で、trusted server 側から対象 pair のみ削除する。
+
+### `GET /v1/friend-requests/status?friend_id={user_id}`
+
+Response:
+
+```json
+{"already_friend":false,"request_state":"outgoing","request_id":"<uuid>"}
+```
+
+`request_state` は `none` / `self` / `outgoing` / `incoming`。pending request がある場合は `request_id` を返す。
+
+### `POST /v1/friend-requests`
+
+Body:
+
+```json
+{"to_user_id":"<uuid>"}
+```
+
+申請を作成する。
+
+### `PATCH /v1/friend-requests/{id}`
+
+Body:
+
+```json
+{"status":"cancelled"}
+```
+
+Allowed status:
+
+- `accepted`: recipient のみ
+- `rejected`: recipient のみ
+- `cancelled`: sender のみ
+
 ## User Safety
 
 ### `POST /v1/feed-hidden-drink-logs`
@@ -108,6 +166,10 @@ Body:
 
 対象 user の投稿を自分の feed から除外する。
 
+### `GET /v1/user-mutes`
+
+自分が mute している user profile 一覧を返す。設定画面の解除 UI 用。
+
 ### `DELETE /v1/user-mutes/{user_id}`
 
 mute を解除する。
@@ -125,6 +187,10 @@ Body:
 - feed から対象 user の投稿を除外
 - friend request / drink invite 作成時に block 関係を拒否
 - block 作成時に既存 friendship / pending friend request / pending drink invite を整理
+
+### `GET /v1/user-blocks`
+
+自分が block している user profile 一覧を返す。設定画面の解除 UI 用。
 
 ### `DELETE /v1/user-blocks/{user_id}`
 

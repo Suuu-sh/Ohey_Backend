@@ -114,6 +114,19 @@ func (r *router) createFriendship(w http.ResponseWriter, req *http.Request, auth
 	writeJSON(w, http.StatusOK, row)
 }
 
+func (r *router) deleteFriendship(w http.ResponseWriter, req *http.Request, authToken string) {
+	row, err := r.friendsUsecase(req).DeleteFriendship(req.Context(), friends.FriendInput{
+		AuthToken: authToken,
+		UserID:    req.Header.Get("X-Nomo-User-ID"),
+		FriendID:  req.PathValue("id"),
+	})
+	if err != nil {
+		writeFriendsError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, row)
+}
+
 func (r *router) listFriendGroups(w http.ResponseWriter, req *http.Request, authToken string) {
 	groups, err := r.friendGroupsUsecase().ListFriendGroups(req.Context(), friendgroups.AuthInput{
 		AuthToken: authToken,
@@ -266,6 +279,18 @@ func (r *router) blockUser(w http.ResponseWriter, req *http.Request, authToken s
 	writeJSON(w, http.StatusCreated, row)
 }
 
+func (r *router) listBlockedUsers(w http.ResponseWriter, req *http.Request, authToken string) {
+	rows, err := r.userSafetyUsecase().ListBlockedUsers(req.Context(), usersafety.ListInput{
+		AuthToken: authToken,
+		UserID:    req.Header.Get("X-Nomo-User-ID"),
+	})
+	if err != nil {
+		writeUserSafetyError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, rows)
+}
+
 func (r *router) unblockUser(w http.ResponseWriter, req *http.Request, authToken string) {
 	err := r.userSafetyUsecase().UnblockUser(req.Context(), usersafety.UserTargetInput{
 		AuthToken:    authToken,
@@ -297,6 +322,18 @@ func (r *router) muteUser(w http.ResponseWriter, req *http.Request, authToken st
 		return
 	}
 	writeJSON(w, http.StatusCreated, row)
+}
+
+func (r *router) listMutedUsers(w http.ResponseWriter, req *http.Request, authToken string) {
+	rows, err := r.userSafetyUsecase().ListMutedUsers(req.Context(), usersafety.ListInput{
+		AuthToken: authToken,
+		UserID:    req.Header.Get("X-Nomo-User-ID"),
+	})
+	if err != nil {
+		writeUserSafetyError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, rows)
 }
 
 func (r *router) unmuteUser(w http.ResponseWriter, req *http.Request, authToken string) {
@@ -388,6 +425,19 @@ func (r *router) markNotificationsRead(w http.ResponseWriter, req *http.Request,
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"updated_count": updatedCount})
+}
+
+func (r *router) deleteOwnAccount(w http.ResponseWriter, req *http.Request, _ string) {
+	userID := strings.TrimSpace(req.Header.Get("X-Nomo-User-ID"))
+	if r.deps.AdminSupabase == nil || strings.TrimSpace(r.deps.Config.SupabaseServiceRoleKey) == "" {
+		writeError(w, http.StatusServiceUnavailable, "account deletion is temporarily unavailable")
+		return
+	}
+	if err := r.deps.AdminSupabase.AdminDeleteUser(req.Context(), userID); err != nil {
+		writeSupabaseError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"id": userID})
 }
 
 func (r *router) listTodayReservations(w http.ResponseWriter, req *http.Request, authToken string) {
@@ -482,7 +532,7 @@ func (r *router) drinkInviteUsecase(req *http.Request) *drinkinvites.Usecase {
 
 func (r *router) friendsUsecase(req *http.Request) *friends.Usecase {
 	return friends.NewUsecase(friends.Dependencies{
-		Repository: friends.NewSupabaseRepository(r.deps.Supabase),
+		Repository: friends.NewSupabaseRepository(r.deps.Supabase, r.deps.AdminSupabase, r.deps.Config.SupabaseServiceRoleKey),
 		Publisher:  friendRequestEventPublisher{router: r, req: req},
 		Logger:     r.deps.Logger,
 	})

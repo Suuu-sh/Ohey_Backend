@@ -20,10 +20,23 @@ type UserTargetInput struct {
 	TargetUserID string
 }
 
+type ListInput struct {
+	AuthToken string
+	UserID    string
+}
+
 type DrinkLogInput struct {
 	AuthToken  string
 	UserID     string
 	DrinkLogID string
+}
+
+func (u *Usecase) ListBlockedUsers(ctx context.Context, input ListInput) ([]map[string]any, error) {
+	userID, err := CleanUUID(input.UserID, "user id")
+	if err != nil {
+		return nil, err
+	}
+	return u.repository.ListBlockedUsers(ctx, input.AuthToken, userID)
 }
 
 func (u *Usecase) BlockUser(ctx context.Context, input UserTargetInput) (map[string]any, error) {
@@ -47,6 +60,14 @@ func (u *Usecase) UnblockUser(ctx context.Context, input UserTargetInput) error 
 		return err
 	}
 	return u.repository.UnblockUser(ctx, input.AuthToken, relation)
+}
+
+func (u *Usecase) ListMutedUsers(ctx context.Context, input ListInput) ([]map[string]any, error) {
+	userID, err := CleanUUID(input.UserID, "user id")
+	if err != nil {
+		return nil, err
+	}
+	return u.repository.ListMutedUsers(ctx, input.AuthToken, userID)
 }
 
 func (u *Usecase) MuteUser(ctx context.Context, input UserTargetInput) (map[string]any, error) {

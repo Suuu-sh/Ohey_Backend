@@ -18,11 +18,17 @@ type fakeRepository struct {
 	cleaned UserRelation
 }
 
+func (f *fakeRepository) ListBlockedUsers(context.Context, string, string) ([]map[string]any, error) {
+	return []map[string]any{{"id": otherUserID}}, nil
+}
 func (f *fakeRepository) BlockUser(_ context.Context, _ string, relation UserRelation) (map[string]any, error) {
 	f.blocked = relation
 	return map[string]any{"blocked_user_id": relation.TargetUserID}, nil
 }
 func (f *fakeRepository) UnblockUser(context.Context, string, UserRelation) error { return nil }
+func (f *fakeRepository) ListMutedUsers(context.Context, string, string) ([]map[string]any, error) {
+	return []map[string]any{{"id": otherUserID}}, nil
+}
 func (f *fakeRepository) MuteUser(context.Context, string, UserRelation) (map[string]any, error) {
 	return nil, nil
 }
@@ -57,6 +63,18 @@ func TestBlockUserCleansRelation(t *testing.T) {
 	}
 	if repo.cleaned.ActorUserID != testUserID || repo.cleaned.TargetUserID != otherUserID {
 		t.Fatalf("cleaned = %#v", repo.cleaned)
+	}
+}
+
+func TestListBlockedUsersCleansUserID(t *testing.T) {
+	usecase := NewUsecase(Dependencies{Repository: &fakeRepository{}})
+
+	rows, err := usecase.ListBlockedUsers(context.Background(), ListInput{AuthToken: testAuthToken, UserID: testUserID})
+	if err != nil {
+		t.Fatalf("ListBlockedUsers returned error: %v", err)
+	}
+	if len(rows) != 1 || rows[0]["id"] != otherUserID {
+		t.Fatalf("rows = %#v", rows)
 	}
 }
 

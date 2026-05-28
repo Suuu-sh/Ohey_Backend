@@ -11,6 +11,7 @@ type Repository interface {
 	AttachDrinkStats(ctx context.Context, authToken, currentUserID string, rows []map[string]any) error
 	UpdateFriendFavorite(ctx context.Context, authToken, userID, friendID string, isFavorite bool) (map[string]any, error)
 	UpsertFriendshipPair(ctx context.Context, authToken, userA, userB string) (map[string]any, error)
+	DeleteFriendship(ctx context.Context, authToken, userID, friendID string) (map[string]any, error)
 	FriendshipExists(ctx context.Context, authToken, userID, friendID string) (bool, error)
 	BlockExistsBetweenUsers(ctx context.Context, authToken, userID, friendID string) (bool, error)
 	PendingFriendRequestBetween(ctx context.Context, authToken, userID, friendID string) (map[string]any, error)

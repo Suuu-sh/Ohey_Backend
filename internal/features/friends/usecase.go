@@ -118,6 +118,21 @@ func (u *Usecase) UpdateFriendFavorite(ctx context.Context, input FavoriteInput)
 	return row, nil
 }
 
+func (u *Usecase) DeleteFriendship(ctx context.Context, input FriendInput) (map[string]any, error) {
+	userID, friendID, err := cleanFriendPair(input.UserID, input.FriendID, "friend id")
+	if err != nil {
+		return nil, err
+	}
+	row, err := u.repository.DeleteFriendship(ctx, input.AuthToken, userID, friendID)
+	if err != nil {
+		return nil, err
+	}
+	if row == nil {
+		return nil, UserError{Kind: ErrorKindNotFound, Message: "friendship not found"}
+	}
+	return row, nil
+}
+
 func (u *Usecase) GetFriendRequestStatus(ctx context.Context, input FriendInput) (FriendRequestStatus, error) {
 	userID, friendID, err := cleanFriendPair(input.UserID, input.FriendID, "friend_id")
 	if err != nil {
@@ -131,12 +146,14 @@ func (u *Usecase) GetFriendRequestStatus(ctx context.Context, input FriendInput)
 		return FriendRequestStatus{}, err
 	}
 	requestState := "none"
+	requestID := ""
 	if !alreadyFriend {
 		request, err := u.repository.PendingFriendRequestBetween(ctx, input.AuthToken, userID, friendID)
 		if err != nil {
 			return FriendRequestStatus{}, err
 		}
 		if request != nil {
+			requestID, _ = request["id"].(string)
 			if request["from_user_id"] == userID {
 				requestState = "outgoing"
 			} else {
@@ -144,7 +161,7 @@ func (u *Usecase) GetFriendRequestStatus(ctx context.Context, input FriendInput)
 			}
 		}
 	}
-	return FriendRequestStatus{AlreadyFriend: alreadyFriend, RequestState: requestState}, nil
+	return FriendRequestStatus{AlreadyFriend: alreadyFriend, RequestState: requestState, RequestID: requestID}, nil
 }
 
 func (u *Usecase) CreateFriendRequest(ctx context.Context, input CreateFriendRequestInput) (map[string]any, error) {

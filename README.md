@@ -40,6 +40,7 @@ Authenticated requests must include:
 - `GET /v1/profiles/by-user-id/{user_id}`
 - `GET /v1/friends`
 - `POST /v1/friends`
+- `DELETE /v1/friends/{id}`
 - `PUT /v1/friends/{id}/favorite`
 - `GET /v1/friend-requests/status?friend_id={id}`
 - `POST /v1/friend-requests`
@@ -53,8 +54,10 @@ Authenticated requests must include:
 - `POST /v1/feed-hidden-drink-logs`
 - `DELETE /v1/feed-hidden-drink-logs/{drink_log_id}`
 - `POST /v1/user-mutes`
+- `GET /v1/user-mutes`
 - `DELETE /v1/user-mutes/{user_id}`
 - `POST /v1/user-blocks`
+- `GET /v1/user-blocks`
 - `DELETE /v1/user-blocks/{user_id}`
 - `POST /v1/media/upload-url`
 - `POST /v1/media/display-url`
@@ -69,6 +72,8 @@ Authenticated requests must include:
 - `GET /v1/notifications`
 - `PATCH /v1/notifications/read-all`
 - `PUT /v1/me/push-token`
+- `DELETE /v1/me/push-token`
+- `DELETE /v1/me/account`
 
 ## Admin endpoints
 
