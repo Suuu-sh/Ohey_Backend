@@ -148,7 +148,7 @@ func (u *Usecase) CreateDrinkLog(ctx context.Context, input CreateInput) (map[st
 		return nil, err
 	}
 	if exists {
-		return nil, UserError{Kind: ErrorKindConflict, Message: "投稿は1日1回までです"}
+		return nil, UserError{Kind: ErrorKindConflict, Message: "投稿は1日1つまでです"}
 	}
 	photoPath, err := CleanUserPhotoPath(ownerUserID, input.PhotoPath)
 	if err != nil {

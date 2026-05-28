@@ -181,7 +181,7 @@ func TestCreateDrinkLogRejectsExistingLogOnSameDay(t *testing.T) {
 		TimezoneOffsetMinutes: &offset,
 	})
 
-	assertUserError(t, err, ErrorKindConflict, "投稿は1日1回までです")
+	assertUserError(t, err, ErrorKindConflict, "投稿は1日1つまでです")
 	if want := []string{"daily_limit"}; !reflect.DeepEqual(repo.calls, want) {
 		t.Fatalf("calls = %v, want %v", repo.calls, want)
 	}

@@ -530,7 +530,7 @@ func TestCreateDrinkLogRejectsExistingLogOnSameLocalDay(t *testing.T) {
 	if insertSent {
 		t.Fatal("drink log insert was sent despite same-day existing log")
 	}
-	if !strings.Contains(w.Body.String(), "1日1回") {
+	if !strings.Contains(w.Body.String(), "1日1つ") {
 		t.Fatalf("body does not explain daily limit: %s", w.Body.String())
 	}
 }
