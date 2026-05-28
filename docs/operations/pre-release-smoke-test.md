@@ -60,3 +60,14 @@ Run this before TestFlight / production release. For Nomo dev checks, use iOS Si
 - [ ] `GET /v1/admin/notification-outbox?status=failed` works for admin.
 - [ ] `POST /v1/admin/notification-outbox/process?limit=50` works for admin.
 - [ ] Render cron is not created unless paid cron is intentionally enabled.
+
+## Execution log
+
+### 2026-05-28 dev Simulator partial
+
+- Device: iOS Simulator `iPhone 17`.
+- Backend/Supabase target: dev environment.
+- Result: build/run succeeded and an existing Admin session loaded. Feed/profile/settings surfaces rendered.
+- GitHub Actions: latest `Supabase Dev Migrate` run on `development` succeeded: https://github.com/Suuu-sh/Nomo_Mobile/actions/runs/26548996618
+- Not fully executed in this pass: mutating manual flows (`drink log create`, `photo upload`, `invite/accept`, `block/mute/hide/report`) and push notification delivery. Run those with prepared dev accounts before production/TestFlight release.
+
