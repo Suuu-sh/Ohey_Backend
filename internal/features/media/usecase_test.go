@@ -24,6 +24,10 @@ func (f *fakeStorage) CreateSignedDisplayURL(_ context.Context, bucket, objectPa
 	return "https://example.test/display", nil
 }
 
+func (f *fakeStorage) ListObjects(context.Context, string, string, int) ([]StorageObject, error) {
+	return nil, nil
+}
+
 func TestCreateUploadURLBuildsDrinkLogPhotoPath(t *testing.T) {
 	storage := &fakeStorage{}
 	usecase := NewUsecase(Dependencies{

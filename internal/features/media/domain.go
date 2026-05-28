@@ -88,6 +88,11 @@ type DisplayURL struct {
 	ExpiresIn int    `json:"expires_in"`
 }
 
+type StorageObject struct {
+	Name string
+	Path string
+}
+
 const DisplayURLTTLSeconds = 60 * 60
 
 func CleanDrinkLogPhotoPath(value string) (string, error) {

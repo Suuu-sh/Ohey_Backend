@@ -84,6 +84,7 @@ func (r *router) routes() {
 	r.mux.HandleFunc("PATCH /v1/admin/drink-log-reports/{id}", r.admin(r.adminUpdateDrinkLogReport))
 	r.mux.HandleFunc("GET /v1/admin/notification-outbox", r.admin(r.adminListNotificationOutbox))
 	r.mux.HandleFunc("POST /v1/admin/notification-outbox/process", r.admin(r.adminProcessNotificationOutbox))
+	r.mux.HandleFunc("GET /v1/admin/media/orphan-drink-log-photos", r.admin(r.adminListOrphanDrinkLogPhotos))
 	r.mux.HandleFunc("POST /v1/admin/drink-logs", r.admin(r.adminCreateDrinkLog))
 	r.mux.HandleFunc("PATCH /v1/admin/drink-logs/{id}", r.admin(r.adminUpdateDrinkLog))
 	r.mux.HandleFunc("DELETE /v1/admin/drink-logs/{id}", r.admin(r.adminDeleteDrinkLog))

@@ -133,6 +133,10 @@ Storage display 用 signed URL を Backend から返す。Mobile は raw `photo_
 
 Drink log 削除時は Backend が `nomo-photos` object cleanup を best-effort で行う。
 
+### `GET /v1/admin/media/orphan-drink-log-photos?user_id=<uuid>&limit=100`
+
+指定 user の `users/<user_id>/drink_logs` prefix を Storage から確認し、`drink_logs.photo_path` に存在しない object path を候補として返す。実削除はしない。
+
 ## Notifications / Outbox
 
 Domain events:

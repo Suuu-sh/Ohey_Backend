@@ -1124,6 +1124,7 @@ Trade-off:
 
 - feed item ごとに display-url call が増える。将来は feed endpoint 側で signed URL を batch 付与する方が効率的。
 - 現段階では path validation は drink log photo path 形式の検証まで。閲覧権限は feed visibility と RLS に依存する。
+- orphan object は `GET /v1/admin/media/orphan-drink-log-photos?user_id=<uuid>` で user prefix 単位に検出する。実削除は手動確認後に別途行う。
 
 ### API contract doc
 

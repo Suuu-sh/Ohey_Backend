@@ -93,6 +93,7 @@ Available endpoints:
 - `PATCH /v1/admin/drink-log-reports/{id}`
 - `GET /v1/admin/notification-outbox`
 - `POST /v1/admin/notification-outbox/process`
+- `GET /v1/admin/media/orphan-drink-log-photos`
 - `POST /v1/admin/drink-logs`
 - `PATCH /v1/admin/drink-logs/{id}`
 - `DELETE /v1/admin/drink-logs/{id}`

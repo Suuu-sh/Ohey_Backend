@@ -3,6 +3,9 @@ package httpapi
 import (
 	"context"
 	"net/http"
+	"net/url"
+	"strconv"
+	"strings"
 
 	"github.com/yota/nomo/backend/internal/features/drinklogs"
 	"github.com/yota/nomo/backend/internal/features/media"
@@ -74,6 +77,67 @@ func (r *router) drinkLogPhotoCleaner() drinklogs.MediaCleaner {
 		return nil
 	}
 	return drinkLogPhotoCleaner{storage: media.NewSupabaseStorageRepository(r.deps.Config.SupabaseURL, r.deps.Config.SupabaseServiceRoleKey, nil)}
+}
+
+func (r *router) adminListOrphanDrinkLogPhotos(w http.ResponseWriter, req *http.Request, _ AuthUser) {
+	userID, errMessage := cleanUUID(req.URL.Query().Get("user_id"), "user_id")
+	if errMessage != "" {
+		writeError(w, http.StatusBadRequest, errMessage)
+		return
+	}
+	limit := 100
+	if rawLimit := strings.TrimSpace(req.URL.Query().Get("limit")); rawLimit != "" {
+		parsed, err := strconv.Atoi(rawLimit)
+		if err != nil || parsed <= 0 {
+			writeError(w, http.StatusBadRequest, "limit must be a positive integer")
+			return
+		}
+		limit = min(parsed, 1000)
+	}
+	prefix := "users/" + userID + "/drink_logs"
+	storage := media.NewSupabaseStorageRepository(r.deps.Config.SupabaseURL, r.deps.Config.SupabaseServiceRoleKey, nil)
+	objects, err := storage.ListObjects(req.Context(), media.PhotoBucket, prefix, limit)
+	if err != nil {
+		writeSupabaseError(w, err)
+		return
+	}
+	activePaths, err := r.adminActiveDrinkLogPhotoPaths(req.Context(), userID)
+	if err != nil {
+		writeSupabaseError(w, err)
+		return
+	}
+	orphanPaths := make([]string, 0)
+	for _, object := range objects {
+		if object.Path == "" || activePaths[object.Path] {
+			continue
+		}
+		orphanPaths = append(orphanPaths, object.Path)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"user_id":       userID,
+		"prefix":        prefix,
+		"checked_count": len(objects),
+		"orphan_paths":  orphanPaths,
+	})
+}
+
+func (r *router) adminActiveDrinkLogPhotoPaths(ctx context.Context, userID string) (map[string]bool, error) {
+	q := url.Values{}
+	q.Set("select", "photo_path")
+	q.Set("owner_user_id", "eq."+userID)
+	q.Set("photo_path", "neq.")
+	q.Set("limit", "10000")
+	var rows []map[string]any
+	if err := r.deps.AdminSupabase.Get(ctx, r.deps.Config.SupabaseServiceRoleKey, "drink_logs", q, &rows); err != nil {
+		return nil, err
+	}
+	paths := make(map[string]bool, len(rows))
+	for _, row := range rows {
+		if path := strings.TrimSpace(stringValue(row, "photo_path")); path != "" {
+			paths[path] = true
+		}
+	}
+	return paths, nil
 }
 
 func writeMediaError(w http.ResponseWriter, err error) {

@@ -165,6 +165,57 @@ func (r *SupabaseStorageRepository) CreateSignedDisplayURL(ctx context.Context, 
 	return signedURL, nil
 }
 
+func (r *SupabaseStorageRepository) ListObjects(ctx context.Context, bucket, prefix string, limit int) ([]StorageObject, error) {
+	if r.supabaseURL == "" || r.serviceRoleKey == "" {
+		return nil, errors.New("supabase storage is not configured")
+	}
+	if limit <= 0 || limit > 1000 {
+		limit = 100
+	}
+	prefix = strings.Trim(strings.TrimSpace(prefix), "/")
+	endpoint := r.supabaseURL + "/storage/v1/object/list/" + url.PathEscape(bucket)
+	body, err := json.Marshal(map[string]any{"prefix": prefix, "limit": limit})
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+r.serviceRoleKey)
+	req.Header.Set("apikey", r.serviceRoleKey)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := r.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	data, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("supabase storage object list failed: status=%d body=%s", resp.StatusCode, string(data))
+	}
+	var rows []struct {
+		Name string `json:"name"`
+		ID   string `json:"id"`
+	}
+	if err := json.Unmarshal(data, &rows); err != nil {
+		return nil, err
+	}
+	objects := make([]StorageObject, 0, len(rows))
+	for _, row := range rows {
+		name := strings.TrimSpace(row.Name)
+		if name == "" {
+			continue
+		}
+		path := name
+		if prefix != "" && !strings.HasPrefix(name, prefix+"/") {
+			path = prefix + "/" + name
+		}
+		objects = append(objects, StorageObject{Name: name, Path: path})
+	}
+	return objects, nil
+}
+
 func escapedStoragePath(bucket, objectPath string) string {
 	parts := append([]string{bucket}, strings.Split(objectPath, "/")...)
 	for i, part := range parts {
