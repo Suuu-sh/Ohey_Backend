@@ -33,8 +33,8 @@ Operational rules:
 
 Current state:
 
-- Drink log deletion performs best-effort Storage object cleanup.
-- `GET /v1/admin/media/orphan-drink-log-photos?user_id=<uuid>&limit=100` lists orphan candidates only.
+- Memory deletion performs best-effort Storage object cleanup.
+- `GET /v1/admin/media/orphan-memory-photos?user_id=<uuid>&limit=100` lists orphan candidates only.
 - No automatic orphan deletion is enabled.
 
 Policy until launch:
@@ -46,7 +46,7 @@ Policy until launch:
 
 Future endpoint candidate:
 
-- `DELETE /v1/admin/media/orphan-drink-log-photos`
+- `DELETE /v1/admin/media/orphan-memory-photos`
 - require explicit `paths` list
 - return deleted / skipped / failed counts
 

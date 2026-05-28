@@ -67,7 +67,7 @@ internal/interfaces
 
 この構成は大規模開発では有効だが、Nomo の現在の規模と AI による局所修正を考えると、feature 単位で関連コードが近くにある方が安全に変更しやすい。
 
-Feature Slice では、`drinkinvites` の変更ならまず `internal/features/drinkinvites` を見ればよい。
+Feature Slice では、`invites` の変更ならまず `internal/features/invites` を見ればよい。
 AI にも「この feature の範囲だけ変更する」と指示しやすい。
 
 ## Why Lightweight Clean Architecture
@@ -147,11 +147,11 @@ Nomo Backend では現時点でフル DDD は採用しない。
 
 優先順位:
 
-1. `drinkinvites`
+1. `invites`
    - 状態、日付、相手の状況、通知が絡むため最優先。
 2. `friendrequests`
    - pending/accepted/rejected と friendship 作成が絡む。
-3. `drinklogs`
+3. `memories`
    - 1日1回制限、tagged friend、like/report、official log が絡む。
 4. `notifications`
    - 発火条件と push 副作用が絡む。
@@ -170,17 +170,17 @@ Nomo Backend では現時点でフル DDD は採用しない。
   - usecase 呼び出し
   - HTTP status と response 変換
 - usecase は 1操作を表す名前にする。
-  - `CreateDrinkInvite`
+  - `CreateInvite`
   - `AcceptFriendRequest`
-  - `CreateDrinkLog`
+  - `CreateMemory`
 - domain は業務判断を表す。
   - `CanAcceptInvite`
   - `NewFriendRequest`
-  - `ValidateDailyDrinkLogLimit`
+  - `ValidateDailyMemoryLimit`
 - repository は usecase が必要とする意図を表す method 名にする。
   - `FindActiveInviteForDate`
   - `CreateFriendship`
-  - `ListVisibleDrinkLogs`
+  - `ListVisibleMemories`
 - Supabase の table/column 文字列は原則 `supabase_repository.go` に閉じ込める。
 - RLS/DB constraint は引き続き最終防衛線。backend domain check だけを信頼しない。
 - AI に依頼する場合は、対象 feature と変更可能ファイル範囲を明確にする。

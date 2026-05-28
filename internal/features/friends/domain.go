@@ -150,14 +150,14 @@ func (e DomainEvent) RequestRow() map[string]any {
 	}
 }
 
-type DrinkStats struct {
-	Count       int
-	LastDrinkAt time.Time
+type MemoryStats struct {
+	Count        int
+	LastMemoryAt time.Time
 }
 
-func (s *DrinkStats) Add(drankAt time.Time) {
+func (s *MemoryStats) Add(happenedAt time.Time) {
 	s.Count++
-	if drankAt.After(s.LastDrinkAt) {
-		s.LastDrinkAt = drankAt
+	if happenedAt.After(s.LastMemoryAt) {
+		s.LastMemoryAt = happenedAt
 	}
 }

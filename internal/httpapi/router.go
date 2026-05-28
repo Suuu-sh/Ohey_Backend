@@ -9,8 +9,8 @@ import (
 
 	"github.com/yota/nomo/backend/internal/config"
 	"github.com/yota/nomo/backend/internal/features/dailystatuses"
-	"github.com/yota/nomo/backend/internal/features/drinklogs"
 	"github.com/yota/nomo/backend/internal/features/friends"
+	"github.com/yota/nomo/backend/internal/features/memories"
 	"github.com/yota/nomo/backend/internal/features/profiles"
 	"github.com/yota/nomo/backend/internal/supabase"
 )
@@ -52,12 +52,12 @@ func (r *router) routes() {
 	r.mux.HandleFunc("POST /v1/friend-requests", r.auth(r.createFriendRequest))
 	r.mux.HandleFunc("PATCH /v1/friend-requests/{id}", r.auth(r.updateFriendRequest))
 	r.mux.HandleFunc("GET /v1/home/feed", r.auth(r.listHomeFeed))
-	r.mux.HandleFunc("GET /v1/drink-logs", r.auth(r.listDrinkLogs))
-	r.mux.HandleFunc("POST /v1/drink-logs", r.auth(r.createDrinkLog))
-	r.mux.HandleFunc("DELETE /v1/drink-logs/{id}", r.auth(r.deleteDrinkLog))
-	r.mux.HandleFunc("PUT /v1/drink-logs/{id}/like", r.auth(r.likeDrinkLog))
-	r.mux.HandleFunc("DELETE /v1/drink-logs/{id}/like", r.auth(r.unlikeDrinkLog))
-	r.mux.HandleFunc("POST /v1/drink-logs/{id}/report", r.auth(r.reportDrinkLog))
+	r.mux.HandleFunc("GET /v1/memories", r.auth(r.listMemories))
+	r.mux.HandleFunc("POST /v1/memories", r.auth(r.createMemory))
+	r.mux.HandleFunc("DELETE /v1/memories/{id}", r.auth(r.deleteMemory))
+	r.mux.HandleFunc("PUT /v1/memories/{id}/like", r.auth(r.likeMemory))
+	r.mux.HandleFunc("DELETE /v1/memories/{id}/like", r.auth(r.unlikeMemory))
+	r.mux.HandleFunc("POST /v1/memories/{id}/report", r.auth(r.reportMemory))
 	r.mux.HandleFunc("POST /v1/user-blocks", r.auth(r.blockUser))
 	r.mux.HandleFunc("GET /v1/user-blocks", r.auth(r.listBlockedUsers))
 	r.mux.HandleFunc("DELETE /v1/user-blocks/{id}", r.auth(r.unblockUser))
@@ -65,8 +65,8 @@ func (r *router) routes() {
 	r.mux.HandleFunc("GET /v1/user-mutes", r.auth(r.listMutedUsers))
 	r.mux.HandleFunc("DELETE /v1/user-mutes/{id}", r.auth(r.unmuteUser))
 	r.mux.HandleFunc("POST /v1/user-reports", r.auth(r.reportUser))
-	r.mux.HandleFunc("POST /v1/feed-hidden-drink-logs", r.auth(r.hideDrinkLogFromFeed))
-	r.mux.HandleFunc("DELETE /v1/feed-hidden-drink-logs/{id}", r.auth(r.unhideDrinkLogFromFeed))
+	r.mux.HandleFunc("POST /v1/memory-hides", r.auth(r.hideMemoryFromFeed))
+	r.mux.HandleFunc("DELETE /v1/memory-hides/{id}", r.auth(r.unhideMemoryFromFeed))
 	r.mux.HandleFunc("POST /v1/media/upload-url", r.auth(r.createMediaUploadURL))
 	r.mux.HandleFunc("POST /v1/media/display-url", r.auth(r.createMediaDisplayURL))
 	r.mux.HandleFunc("GET /v1/notifications", r.auth(r.listNotifications))
@@ -77,25 +77,25 @@ func (r *router) routes() {
 	r.mux.HandleFunc("GET /v1/daily-status", r.auth(r.getDailyStatus))
 	r.mux.HandleFunc("PUT /v1/daily-status", r.auth(r.upsertDailyStatus))
 	r.mux.HandleFunc("GET /v1/daily-statuses/month", r.auth(r.listMonthlyDailyStatuses))
-	r.mux.HandleFunc("GET /v1/drink-invites/today-reservations", r.auth(r.listTodayReservations))
-	r.mux.HandleFunc("GET /v1/drink-invites/incoming-pending", r.auth(r.listIncomingPendingInvites))
-	r.mux.HandleFunc("GET /v1/drink-invites/outgoing-active", r.auth(r.listOutgoingActiveInvites))
-	r.mux.HandleFunc("POST /v1/drink-invites", r.auth(r.createDrinkInvite))
-	r.mux.HandleFunc("PATCH /v1/drink-invites/{id}", r.auth(r.updateDrinkInvite))
+	r.mux.HandleFunc("GET /v1/invites/today-reservations", r.auth(r.listTodayReservations))
+	r.mux.HandleFunc("GET /v1/invites/incoming-pending", r.auth(r.listIncomingPendingInvites))
+	r.mux.HandleFunc("GET /v1/invites/outgoing-active", r.auth(r.listOutgoingActiveInvites))
+	r.mux.HandleFunc("POST /v1/invites", r.auth(r.createInvite))
+	r.mux.HandleFunc("PATCH /v1/invites/{id}", r.auth(r.updateInvite))
 	r.mux.HandleFunc("GET /v1/admin/me", r.admin(r.adminMe))
 	r.mux.HandleFunc("GET /v1/admin/users", r.admin(r.adminListUsers))
 	r.mux.HandleFunc("POST /v1/admin/users", r.admin(r.adminCreateUser))
 	r.mux.HandleFunc("PATCH /v1/admin/users/{id}", r.admin(r.adminUpdateUser))
 	r.mux.HandleFunc("DELETE /v1/admin/users/{id}", r.admin(r.adminDeleteUser))
-	r.mux.HandleFunc("GET /v1/admin/drink-logs", r.admin(r.adminListDrinkLogs))
-	r.mux.HandleFunc("GET /v1/admin/drink-log-reports", r.admin(r.adminListDrinkLogReports))
-	r.mux.HandleFunc("PATCH /v1/admin/drink-log-reports/{id}", r.admin(r.adminUpdateDrinkLogReport))
+	r.mux.HandleFunc("GET /v1/admin/memories", r.admin(r.adminListMemories))
+	r.mux.HandleFunc("GET /v1/admin/memory-reports", r.admin(r.adminListMemoryReports))
+	r.mux.HandleFunc("PATCH /v1/admin/memory-reports/{id}", r.admin(r.adminUpdateMemoryReport))
 	r.mux.HandleFunc("GET /v1/admin/notification-outbox", r.admin(r.adminListNotificationOutbox))
 	r.mux.HandleFunc("POST /v1/admin/notification-outbox/process", r.admin(r.adminProcessNotificationOutbox))
-	r.mux.HandleFunc("GET /v1/admin/media/orphan-drink-log-photos", r.admin(r.adminListOrphanDrinkLogPhotos))
-	r.mux.HandleFunc("POST /v1/admin/drink-logs", r.admin(r.adminCreateDrinkLog))
-	r.mux.HandleFunc("PATCH /v1/admin/drink-logs/{id}", r.admin(r.adminUpdateDrinkLog))
-	r.mux.HandleFunc("DELETE /v1/admin/drink-logs/{id}", r.admin(r.adminDeleteDrinkLog))
+	r.mux.HandleFunc("GET /v1/admin/media/orphan-memory-photos", r.admin(r.adminListOrphanMemoryPhotos))
+	r.mux.HandleFunc("POST /v1/admin/memories", r.admin(r.adminCreateMemory))
+	r.mux.HandleFunc("PATCH /v1/admin/memories/{id}", r.admin(r.adminUpdateMemory))
+	r.mux.HandleFunc("DELETE /v1/admin/memories/{id}", r.admin(r.adminDeleteMemory))
 	r.mux.HandleFunc("POST /v1/admin/notifications", r.admin(r.adminCreateNotification))
 }
 
@@ -163,19 +163,19 @@ func (r *router) updateFriendFavorite(w http.ResponseWriter, req *http.Request, 
 	writeJSON(w, http.StatusOK, row)
 }
 
-func (r *router) listDrinkLogs(w http.ResponseWriter, req *http.Request, authToken string) {
-	rows, err := r.drinkLogUsecase(req).ListDrinkLogs(req.Context(), drinklogs.ListInput{
+func (r *router) listMemories(w http.ResponseWriter, req *http.Request, authToken string) {
+	rows, err := r.memoryUsecase(req).ListMemories(req.Context(), memories.ListInput{
 		AuthToken: authToken,
 		UserID:    req.Header.Get("X-Nomo-User-ID"),
 	})
 	if err != nil {
-		writeDrinkLogError(w, err)
+		writeMemoryError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, rows)
 }
 
-func cleanDrinkLogMarkerRarity(value string) string {
+func cleanMemoryMarkerRarity(value string) string {
 	switch strings.TrimSpace(value) {
 	case "uncommon", "rare", "super_rare", "ultra_rare", "secret":
 		return strings.TrimSpace(value)
@@ -184,7 +184,7 @@ func cleanDrinkLogMarkerRarity(value string) string {
 	}
 }
 
-func cleanDrinkLogCaptionY(value *float64) float64 {
+func cleanMemoryCaptionY(value *float64) float64 {
 	if value == nil {
 		return 0.5
 	}
@@ -197,16 +197,16 @@ func cleanDrinkLogCaptionY(value *float64) float64 {
 	return *value
 }
 
-func (r *router) createDrinkLog(w http.ResponseWriter, req *http.Request, authToken string) {
-	var input CreateDrinkLogRequest
+func (r *router) createMemory(w http.ResponseWriter, req *http.Request, authToken string) {
+	var input CreateMemoryRequest
 	if !decodeJSONBody(w, req, &input) {
 		return
 	}
-	row, err := r.drinkLogUsecase(req).CreateDrinkLog(req.Context(), drinklogs.CreateInput{
+	row, err := r.memoryUsecase(req).CreateMemory(req.Context(), memories.CreateInput{
 		AuthToken:             authToken,
 		OwnerUserID:           req.Header.Get("X-Nomo-User-ID"),
-		DrankAt:               input.DrankAt,
-		DrankOn:               input.DrankOn,
+		HappenedAt:            input.HappenedAt,
+		HappenedOn:            input.HappenedOn,
 		TimezoneOffsetMinutes: input.TimezoneOffsetMinutes,
 		PlaceName:             input.PlaceName,
 		PlaceLat:              input.PlaceLat,
@@ -218,20 +218,20 @@ func (r *router) createDrinkLog(w http.ResponseWriter, req *http.Request, authTo
 		ClientRequestedRarity: input.MarkerRarity,
 	})
 	if err != nil {
-		writeDrinkLogError(w, err)
+		writeMemoryError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, row)
 }
 
-func (r *router) deleteDrinkLog(w http.ResponseWriter, req *http.Request, authToken string) {
-	row, err := r.drinkLogUsecase(req).DeleteDrinkLog(req.Context(), drinklogs.DeleteInput{
+func (r *router) deleteMemory(w http.ResponseWriter, req *http.Request, authToken string) {
+	row, err := r.memoryUsecase(req).DeleteMemory(req.Context(), memories.DeleteInput{
 		AuthToken:   authToken,
-		LogID:       req.PathValue("id"),
+		MemoryID:    req.PathValue("id"),
 		OwnerUserID: req.Header.Get("X-Nomo-User-ID"),
 	})
 	if err != nil {
-		writeDrinkLogError(w, err)
+		writeMemoryError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, row)

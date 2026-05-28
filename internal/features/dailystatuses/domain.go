@@ -44,17 +44,17 @@ func CleanUUID(value, field string) (string, error) {
 type Status string
 
 const (
-	StatusUnselected    Status = "unselected"
-	StatusCanDrinkToday Status = "can_drink_today"
-	StatusNonAlcohol    Status = "non_alcohol"
-	StatusLiverRest     Status = "liver_rest"
-	StatusHasPlans      Status = "has_plans"
+	StatusUnselected     Status = "unselected"
+	StatusAvailable      Status = "available"
+	StatusMaybeAvailable Status = "maybe_available"
+	StatusDependsOnTime  Status = "depends_on_time"
+	StatusHasPlans       Status = "has_plans"
 )
 
 func CleanStatus(value string) (Status, error) {
 	status := Status(strings.ToLower(strings.TrimSpace(value)))
 	switch status {
-	case StatusUnselected, StatusCanDrinkToday, StatusNonAlcohol, StatusLiverRest, StatusHasPlans:
+	case StatusUnselected, StatusAvailable, StatusMaybeAvailable, StatusDependsOnTime, StatusHasPlans:
 		return status, nil
 	default:
 		return "", UserError{Kind: ErrorKindInvalidInput, Message: "status is invalid"}

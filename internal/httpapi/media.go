@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/yota/nomo/backend/internal/features/drinklogs"
 	"github.com/yota/nomo/backend/internal/features/media"
+	"github.com/yota/nomo/backend/internal/features/memories"
 )
 
 type MediaUploadURLRequest struct {
@@ -64,25 +64,25 @@ func (r *router) mediaUsecase() *media.Usecase {
 	})
 }
 
-type drinkLogPhotoCleaner struct {
+type memoryPhotoCleaner struct {
 	storage *media.SupabaseStorageRepository
 }
 
-func (c drinkLogPhotoCleaner) DeleteDrinkLogPhoto(ctx context.Context, photoPath string) error {
+func (c memoryPhotoCleaner) DeleteMemoryPhoto(ctx context.Context, photoPath string) error {
 	if c.storage == nil {
 		return nil
 	}
 	return c.storage.DeleteObject(ctx, media.PhotoBucket, photoPath)
 }
 
-func (r *router) drinkLogPhotoCleaner() drinklogs.MediaCleaner {
+func (r *router) memoryPhotoCleaner() memories.MediaCleaner {
 	if r.deps.Config.SupabaseServiceRoleKey == "" {
 		return nil
 	}
-	return drinkLogPhotoCleaner{storage: media.NewSupabaseStorageRepository(r.deps.Config.SupabaseURL, r.deps.Config.SupabaseServiceRoleKey, nil)}
+	return memoryPhotoCleaner{storage: media.NewSupabaseStorageRepository(r.deps.Config.SupabaseURL, r.deps.Config.SupabaseServiceRoleKey, nil)}
 }
 
-func (r *router) adminListOrphanDrinkLogPhotos(w http.ResponseWriter, req *http.Request, _ AuthUser) {
+func (r *router) adminListOrphanMemoryPhotos(w http.ResponseWriter, req *http.Request, _ AuthUser) {
 	userID, errMessage := cleanUUID(req.URL.Query().Get("user_id"), "user_id")
 	if errMessage != "" {
 		writeError(w, http.StatusBadRequest, errMessage)
@@ -97,14 +97,14 @@ func (r *router) adminListOrphanDrinkLogPhotos(w http.ResponseWriter, req *http.
 		}
 		limit = min(parsed, 1000)
 	}
-	prefix := "users/" + userID + "/drink_logs"
+	prefix := "users/" + userID + "/memories"
 	storage := media.NewSupabaseStorageRepository(r.deps.Config.SupabaseURL, r.deps.Config.SupabaseServiceRoleKey, nil)
 	objects, err := storage.ListObjects(req.Context(), media.PhotoBucket, prefix, limit)
 	if err != nil {
 		writeSupabaseError(w, err)
 		return
 	}
-	activePaths, err := r.adminActiveDrinkLogPhotoPaths(req.Context(), userID)
+	activePaths, err := r.adminActiveMemoryPhotoPaths(req.Context(), userID)
 	if err != nil {
 		writeSupabaseError(w, err)
 		return
@@ -124,14 +124,14 @@ func (r *router) adminListOrphanDrinkLogPhotos(w http.ResponseWriter, req *http.
 	})
 }
 
-func (r *router) adminActiveDrinkLogPhotoPaths(ctx context.Context, userID string) (map[string]bool, error) {
+func (r *router) adminActiveMemoryPhotoPaths(ctx context.Context, userID string) (map[string]bool, error) {
 	q := url.Values{}
 	q.Set("select", "photo_path")
 	q.Set("owner_user_id", "eq."+userID)
 	q.Set("photo_path", "neq.")
 	q.Set("limit", "10000")
 	var rows []map[string]any
-	if err := r.deps.AdminSupabase.Get(ctx, r.deps.Config.SupabaseServiceRoleKey, "drink_logs", q, &rows); err != nil {
+	if err := r.deps.AdminSupabase.Get(ctx, r.deps.Config.SupabaseServiceRoleKey, "memories", q, &rows); err != nil {
 		return nil, err
 	}
 	paths := make(map[string]bool, len(rows))

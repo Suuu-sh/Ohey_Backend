@@ -7,11 +7,11 @@ import (
 	"time"
 
 	"github.com/yota/nomo/backend/internal/features/dailystatuses"
-	"github.com/yota/nomo/backend/internal/features/drinkinvites"
-	"github.com/yota/nomo/backend/internal/features/drinklogs"
 	"github.com/yota/nomo/backend/internal/features/friendgroups"
 	"github.com/yota/nomo/backend/internal/features/friends"
 	"github.com/yota/nomo/backend/internal/features/homefeed"
+	"github.com/yota/nomo/backend/internal/features/invites"
+	"github.com/yota/nomo/backend/internal/features/memories"
 	"github.com/yota/nomo/backend/internal/features/notifications"
 	"github.com/yota/nomo/backend/internal/features/profiles"
 	"github.com/yota/nomo/backend/internal/features/usersafety"
@@ -34,16 +34,16 @@ type FriendRequestUpdateRequest struct {
 	Status string `json:"status"`
 }
 
-type DrinkInviteRequest struct {
-	ToUserID   string `json:"to_user_id"`
-	InviteDate string `json:"invite_date"`
+type InviteRequest struct {
+	InviteeUserID string `json:"invitee_user_id"`
+	ScheduledDate string `json:"scheduled_date"`
 }
 
-type DrinkInviteUpdateRequest struct {
+type InviteUpdateRequest struct {
 	Status string `json:"status"`
 }
 
-type DrinkLogReportRequest struct {
+type MemoryReportRequest struct {
 	Reason string `json:"reason"`
 }
 
@@ -55,8 +55,8 @@ type UserSafetyUserRequest struct {
 	Reason        string `json:"reason"`
 }
 
-type FeedHiddenDrinkLogRequest struct {
-	DrinkLogID string `json:"drink_log_id"`
+type FeedHiddenMemoryRequest struct {
+	MemoryID string `json:"memory_id"`
 }
 
 func (r *router) upsertProfile(w http.ResponseWriter, req *http.Request, authToken string) {
@@ -222,48 +222,48 @@ func (r *router) updateFriendRequest(w http.ResponseWriter, req *http.Request, a
 	writeJSON(w, http.StatusOK, row)
 }
 
-func (r *router) likeDrinkLog(w http.ResponseWriter, req *http.Request, authToken string) {
-	state, err := r.drinkLogUsecase(req).LikeDrinkLog(req.Context(), drinklogs.LikeInput{
+func (r *router) likeMemory(w http.ResponseWriter, req *http.Request, authToken string) {
+	state, err := r.memoryUsecase(req).LikeMemory(req.Context(), memories.LikeInput{
 		AuthToken: authToken,
-		LogID:     req.PathValue("id"),
+		MemoryID:  req.PathValue("id"),
 		UserID:    req.Header.Get("X-Nomo-User-ID"),
 	})
 	if err != nil {
-		writeDrinkLogError(w, err)
+		writeMemoryError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, state)
 }
 
-func (r *router) unlikeDrinkLog(w http.ResponseWriter, req *http.Request, authToken string) {
-	state, err := r.drinkLogUsecase(req).UnlikeDrinkLog(req.Context(), drinklogs.LikeInput{
+func (r *router) unlikeMemory(w http.ResponseWriter, req *http.Request, authToken string) {
+	state, err := r.memoryUsecase(req).UnlikeMemory(req.Context(), memories.LikeInput{
 		AuthToken: authToken,
-		LogID:     req.PathValue("id"),
+		MemoryID:  req.PathValue("id"),
 		UserID:    req.Header.Get("X-Nomo-User-ID"),
 	})
 	if err != nil {
-		writeDrinkLogError(w, err)
+		writeMemoryError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, state)
 }
 
-func (r *router) reportDrinkLog(w http.ResponseWriter, req *http.Request, authToken string) {
-	var input DrinkLogReportRequest
+func (r *router) reportMemory(w http.ResponseWriter, req *http.Request, authToken string) {
+	var input MemoryReportRequest
 	if !decodeJSONBody(w, req, &input) {
 		return
 	}
-	if !r.enforceRateLimit(w, req, rateLimitReportDrinkLog) {
+	if !r.enforceRateLimit(w, req, rateLimitReportMemory) {
 		return
 	}
-	result, err := r.drinkLogUsecase(req).ReportDrinkLog(req.Context(), drinklogs.ReportInput{
+	result, err := r.memoryUsecase(req).ReportMemory(req.Context(), memories.ReportInput{
 		AuthToken:      authToken,
-		LogID:          req.PathValue("id"),
+		MemoryID:       req.PathValue("id"),
 		ReporterUserID: req.Header.Get("X-Nomo-User-ID"),
 		Reason:         input.Reason,
 	})
 	if err != nil {
-		writeDrinkLogError(w, err)
+		writeMemoryError(w, err)
 		return
 	}
 	if result.Created {
@@ -384,15 +384,15 @@ func (r *router) reportUser(w http.ResponseWriter, req *http.Request, authToken 
 	writeJSON(w, http.StatusCreated, row)
 }
 
-func (r *router) hideDrinkLogFromFeed(w http.ResponseWriter, req *http.Request, authToken string) {
-	var input FeedHiddenDrinkLogRequest
+func (r *router) hideMemoryFromFeed(w http.ResponseWriter, req *http.Request, authToken string) {
+	var input FeedHiddenMemoryRequest
 	if !decodeJSONBody(w, req, &input) {
 		return
 	}
-	row, err := r.userSafetyUsecase().HideDrinkLog(req.Context(), usersafety.DrinkLogInput{
-		AuthToken:  authToken,
-		UserID:     req.Header.Get("X-Nomo-User-ID"),
-		DrinkLogID: input.DrinkLogID,
+	row, err := r.userSafetyUsecase().HideMemory(req.Context(), usersafety.MemoryInput{
+		AuthToken: authToken,
+		UserID:    req.Header.Get("X-Nomo-User-ID"),
+		MemoryID:  input.MemoryID,
 	})
 	if err != nil {
 		writeUserSafetyError(w, err)
@@ -401,11 +401,11 @@ func (r *router) hideDrinkLogFromFeed(w http.ResponseWriter, req *http.Request, 
 	writeJSON(w, http.StatusCreated, row)
 }
 
-func (r *router) unhideDrinkLogFromFeed(w http.ResponseWriter, req *http.Request, authToken string) {
-	err := r.userSafetyUsecase().UnhideDrinkLog(req.Context(), usersafety.DrinkLogInput{
-		AuthToken:  authToken,
-		UserID:     req.Header.Get("X-Nomo-User-ID"),
-		DrinkLogID: req.PathValue("id"),
+func (r *router) unhideMemoryFromFeed(w http.ResponseWriter, req *http.Request, authToken string) {
+	err := r.userSafetyUsecase().UnhideMemory(req.Context(), usersafety.MemoryInput{
+		AuthToken: authToken,
+		UserID:    req.Header.Get("X-Nomo-User-ID"),
+		MemoryID:  req.PathValue("id"),
 	})
 	if err != nil {
 		writeUserSafetyError(w, err)
@@ -476,10 +476,10 @@ func (r *router) deleteOwnAccount(w http.ResponseWriter, req *http.Request, _ st
 }
 
 func (r *router) listTodayReservations(w http.ResponseWriter, req *http.Request, authToken string) {
-	rows, err := r.drinkInviteUsecase(req).ListTodayReservations(req.Context(), drinkinvites.ListInput{
-		AuthToken:  authToken,
-		UserID:     req.Header.Get("X-Nomo-User-ID"),
-		InviteDate: dateOnlyParam(req, "date"),
+	rows, err := r.inviteUsecase(req).ListTodayReservations(req.Context(), invites.ListInput{
+		AuthToken:     authToken,
+		UserID:        req.Header.Get("X-Nomo-User-ID"),
+		ScheduledDate: dateOnlyParam(req, "date"),
 	})
 	if err != nil {
 		writeSupabaseError(w, err)
@@ -489,10 +489,10 @@ func (r *router) listTodayReservations(w http.ResponseWriter, req *http.Request,
 }
 
 func (r *router) listIncomingPendingInvites(w http.ResponseWriter, req *http.Request, authToken string) {
-	rows, err := r.drinkInviteUsecase(req).ListIncomingPending(req.Context(), drinkinvites.ListInput{
-		AuthToken:  authToken,
-		UserID:     req.Header.Get("X-Nomo-User-ID"),
-		InviteDate: dateOnlyParam(req, "date"),
+	rows, err := r.inviteUsecase(req).ListIncomingPending(req.Context(), invites.ListInput{
+		AuthToken:     authToken,
+		UserID:        req.Header.Get("X-Nomo-User-ID"),
+		ScheduledDate: dateOnlyParam(req, "date"),
 	})
 	if err != nil {
 		writeSupabaseError(w, err)
@@ -502,10 +502,10 @@ func (r *router) listIncomingPendingInvites(w http.ResponseWriter, req *http.Req
 }
 
 func (r *router) listOutgoingActiveInvites(w http.ResponseWriter, req *http.Request, authToken string) {
-	rows, err := r.drinkInviteUsecase(req).ListOutgoingActive(req.Context(), drinkinvites.ListInput{
-		AuthToken:  authToken,
-		UserID:     req.Header.Get("X-Nomo-User-ID"),
-		InviteDate: dateOnlyParam(req, "date"),
+	rows, err := r.inviteUsecase(req).ListOutgoingActive(req.Context(), invites.ListInput{
+		AuthToken:     authToken,
+		UserID:        req.Header.Get("X-Nomo-User-ID"),
+		ScheduledDate: dateOnlyParam(req, "date"),
 	})
 	if err != nil {
 		writeSupabaseError(w, err)
@@ -514,54 +514,54 @@ func (r *router) listOutgoingActiveInvites(w http.ResponseWriter, req *http.Requ
 	writeJSON(w, http.StatusOK, rows)
 }
 
-func (r *router) createDrinkInvite(w http.ResponseWriter, req *http.Request, authToken string) {
-	var input DrinkInviteRequest
+func (r *router) createInvite(w http.ResponseWriter, req *http.Request, authToken string) {
+	var input InviteRequest
 	if !decodeJSONBody(w, req, &input) {
 		return
 	}
-	if !r.enforceRateLimit(w, req, rateLimitCreateDrinkInvite) {
+	if !r.enforceRateLimit(w, req, rateLimitCreateInvite) {
 		return
 	}
-	row, err := r.drinkInviteUsecase(req).CreateDrinkInvite(req.Context(), drinkinvites.CreateInput{
-		AuthToken:  authToken,
-		FromUserID: req.Header.Get("X-Nomo-User-ID"),
-		ToUserID:   input.ToUserID,
-		InviteDate: input.InviteDate,
+	row, err := r.inviteUsecase(req).CreateInvite(req.Context(), invites.CreateInput{
+		AuthToken:     authToken,
+		InviterUserID: req.Header.Get("X-Nomo-User-ID"),
+		InviteeUserID: input.InviteeUserID,
+		ScheduledDate: input.ScheduledDate,
 	})
 	if err != nil {
-		writeDrinkInviteError(w, err)
+		writeInviteError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, row)
 }
 
-func (r *router) updateDrinkInvite(w http.ResponseWriter, req *http.Request, authToken string) {
+func (r *router) updateInvite(w http.ResponseWriter, req *http.Request, authToken string) {
 	inviteID := req.PathValue("id")
-	if _, err := drinkinvites.CleanUUID(inviteID, "drink invite id"); err != nil {
-		writeDrinkInviteError(w, err)
+	if _, err := invites.CleanUUID(inviteID, "invite id"); err != nil {
+		writeInviteError(w, err)
 		return
 	}
-	var input DrinkInviteUpdateRequest
+	var input InviteUpdateRequest
 	if !decodeJSONBody(w, req, &input) {
 		return
 	}
-	row, err := r.drinkInviteUsecase(req).UpdateDrinkInvite(req.Context(), drinkinvites.UpdateInput{
+	row, err := r.inviteUsecase(req).UpdateInvite(req.Context(), invites.UpdateInput{
 		AuthToken:       authToken,
 		InviteID:        inviteID,
 		RecipientUserID: req.Header.Get("X-Nomo-User-ID"),
 		Status:          input.Status,
 	})
 	if err != nil {
-		writeDrinkInviteError(w, err)
+		writeInviteError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, row)
 }
 
-func (r *router) drinkInviteUsecase(req *http.Request) *drinkinvites.Usecase {
-	return drinkinvites.NewUsecase(drinkinvites.Dependencies{
-		Repository: drinkinvites.NewSupabaseRepository(r.deps.Supabase),
-		Publisher:  drinkInviteEventPublisher{router: r, req: req},
+func (r *router) inviteUsecase(req *http.Request) *invites.Usecase {
+	return invites.NewUsecase(invites.Dependencies{
+		Repository: invites.NewSupabaseRepository(r.deps.Supabase),
+		Publisher:  inviteEventPublisher{router: r, req: req},
 	})
 }
 
@@ -605,46 +605,46 @@ func (p friendRequestEventPublisher) Publish(ctx context.Context, authToken stri
 	}
 }
 
-type drinkInviteEventPublisher struct {
+type inviteEventPublisher struct {
 	router *router
 	req    *http.Request
 }
 
-func (p drinkInviteEventPublisher) Publish(_ context.Context, authToken string, event drinkinvites.DomainEvent) {
+func (p inviteEventPublisher) Publish(_ context.Context, authToken string, event invites.DomainEvent) {
 	if p.router == nil || p.req == nil {
 		return
 	}
 	row := event.InviteRow()
 	switch event.Kind {
-	case drinkinvites.EventDrinkInviteCreated:
+	case invites.EventInviteCreated:
 		p.router.enqueueAndProcessNotificationOutboxEvent(p.req.Context(), authToken, notificationOutboxEvent{
 			EventKind:       string(event.Kind),
-			AggregateType:   "drink_invite",
+			AggregateType:   "invite",
 			AggregateID:     event.Invite.ID,
-			ActorUserID:     event.Invite.FromUserID,
-			RecipientUserID: event.Invite.ToUserID,
+			ActorUserID:     event.Invite.InviterUserID,
+			RecipientUserID: event.Invite.InviteeUserID,
 			Payload:         row,
 		})
-	case drinkinvites.EventDrinkInviteAccepted:
+	case invites.EventInviteAccepted:
 		p.router.enqueueAndProcessNotificationOutboxEvent(p.req.Context(), authToken, notificationOutboxEvent{
 			EventKind:       string(event.Kind),
-			AggregateType:   "drink_invite",
+			AggregateType:   "invite",
 			AggregateID:     event.Invite.ID,
-			ActorUserID:     event.Invite.ToUserID,
-			RecipientUserID: event.Invite.FromUserID,
+			ActorUserID:     event.Invite.InviteeUserID,
+			RecipientUserID: event.Invite.InviterUserID,
 			Payload:         row,
 		})
 	}
 }
 
-func writeDrinkInviteError(w http.ResponseWriter, err error) {
-	if kind, ok := drinkinvites.ErrorKindOf(err); ok {
+func writeInviteError(w http.ResponseWriter, err error) {
+	if kind, ok := invites.ErrorKindOf(err); ok {
 		switch kind {
-		case drinkinvites.ErrorKindInvalidInput:
+		case invites.ErrorKindInvalidInput:
 			writeError(w, http.StatusBadRequest, err.Error())
-		case drinkinvites.ErrorKindConflict:
+		case invites.ErrorKindConflict:
 			writeError(w, http.StatusConflict, err.Error())
-		case drinkinvites.ErrorKindNotFound:
+		case invites.ErrorKindNotFound:
 			writeError(w, http.StatusNotFound, err.Error())
 		default:
 			writeError(w, http.StatusBadRequest, err.Error())
@@ -671,26 +671,26 @@ func writeFriendsError(w http.ResponseWriter, err error) {
 	writeSupabaseError(w, err)
 }
 
-func (r *router) drinkLogUsecase(req *http.Request) *drinklogs.Usecase {
-	return drinklogs.NewUsecase(drinklogs.Dependencies{
-		Repository:   drinklogs.NewSupabaseRepository(r.deps.Supabase),
-		Publisher:    drinkLogEventPublisher{router: r, req: req},
-		MediaCleaner: r.drinkLogPhotoCleaner(),
+func (r *router) memoryUsecase(req *http.Request) *memories.Usecase {
+	return memories.NewUsecase(memories.Dependencies{
+		Repository:   memories.NewSupabaseRepository(r.deps.Supabase),
+		Publisher:    memoryEventPublisher{router: r, req: req},
+		MediaCleaner: r.memoryPhotoCleaner(),
 		Logger:       r.deps.Logger,
 	})
 }
 
-type drinkLogEventPublisher struct {
+type memoryEventPublisher struct {
 	router *router
 	req    *http.Request
 }
 
-func (p drinkLogEventPublisher) Publish(ctx context.Context, authToken string, event drinklogs.DomainEvent) {
+func (p memoryEventPublisher) Publish(ctx context.Context, authToken string, event memories.DomainEvent) {
 	if p.router == nil || p.req == nil {
 		return
 	}
 	payload := map[string]any{
-		"log_id":        event.LogID,
+		"memory_id":     event.MemoryID,
 		"owner_user_id": event.OwnerUserID,
 		"actor_user_id": event.ActorUserID,
 	}
@@ -702,45 +702,45 @@ func (p drinkLogEventPublisher) Publish(ctx context.Context, authToken string, e
 		payload["status"] = string(event.ModerationStatus)
 	}
 	switch event.Kind {
-	case drinklogs.EventDrinkLogTagged:
+	case memories.EventMemoryTagged:
 		p.router.enqueueAndProcessNotificationOutboxEvent(ctx, authToken, notificationOutboxEvent{
 			EventKind:     string(event.Kind),
-			AggregateType: "drink_log",
-			AggregateID:   event.LogID,
+			AggregateType: "memory",
+			AggregateID:   event.MemoryID,
 			ActorUserID:   event.ActorUserID,
 			Payload:       payload,
 		})
-	case drinklogs.EventDrinkLogLiked:
+	case memories.EventMemoryLiked:
 		p.router.enqueueAndProcessNotificationOutboxEvent(ctx, authToken, notificationOutboxEvent{
 			EventKind:     string(event.Kind),
-			AggregateType: "drink_log",
-			AggregateID:   event.LogID,
+			AggregateType: "memory",
+			AggregateID:   event.MemoryID,
 			ActorUserID:   event.ActorUserID,
 			Payload:       payload,
 		})
-	case drinklogs.EventDrinkLogReported:
+	case memories.EventMemoryReported:
 		p.router.enqueueAndProcessNotificationOutboxEvent(ctx, authToken, notificationOutboxEvent{
 			EventKind:     string(event.Kind),
-			AggregateType: "drink_log",
-			AggregateID:   event.LogID,
+			AggregateType: "memory",
+			AggregateID:   event.MemoryID,
 			ActorUserID:   event.ActorUserID,
 			Payload:       payload,
 		})
 	}
 }
 
-func writeDrinkLogError(w http.ResponseWriter, err error) {
-	if kind, ok := drinklogs.ErrorKindOf(err); ok {
+func writeMemoryError(w http.ResponseWriter, err error) {
+	if kind, ok := memories.ErrorKindOf(err); ok {
 		switch kind {
-		case drinklogs.ErrorKindInvalidInput:
+		case memories.ErrorKindInvalidInput:
 			writeError(w, http.StatusBadRequest, err.Error())
-		case drinklogs.ErrorKindForbidden:
+		case memories.ErrorKindForbidden:
 			writeError(w, http.StatusForbidden, err.Error())
-		case drinklogs.ErrorKindConflict:
+		case memories.ErrorKindConflict:
 			writeError(w, http.StatusConflict, err.Error())
-		case drinklogs.ErrorKindNotFound:
+		case memories.ErrorKindNotFound:
 			writeError(w, http.StatusNotFound, err.Error())
-		case drinklogs.ErrorKindUpstream:
+		case memories.ErrorKindUpstream:
 			writeError(w, http.StatusBadGateway, "upstream service error")
 		default:
 			writeError(w, http.StatusBadRequest, err.Error())
@@ -862,9 +862,9 @@ func dateOnlyParam(req *http.Request, name string) string {
 func isValidDailyStatus(status string) bool {
 	switch status {
 	case "unselected",
-		"can_drink_today",
-		"non_alcohol",
-		"liver_rest",
+		"available",
+		"maybe_available",
+		"depends_on_time",
 		"has_plans":
 		return true
 	default:

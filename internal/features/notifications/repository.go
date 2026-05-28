@@ -10,8 +10,8 @@ type Repository interface {
 	ListNotifications(ctx context.Context, authToken, recipientUserID string, limit int) ([]map[string]any, error)
 	MarkAllRead(ctx context.Context, authToken, recipientUserID string, readAt time.Time) (int, error)
 	DisplayName(ctx context.Context, authToken, userID string) (string, error)
-	DrinkLogOwnerUserID(ctx context.Context, authToken, logID string) (string, error)
-	TodayAcceptedInvites(ctx context.Context, authToken, userID, date string) ([]DrinkInvite, error)
+	MemoryOwnerUserID(ctx context.Context, authToken, memoryID string) (string, error)
+	TodayAcceptedInvites(ctx context.Context, authToken, userID, date string) ([]Invite, error)
 	AllProfileIDs(ctx context.Context) ([]string, error)
 	PushTokens(ctx context.Context, recipientUserID string) ([]string, error)
 	DeletePushToken(ctx context.Context, token string) error

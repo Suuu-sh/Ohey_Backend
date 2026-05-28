@@ -9,13 +9,13 @@ const (
 	testAuthToken = "access-token"
 	testUserID    = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 	otherUserID   = "bbbbbbbb-cccc-dddd-eeee-ffffffffffff"
-	testLogID     = "11111111-2222-3333-4444-555555555555"
+	testMemoryID  = "11111111-2222-3333-4444-555555555555"
 )
 
 type fakeRepository struct {
 	blocked UserRelation
 	report  UserReport
-	hidden  HiddenDrinkLog
+	hidden  HiddenMemory
 	cleaned UserRelation
 }
 
@@ -38,11 +38,11 @@ func (f *fakeRepository) ReportUser(_ context.Context, _ string, report UserRepo
 	f.report = report
 	return map[string]any{"reported_user_id": report.ReportedUserID, "reason": report.Reason}, nil
 }
-func (f *fakeRepository) HideDrinkLog(_ context.Context, _ string, hidden HiddenDrinkLog) (map[string]any, error) {
+func (f *fakeRepository) HideMemory(_ context.Context, _ string, hidden HiddenMemory) (map[string]any, error) {
 	f.hidden = hidden
-	return map[string]any{"drink_log_id": hidden.DrinkLogID}, nil
+	return map[string]any{"memory_id": hidden.MemoryID}, nil
 }
-func (f *fakeRepository) UnhideDrinkLog(context.Context, string, HiddenDrinkLog) error { return nil }
+func (f *fakeRepository) UnhideMemory(context.Context, string, HiddenMemory) error { return nil }
 func (f *fakeRepository) CleanupBlockedRelations(_ context.Context, relation UserRelation) error {
 	f.cleaned = relation
 	return nil
@@ -116,15 +116,15 @@ func TestReportUserRejectsInvalidReason(t *testing.T) {
 	assertUserError(t, err, ErrorKindInvalidInput, "report reason is invalid")
 }
 
-func TestHideDrinkLogCleansIDs(t *testing.T) {
+func TestHideMemoryCleansIDs(t *testing.T) {
 	repo := &fakeRepository{}
 	usecase := NewUsecase(Dependencies{Repository: repo})
 
-	_, err := usecase.HideDrinkLog(context.Background(), DrinkLogInput{AuthToken: testAuthToken, UserID: testUserID, DrinkLogID: testLogID})
+	_, err := usecase.HideMemory(context.Background(), MemoryInput{AuthToken: testAuthToken, UserID: testUserID, MemoryID: testMemoryID})
 	if err != nil {
-		t.Fatalf("HideDrinkLog returned error: %v", err)
+		t.Fatalf("HideMemory returned error: %v", err)
 	}
-	if repo.hidden.UserID != testUserID || repo.hidden.DrinkLogID != testLogID {
+	if repo.hidden.UserID != testUserID || repo.hidden.MemoryID != testMemoryID {
 		t.Fatalf("hidden = %#v", repo.hidden)
 	}
 }

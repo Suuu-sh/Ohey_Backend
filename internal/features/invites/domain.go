@@ -1,4 +1,4 @@
-package drinkinvites
+package invites
 
 import (
 	"errors"
@@ -68,8 +68,8 @@ func CleanDateOnlyOrToday(value, field string, now time.Time) (string, error) {
 	return parsed.Format(time.DateOnly), nil
 }
 
-func ValidateNewInvite(fromUserID, toUserID string) error {
-	if fromUserID == toUserID {
+func ValidateNewInvite(inviterUserID, inviteeUserID string) error {
+	if inviterUserID == inviteeUserID {
 		return UserError{Kind: ErrorKindInvalidInput, Message: "cannot invite yourself"}
 	}
 	return nil
@@ -87,8 +87,6 @@ func NormalizeResponseStatus(value string) (InviteStatus, error) {
 
 func BlockedDailyStatusMessage(status string) string {
 	switch strings.TrimSpace(status) {
-	case "liver_rest":
-		return "相手が休肝日のため今日は誘えません。"
 	case "has_plans":
 		return "相手に予定があるため今日は誘えません。"
 	default:
@@ -106,63 +104,63 @@ func ExistingInviteConflictMessage(status InviteStatus) string {
 type DomainEventKind string
 
 const (
-	EventDrinkInviteCreated  DomainEventKind = "drink_invite.created"
-	EventDrinkInviteAccepted DomainEventKind = "drink_invite.accepted"
+	EventInviteCreated  DomainEventKind = "invite.created"
+	EventInviteAccepted DomainEventKind = "invite.accepted"
 )
 
-type DrinkInvite struct {
-	ID         string
-	FromUserID string
-	ToUserID   string
-	InviteDate string
-	Status     InviteStatus
+type Invite struct {
+	ID            string
+	InviterUserID string
+	InviteeUserID string
+	ScheduledDate string
+	Status        InviteStatus
 }
 
 type DomainEvent struct {
 	Kind   DomainEventKind
-	Invite DrinkInvite
+	Invite Invite
 }
 
-func DrinkInviteFromRow(row map[string]any) DrinkInvite {
+func InviteFromRow(row map[string]any) Invite {
 	id, _ := row["id"].(string)
-	fromUserID, _ := row["from_user_id"].(string)
-	toUserID, _ := row["to_user_id"].(string)
-	inviteDate, _ := row["invite_date"].(string)
+	inviterUserID, _ := row["inviter_user_id"].(string)
+	inviteeUserID, _ := row["invitee_user_id"].(string)
+	scheduledDate, _ := row["scheduled_date"].(string)
 	status, _ := row["status"].(string)
-	return DrinkInvite{ID: id, FromUserID: fromUserID, ToUserID: toUserID, InviteDate: inviteDate, Status: InviteStatus(status)}
+	return Invite{ID: id, InviterUserID: inviterUserID, InviteeUserID: inviteeUserID, ScheduledDate: scheduledDate, Status: InviteStatus(status)}
 }
 
-func NewDrinkInviteCreatedEvent(row map[string]any) (DomainEvent, bool) {
-	invite := DrinkInviteFromRow(row)
-	if invite.ID == "" || invite.FromUserID == "" || invite.ToUserID == "" || invite.FromUserID == invite.ToUserID {
+func NewInviteCreatedEvent(row map[string]any) (DomainEvent, bool) {
+	invite := InviteFromRow(row)
+	if invite.ID == "" || invite.InviterUserID == "" || invite.InviteeUserID == "" || invite.InviterUserID == invite.InviteeUserID {
 		return DomainEvent{}, false
 	}
-	return DomainEvent{Kind: EventDrinkInviteCreated, Invite: invite}, true
+	return DomainEvent{Kind: EventInviteCreated, Invite: invite}, true
 }
 
-func NewDrinkInviteAcceptedEvent(row map[string]any) (DomainEvent, bool) {
-	invite := DrinkInviteFromRow(row)
-	if invite.ID == "" || invite.FromUserID == "" || invite.ToUserID == "" || invite.FromUserID == invite.ToUserID {
+func NewInviteAcceptedEvent(row map[string]any) (DomainEvent, bool) {
+	invite := InviteFromRow(row)
+	if invite.ID == "" || invite.InviterUserID == "" || invite.InviteeUserID == "" || invite.InviterUserID == invite.InviteeUserID {
 		return DomainEvent{}, false
 	}
 	invite.Status = InviteStatusAccepted
-	return DomainEvent{Kind: EventDrinkInviteAccepted, Invite: invite}, true
+	return DomainEvent{Kind: EventInviteAccepted, Invite: invite}, true
 }
 
 func (e DomainEvent) InviteRow() map[string]any {
 	return map[string]any{
-		"id":           e.Invite.ID,
-		"from_user_id": e.Invite.FromUserID,
-		"to_user_id":   e.Invite.ToUserID,
-		"invite_date":  e.Invite.InviteDate,
-		"status":       string(e.Invite.Status),
+		"id":              e.Invite.ID,
+		"inviter_user_id": e.Invite.InviterUserID,
+		"invitee_user_id": e.Invite.InviteeUserID,
+		"scheduled_date":  e.Invite.ScheduledDate,
+		"status":          string(e.Invite.Status),
 	}
 }
 
 type NewInvite struct {
-	FromUserID string
-	ToUserID   string
-	InviteDate string
+	InviterUserID string
+	InviteeUserID string
+	ScheduledDate string
 }
 
 type ExistingInvite struct {

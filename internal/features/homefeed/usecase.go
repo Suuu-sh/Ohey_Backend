@@ -48,7 +48,7 @@ func (u *Usecase) ListHomeFeed(ctx context.Context, input ListInput) ([]map[stri
 	if err != nil {
 		return nil, err
 	}
-	hiddenIDs, err := u.repository.HiddenDrinkLogIDs(ctx, input.AuthToken, userID)
+	hiddenIDs, err := u.repository.HiddenMemoryIDs(ctx, input.AuthToken, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -57,11 +57,11 @@ func (u *Usecase) ListHomeFeed(ctx context.Context, input ListInput) ([]map[stri
 		return nil, err
 	}
 	visibleUserIDs = ExcludeHiddenUserIDs(visibleUserIDs, hiddenUserIDs)
-	rows, err := u.repository.ListDrinkLogs(ctx, input.AuthToken, visibleUserIDs)
+	rows, err := u.repository.ListMemories(ctx, input.AuthToken, visibleUserIDs)
 	if err != nil {
 		return nil, err
 	}
-	officialRows, err := u.repository.ListOfficialDrinkLogs(ctx, input.AuthToken)
+	officialRows, err := u.repository.ListOfficialMemories(ctx, input.AuthToken)
 	if err != nil {
 		return nil, err
 	}
@@ -145,7 +145,7 @@ func appendUniqueRows(rows []map[string]any, extraRows ...map[string]any) []map[
 
 func attachLikeState(rows []map[string]any, userID string) {
 	for _, row := range rows {
-		rawLikes, _ := row["drink_log_likes"].([]any)
+		rawLikes, _ := row["memory_likes"].([]any)
 		row["like_count"] = len(rawLikes)
 		likedByMe := false
 		for _, rawLike := range rawLikes {

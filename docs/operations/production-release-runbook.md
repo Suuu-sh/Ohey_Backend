@@ -27,7 +27,7 @@ Do not merge `development` to `main` until all of the following are true.
 7. Build/upload TestFlight if the Mobile app changed.
 8. Run post-release smoke against production/TestFlight:
    - login/profile bootstrap
-   - drink log create/delete
+   - memory create/delete
    - photo upload/display
    - feed pagination
    - invite/accept

@@ -1,4 +1,4 @@
-package drinklogs
+package memories
 
 import (
 	"context"
@@ -11,29 +11,29 @@ const (
 	testAuthToken = "access-token"
 	testUserID    = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 	otherUserID   = "bbbbbbbb-cccc-dddd-eeee-ffffffffffff"
-	testLogID     = "11111111-2222-3333-4444-555555555555"
+	testMemoryID  = "11111111-2222-3333-4444-555555555555"
 )
 
 type fakeRepository struct {
 	calls []string
 
-	visibleUserIDs []string
-	logs           []map[string]any
-	officialLogs   []map[string]any
-	hasDailyLog    bool
-	friendships    map[string]bool
-	createdLog     map[string]any
-	deletedLog     map[string]any
-	likeCreated    bool
-	likeState      LikeState
-	hiddenIDs      map[string]bool
-	hiddenUserIDs  map[string]bool
-	report         *Report
-	reportOwnerID  string
-	createdReport  Report
+	visibleUserIDs   []string
+	memories         []map[string]any
+	officialMemories []map[string]any
+	hasDailyMemory   bool
+	friendships      map[string]bool
+	createdMemory    map[string]any
+	deletedMemory    map[string]any
+	likeCreated      bool
+	likeState        LikeState
+	hiddenIDs        map[string]bool
+	hiddenUserIDs    map[string]bool
+	report           *Report
+	reportOwnerID    string
+	createdReport    Report
 
-	newLog NewDrinkLog
-	links  []string
+	newMemory NewMemory
+	links     []string
 }
 
 func (f *fakeRepository) VisibleFeedUserIDs(context.Context, string, string) ([]string, error) {
@@ -44,19 +44,19 @@ func (f *fakeRepository) VisibleFeedUserIDs(context.Context, string, string) ([]
 	return []string{testUserID}, nil
 }
 
-func (f *fakeRepository) ListDrinkLogs(context.Context, string, []string) ([]map[string]any, error) {
-	f.calls = append(f.calls, "list_logs")
-	return f.logs, nil
+func (f *fakeRepository) ListMemories(context.Context, string, []string) ([]map[string]any, error) {
+	f.calls = append(f.calls, "list_memories")
+	return f.memories, nil
 }
 
-func (f *fakeRepository) ListOfficialDrinkLogs(context.Context, string) ([]map[string]any, error) {
+func (f *fakeRepository) ListOfficialMemories(context.Context, string) ([]map[string]any, error) {
 	f.calls = append(f.calls, "list_official")
-	return f.officialLogs, nil
+	return f.officialMemories, nil
 }
 
-func (f *fakeRepository) HasDrinkLogInWindow(context.Context, string, string, time.Time, time.Time) (bool, error) {
+func (f *fakeRepository) HasMemoryInWindow(context.Context, string, string, time.Time, time.Time) (bool, error) {
 	f.calls = append(f.calls, "daily_limit")
-	return f.hasDailyLog, nil
+	return f.hasDailyMemory, nil
 }
 
 func (f *fakeRepository) FriendshipExists(_ context.Context, _ string, _ string, friendID string) (bool, error) {
@@ -67,24 +67,24 @@ func (f *fakeRepository) FriendshipExists(_ context.Context, _ string, _ string,
 	return f.friendships[friendID], nil
 }
 
-func (f *fakeRepository) CreateDrinkLog(_ context.Context, _ string, log NewDrinkLog) (map[string]any, error) {
+func (f *fakeRepository) CreateMemory(_ context.Context, _ string, memory NewMemory) (map[string]any, error) {
 	f.calls = append(f.calls, "create")
-	f.newLog = log
-	if f.createdLog != nil {
-		return f.createdLog, nil
+	f.newMemory = memory
+	if f.createdMemory != nil {
+		return f.createdMemory, nil
 	}
-	return map[string]any{"id": testLogID, "owner_user_id": log.OwnerUserID, "marker_rarity": string(log.MarkerRarity)}, nil
+	return map[string]any{"id": testMemoryID, "owner_user_id": memory.OwnerUserID, "marker_rarity": string(memory.MarkerRarity)}, nil
 }
 
-func (f *fakeRepository) CreateDrinkLogFriendLinks(_ context.Context, _ string, _ string, friendIDs []string) error {
+func (f *fakeRepository) CreateMemoryFriendLinks(_ context.Context, _ string, _ string, friendIDs []string) error {
 	f.calls = append(f.calls, "links")
 	f.links = friendIDs
 	return nil
 }
 
-func (f *fakeRepository) DeleteOwnedDrinkLog(context.Context, string, string, string) (map[string]any, error) {
+func (f *fakeRepository) DeleteOwnedMemory(context.Context, string, string, string) (map[string]any, error) {
 	f.calls = append(f.calls, "delete")
-	return f.deletedLog, nil
+	return f.deletedMemory, nil
 }
 
 func (f *fakeRepository) CreateLike(context.Context, string, string, string) (bool, error) {
@@ -102,7 +102,7 @@ func (f *fakeRepository) LikeState(context.Context, string, string, string) (Lik
 	return f.likeState, nil
 }
 
-func (f *fakeRepository) HiddenDrinkLogIDs(context.Context, string, string) (map[string]bool, error) {
+func (f *fakeRepository) HiddenMemoryIDs(context.Context, string, string) (map[string]bool, error) {
 	f.calls = append(f.calls, "hidden_reports")
 	if f.hiddenIDs != nil {
 		return f.hiddenIDs, nil
@@ -118,7 +118,7 @@ func (f *fakeRepository) HiddenUserIDs(context.Context, string, string) (map[str
 	return map[string]bool{}, nil
 }
 
-func (f *fakeRepository) DrinkLogOwnerUserID(context.Context, string, string) (string, error) {
+func (f *fakeRepository) MemoryOwnerUserID(context.Context, string, string) (string, error) {
 	f.calls = append(f.calls, "log_owner")
 	return f.reportOwnerID, nil
 }
@@ -146,16 +146,16 @@ type fakeMediaCleaner struct {
 	deletedPath string
 }
 
-func (f *fakeMediaCleaner) DeleteDrinkLogPhoto(_ context.Context, photoPath string) error {
+func (f *fakeMediaCleaner) DeleteMemoryPhoto(_ context.Context, photoPath string) error {
 	f.deletedPath = photoPath
 	return nil
 }
 
-func TestCreateDrinkLogRejectsNonFriendTagBeforeInsert(t *testing.T) {
+func TestCreateMemoryRejectsNonFriendTagBeforeInsert(t *testing.T) {
 	repo := &fakeRepository{friendships: map[string]bool{otherUserID: false}}
 	usecase := NewUsecase(Dependencies{Repository: repo})
 
-	_, err := usecase.CreateDrinkLog(context.Background(), CreateInput{
+	_, err := usecase.CreateMemory(context.Background(), CreateInput{
 		AuthToken:   testAuthToken,
 		OwnerUserID: testUserID,
 		FriendIDs:   []string{otherUserID},
@@ -167,17 +167,17 @@ func TestCreateDrinkLogRejectsNonFriendTagBeforeInsert(t *testing.T) {
 	}
 }
 
-func TestCreateDrinkLogRejectsExistingLogOnSameDay(t *testing.T) {
-	repo := &fakeRepository{hasDailyLog: true}
+func TestCreateMemoryRejectsExistingLogOnSameDay(t *testing.T) {
+	repo := &fakeRepository{hasDailyMemory: true}
 	usecase := NewUsecase(Dependencies{Repository: repo})
-	drankAt := time.Date(2026, 5, 24, 12, 30, 0, 0, time.UTC)
+	happenedAt := time.Date(2026, 5, 24, 12, 30, 0, 0, time.UTC)
 	offset := 9 * 60
 
-	_, err := usecase.CreateDrinkLog(context.Background(), CreateInput{
+	_, err := usecase.CreateMemory(context.Background(), CreateInput{
 		AuthToken:             testAuthToken,
 		OwnerUserID:           testUserID,
-		DrankAt:               &drankAt,
-		DrankOn:               "2026-05-24",
+		HappenedAt:            &happenedAt,
+		HappenedOn:            "2026-05-24",
 		TimezoneOffsetMinutes: &offset,
 	})
 
@@ -187,23 +187,23 @@ func TestCreateDrinkLogRejectsExistingLogOnSameDay(t *testing.T) {
 	}
 }
 
-func TestCreateDrinkLogRejectsInvalidPhotoPath(t *testing.T) {
+func TestCreateMemoryRejectsInvalidPhotoPath(t *testing.T) {
 	repo := &fakeRepository{}
 	usecase := NewUsecase(Dependencies{Repository: repo})
 
-	_, err := usecase.CreateDrinkLog(context.Background(), CreateInput{
+	_, err := usecase.CreateMemory(context.Background(), CreateInput{
 		AuthToken:   testAuthToken,
 		OwnerUserID: testUserID,
-		PhotoPath:   "users/" + otherUserID + "/drink_logs/photo.jpg",
+		PhotoPath:   "users/" + otherUserID + "/memories/photo.jpg",
 	})
 
-	assertUserError(t, err, ErrorKindInvalidInput, "photo_path must be an uploaded drink-log photo")
+	assertUserError(t, err, ErrorKindInvalidInput, "photo_path must be an uploaded memory photo")
 	if want := []string{"daily_limit"}; !reflect.DeepEqual(repo.calls, want) {
 		t.Fatalf("calls = %v, want %v", repo.calls, want)
 	}
 }
 
-func TestCreateDrinkLogAssignsRarityOnBackendAndIgnoresClientRarity(t *testing.T) {
+func TestCreateMemoryAssignsRarityOnBackendAndIgnoresClientRarity(t *testing.T) {
 	repo := &fakeRepository{}
 	publisher := &fakePublisher{}
 	usecase := NewUsecase(Dependencies{
@@ -212,50 +212,50 @@ func TestCreateDrinkLogAssignsRarityOnBackendAndIgnoresClientRarity(t *testing.T
 		RandomFloat: func() float64 { return 0.005 },
 	})
 
-	row, err := usecase.CreateDrinkLog(context.Background(), CreateInput{
+	row, err := usecase.CreateMemory(context.Background(), CreateInput{
 		AuthToken:             testAuthToken,
 		OwnerUserID:           testUserID,
-		PhotoPath:             "users/" + testUserID + "/drink_logs/photo.jpg",
+		PhotoPath:             "users/" + testUserID + "/memories/photo.jpg",
 		FriendIDs:             []string{otherUserID, otherUserID},
 		ClientRequestedRarity: "secret",
 	})
 	if err != nil {
-		t.Fatalf("CreateDrinkLog returned error: %v", err)
+		t.Fatalf("CreateMemory returned error: %v", err)
 	}
-	if row["id"] != testLogID {
+	if row["id"] != testMemoryID {
 		t.Fatalf("row = %#v", row)
 	}
-	if repo.newLog.MarkerRarity != MarkerRarityUltraRare {
-		t.Fatalf("marker rarity = %s, want %s", repo.newLog.MarkerRarity, MarkerRarityUltraRare)
+	if repo.newMemory.MarkerRarity != MarkerRarityUltraRare {
+		t.Fatalf("marker rarity = %s, want %s", repo.newMemory.MarkerRarity, MarkerRarityUltraRare)
 	}
-	if repo.newLog.PhotoPath != "users/"+testUserID+"/drink_logs/photo.jpg" {
-		t.Fatalf("photo path = %q", repo.newLog.PhotoPath)
+	if repo.newMemory.PhotoPath != "users/"+testUserID+"/memories/photo.jpg" {
+		t.Fatalf("photo path = %q", repo.newMemory.PhotoPath)
 	}
 	if !reflect.DeepEqual(repo.links, []string{otherUserID}) {
 		t.Fatalf("links = %v, want deduplicated friend id", repo.links)
 	}
-	if len(publisher.events) != 1 || publisher.events[0].Kind != EventDrinkLogTagged {
-		t.Fatalf("events = %#v, want drink log tagged", publisher.events)
+	if len(publisher.events) != 1 || publisher.events[0].Kind != EventMemoryTagged {
+		t.Fatalf("events = %#v, want memory tagged", publisher.events)
 	}
 }
 
-func TestCreateDrinkLogUsesNormalRarityWithoutPhoto(t *testing.T) {
+func TestCreateMemoryUsesNormalRarityWithoutPhoto(t *testing.T) {
 	repo := &fakeRepository{}
 	usecase := NewUsecase(Dependencies{Repository: repo, RandomFloat: func() float64 { return 0 }})
 
-	_, err := usecase.CreateDrinkLog(context.Background(), CreateInput{
+	_, err := usecase.CreateMemory(context.Background(), CreateInput{
 		AuthToken:   testAuthToken,
 		OwnerUserID: testUserID,
 	})
 	if err != nil {
-		t.Fatalf("CreateDrinkLog returned error: %v", err)
+		t.Fatalf("CreateMemory returned error: %v", err)
 	}
-	if repo.newLog.MarkerRarity != MarkerRarityNormal {
-		t.Fatalf("marker rarity = %s, want normal", repo.newLog.MarkerRarity)
+	if repo.newMemory.MarkerRarity != MarkerRarityNormal {
+		t.Fatalf("marker rarity = %s, want normal", repo.newMemory.MarkerRarity)
 	}
 }
 
-func TestLikeDrinkLogNotifiesOnlyWhenLikeCreated(t *testing.T) {
+func TestLikeMemoryNotifiesOnlyWhenLikeCreated(t *testing.T) {
 	for _, tc := range []struct {
 		name         string
 		created      bool
@@ -269,9 +269,9 @@ func TestLikeDrinkLogNotifiesOnlyWhenLikeCreated(t *testing.T) {
 			publisher := &fakePublisher{}
 			usecase := NewUsecase(Dependencies{Repository: repo, Publisher: publisher})
 
-			state, err := usecase.LikeDrinkLog(context.Background(), LikeInput{AuthToken: testAuthToken, LogID: testLogID, UserID: testUserID})
+			state, err := usecase.LikeMemory(context.Background(), LikeInput{AuthToken: testAuthToken, MemoryID: testMemoryID, UserID: testUserID})
 			if err != nil {
-				t.Fatalf("LikeDrinkLog returned error: %v", err)
+				t.Fatalf("LikeMemory returned error: %v", err)
 			}
 			if state.LikeCount != 2 || !state.LikedByMe {
 				t.Fatalf("state = %#v", state)
@@ -279,76 +279,76 @@ func TestLikeDrinkLogNotifiesOnlyWhenLikeCreated(t *testing.T) {
 			if len(publisher.events) != tc.wantNotified {
 				t.Fatalf("events = %#v, want %d", publisher.events, tc.wantNotified)
 			}
-			if tc.wantNotified == 1 && publisher.events[0].Kind != EventDrinkLogLiked {
-				t.Fatalf("event = %#v, want drink log liked", publisher.events[0])
+			if tc.wantNotified == 1 && publisher.events[0].Kind != EventMemoryLiked {
+				t.Fatalf("event = %#v, want memory liked", publisher.events[0])
 			}
 		})
 	}
 }
 
-func TestDeleteDrinkLogCleansUpPhoto(t *testing.T) {
-	repo := &fakeRepository{deletedLog: map[string]any{"id": testLogID, "photo_path": "users/" + testUserID + "/drink_logs/photo.jpg"}}
+func TestDeleteMemoryCleansUpPhoto(t *testing.T) {
+	repo := &fakeRepository{deletedMemory: map[string]any{"id": testMemoryID, "photo_path": "users/" + testUserID + "/memories/photo.jpg"}}
 	cleaner := &fakeMediaCleaner{}
 	usecase := NewUsecase(Dependencies{Repository: repo, MediaCleaner: cleaner})
 
-	row, err := usecase.DeleteDrinkLog(context.Background(), DeleteInput{AuthToken: testAuthToken, LogID: testLogID, OwnerUserID: testUserID})
+	row, err := usecase.DeleteMemory(context.Background(), DeleteInput{AuthToken: testAuthToken, MemoryID: testMemoryID, OwnerUserID: testUserID})
 	if err != nil {
-		t.Fatalf("DeleteDrinkLog returned error: %v", err)
+		t.Fatalf("DeleteMemory returned error: %v", err)
 	}
-	if row["id"] != testLogID {
+	if row["id"] != testMemoryID {
 		t.Fatalf("row = %#v", row)
 	}
-	if cleaner.deletedPath != "users/"+testUserID+"/drink_logs/photo.jpg" {
+	if cleaner.deletedPath != "users/"+testUserID+"/memories/photo.jpg" {
 		t.Fatalf("deleted path = %q", cleaner.deletedPath)
 	}
 }
 
-func TestReportDrinkLogCreatesModerationReportAndHidesPost(t *testing.T) {
+func TestReportMemoryCreatesModerationReportAndHidesPost(t *testing.T) {
 	repo := &fakeRepository{reportOwnerID: otherUserID}
 	publisher := &fakePublisher{}
 	usecase := NewUsecase(Dependencies{Repository: repo, Publisher: publisher})
 
-	result, err := usecase.ReportDrinkLog(context.Background(), ReportInput{
+	result, err := usecase.ReportMemory(context.Background(), ReportInput{
 		AuthToken:      testAuthToken,
-		LogID:          testLogID,
+		MemoryID:       testMemoryID,
 		ReporterUserID: testUserID,
 		Reason:         " harassment ",
 	})
 	if err != nil {
-		t.Fatalf("ReportDrinkLog returned error: %v", err)
+		t.Fatalf("ReportMemory returned error: %v", err)
 	}
 	if !result.Created || result.Body["duplicate"] != false || result.Body["hidden"] != true || result.Body["reason"] != "harassment" {
 		t.Fatalf("result = %#v", result)
 	}
-	if repo.createdReport.DrinkLogID != testLogID || repo.createdReport.ReporterUserID != testUserID || repo.createdReport.Reason != ReportReasonHarassment {
+	if repo.createdReport.MemoryID != testMemoryID || repo.createdReport.ReporterUserID != testUserID || repo.createdReport.Reason != ReportReasonHarassment {
 		t.Fatalf("created report = %#v", repo.createdReport)
 	}
 	if want := []string{"log_owner", "find_report", "create_report"}; !reflect.DeepEqual(repo.calls, want) {
 		t.Fatalf("calls = %v, want %v", repo.calls, want)
 	}
-	if len(publisher.events) != 1 || publisher.events[0].Kind != EventDrinkLogReported {
-		t.Fatalf("events = %#v, want drink log reported", publisher.events)
+	if len(publisher.events) != 1 || publisher.events[0].Kind != EventMemoryReported {
+		t.Fatalf("events = %#v, want memory reported", publisher.events)
 	}
 }
 
-func TestReportDrinkLogRejectsOwnLog(t *testing.T) {
+func TestReportMemoryRejectsOwnMemory(t *testing.T) {
 	repo := &fakeRepository{reportOwnerID: testUserID}
 	usecase := NewUsecase(Dependencies{Repository: repo})
 
-	_, err := usecase.ReportDrinkLog(context.Background(), ReportInput{AuthToken: testAuthToken, LogID: testLogID, ReporterUserID: testUserID})
-	assertUserError(t, err, ErrorKindForbidden, "cannot report your own drink log")
+	_, err := usecase.ReportMemory(context.Background(), ReportInput{AuthToken: testAuthToken, MemoryID: testMemoryID, ReporterUserID: testUserID})
+	assertUserError(t, err, ErrorKindForbidden, "cannot report your own memory")
 	if want := []string{"log_owner"}; !reflect.DeepEqual(repo.calls, want) {
 		t.Fatalf("calls = %v, want %v", repo.calls, want)
 	}
 }
 
-func TestReportDrinkLogReturnsDuplicateForExistingReport(t *testing.T) {
-	repo := &fakeRepository{reportOwnerID: otherUserID, report: &Report{ID: "report-id", DrinkLogID: testLogID, ReporterUserID: testUserID, Reason: ReportReasonSpam}}
+func TestReportMemoryReturnsDuplicateForExistingReport(t *testing.T) {
+	repo := &fakeRepository{reportOwnerID: otherUserID, report: &Report{ID: "report-id", MemoryID: testMemoryID, ReporterUserID: testUserID, Reason: ReportReasonSpam}}
 	usecase := NewUsecase(Dependencies{Repository: repo})
 
-	result, err := usecase.ReportDrinkLog(context.Background(), ReportInput{AuthToken: testAuthToken, LogID: testLogID, ReporterUserID: testUserID, Reason: "spam"})
+	result, err := usecase.ReportMemory(context.Background(), ReportInput{AuthToken: testAuthToken, MemoryID: testMemoryID, ReporterUserID: testUserID, Reason: "spam"})
 	if err != nil {
-		t.Fatalf("ReportDrinkLog returned error: %v", err)
+		t.Fatalf("ReportMemory returned error: %v", err)
 	}
 	if result.Created || result.Body["duplicate"] != true || result.Body["status"] != "pending" {
 		t.Fatalf("result = %#v", result)
@@ -358,19 +358,19 @@ func TestReportDrinkLogReturnsDuplicateForExistingReport(t *testing.T) {
 	}
 }
 
-func TestListDrinkLogsExcludesHiddenReportedRows(t *testing.T) {
+func TestListMemoriesExcludesHiddenReportedRows(t *testing.T) {
 	repo := &fakeRepository{
-		logs: []map[string]any{
-			{"id": "visible", "drank_at": "2026-05-24T12:00:00Z", "drink_log_likes": []any{}},
-			{"id": "hidden", "drank_at": "2026-05-24T13:00:00Z", "drink_log_likes": []any{}},
+		memories: []map[string]any{
+			{"id": "visible", "happened_at": "2026-05-24T12:00:00Z", "memory_likes": []any{}},
+			{"id": "hidden", "happened_at": "2026-05-24T13:00:00Z", "memory_likes": []any{}},
 		},
 		hiddenIDs: map[string]bool{"hidden": true},
 	}
 	usecase := NewUsecase(Dependencies{Repository: repo})
 
-	rows, err := usecase.ListDrinkLogs(context.Background(), ListInput{AuthToken: testAuthToken, UserID: testUserID})
+	rows, err := usecase.ListMemories(context.Background(), ListInput{AuthToken: testAuthToken, UserID: testUserID})
 	if err != nil {
-		t.Fatalf("ListDrinkLogs returned error: %v", err)
+		t.Fatalf("ListMemories returned error: %v", err)
 	}
 	if len(rows) != 1 || rows[0]["id"] != "visible" {
 		t.Fatalf("rows = %#v", rows)

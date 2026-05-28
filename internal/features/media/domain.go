@@ -49,8 +49,8 @@ func CleanUUID(value, field string) (string, error) {
 type UploadKind string
 
 const (
-	UploadKindDrinkLogPhoto UploadKind = "drink_log_photo"
-	PhotoBucket                        = "nomo-photos"
+	UploadKindMemoryPhoto UploadKind = "memory_photo"
+	PhotoBucket                      = "nomo-photos"
 )
 
 type UploadRequest struct {
@@ -95,7 +95,7 @@ type StorageObject struct {
 
 const DisplayURLTTLSeconds = 60 * 60
 
-func CleanDrinkLogPhotoPath(value string) (string, error) {
+func CleanMemoryPhotoPath(value string) (string, error) {
 	path := strings.TrimSpace(value)
 	if path == "" {
 		return "", UserError{Kind: ErrorKindInvalidInput, Message: "path is required"}
@@ -106,8 +106,8 @@ func CleanDrinkLogPhotoPath(value string) (string, error) {
 	if strings.HasPrefix(path, "/") || strings.Contains(path, "..") || strings.Contains(path, "\\") {
 		return "", UserError{Kind: ErrorKindInvalidInput, Message: "path is invalid"}
 	}
-	if !strings.HasPrefix(path, "users/") || !strings.Contains(path, "/drink_logs/") {
-		return "", UserError{Kind: ErrorKindInvalidInput, Message: "path must be a drink-log photo"}
+	if !strings.HasPrefix(path, "users/") || !strings.Contains(path, "/memories/") {
+		return "", UserError{Kind: ErrorKindInvalidInput, Message: "path must be a memory photo"}
 	}
 	_, _, err := cleanPhotoType(pathExtension(path), "")
 	if err != nil {
@@ -135,9 +135,9 @@ func NewUploadTarget(input UploadRequest, now time.Time, randomSuffix func() str
 	}
 	kind := UploadKind(strings.TrimSpace(input.Kind))
 	if kind == "" {
-		kind = UploadKindDrinkLogPhoto
+		kind = UploadKindMemoryPhoto
 	}
-	if kind != UploadKindDrinkLogPhoto {
+	if kind != UploadKindMemoryPhoto {
 		return UploadTarget{}, UserError{Kind: ErrorKindInvalidInput, Message: "kind is unsupported"}
 	}
 	extension, contentType, err := cleanPhotoType(input.FileExtension, input.ContentType)
@@ -151,7 +151,7 @@ func NewUploadTarget(input UploadRequest, now time.Time, randomSuffix func() str
 	if suffix == "" {
 		suffix = RandomSuffix()
 	}
-	path := "users/" + userID + "/drink_logs/" + now.UTC().Format("20060102T150405.000000000") + "_" + suffix + extension
+	path := "users/" + userID + "/memories/" + now.UTC().Format("20060102T150405.000000000") + "_" + suffix + extension
 	return UploadTarget{Kind: kind, UserID: userID, Bucket: PhotoBucket, Path: path, ContentType: contentType}, nil
 }
 

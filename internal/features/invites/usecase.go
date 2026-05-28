@@ -1,4 +1,4 @@
-package drinkinvites
+package invites
 
 import (
 	"context"
@@ -26,16 +26,16 @@ func NewUsecase(deps Dependencies) *Usecase {
 }
 
 type ListInput struct {
-	AuthToken  string
-	UserID     string
-	InviteDate string
+	AuthToken     string
+	UserID        string
+	ScheduledDate string
 }
 
 type CreateInput struct {
-	AuthToken  string
-	FromUserID string
-	ToUserID   string
-	InviteDate string
+	AuthToken     string
+	InviterUserID string
+	InviteeUserID string
+	ScheduledDate string
 }
 
 type UpdateInput struct {
@@ -46,34 +46,34 @@ type UpdateInput struct {
 }
 
 func (u *Usecase) ListTodayReservations(ctx context.Context, input ListInput) ([]map[string]any, error) {
-	return u.repository.ListTodayReservations(ctx, input.AuthToken, input.UserID, input.InviteDate)
+	return u.repository.ListTodayReservations(ctx, input.AuthToken, input.UserID, input.ScheduledDate)
 }
 
 func (u *Usecase) ListIncomingPending(ctx context.Context, input ListInput) ([]map[string]any, error) {
-	return u.repository.ListIncomingPending(ctx, input.AuthToken, input.UserID, input.InviteDate)
+	return u.repository.ListIncomingPending(ctx, input.AuthToken, input.UserID, input.ScheduledDate)
 }
 
 func (u *Usecase) ListOutgoingActive(ctx context.Context, input ListInput) ([]map[string]any, error) {
-	return u.repository.ListOutgoingActive(ctx, input.AuthToken, input.UserID, input.InviteDate)
+	return u.repository.ListOutgoingActive(ctx, input.AuthToken, input.UserID, input.ScheduledDate)
 }
 
-func (u *Usecase) CreateDrinkInvite(ctx context.Context, input CreateInput) (map[string]any, error) {
-	fromUserID, err := CleanUUID(input.FromUserID, "from_user_id")
+func (u *Usecase) CreateInvite(ctx context.Context, input CreateInput) (map[string]any, error) {
+	inviterUserID, err := CleanUUID(input.InviterUserID, "inviter_user_id")
 	if err != nil {
 		return nil, err
 	}
-	toUserID, err := CleanUUID(input.ToUserID, "to_user_id")
+	inviteeUserID, err := CleanUUID(input.InviteeUserID, "invitee_user_id")
 	if err != nil {
 		return nil, err
 	}
-	if err := ValidateNewInvite(fromUserID, toUserID); err != nil {
+	if err := ValidateNewInvite(inviterUserID, inviteeUserID); err != nil {
 		return nil, err
 	}
-	inviteDate, err := CleanDateOnlyOrToday(input.InviteDate, "invite_date", u.now())
+	scheduledDate, err := CleanDateOnlyOrToday(input.ScheduledDate, "scheduled_date", u.now())
 	if err != nil {
 		return nil, err
 	}
-	blocked, err := u.repository.BlockExistsBetweenUsers(ctx, input.AuthToken, fromUserID, toUserID)
+	blocked, err := u.repository.BlockExistsBetweenUsers(ctx, input.AuthToken, inviterUserID, inviteeUserID)
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +81,7 @@ func (u *Usecase) CreateDrinkInvite(ctx context.Context, input CreateInput) (map
 		return nil, UserError{Kind: ErrorKindConflict, Message: "blocked users cannot be invited"}
 	}
 
-	dailyStatus, err := u.repository.DailyStatus(ctx, input.AuthToken, toUserID, inviteDate)
+	dailyStatus, err := u.repository.DailyStatus(ctx, input.AuthToken, inviteeUserID, scheduledDate)
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +89,7 @@ func (u *Usecase) CreateDrinkInvite(ctx context.Context, input CreateInput) (map
 		return nil, UserError{Kind: ErrorKindConflict, Message: message}
 	}
 
-	existing, err := u.repository.FindActiveInviteBetweenUsersForDate(ctx, input.AuthToken, fromUserID, toUserID, inviteDate)
+	existing, err := u.repository.FindActiveInviteBetweenUsersForDate(ctx, input.AuthToken, inviterUserID, inviteeUserID, scheduledDate)
 	if err != nil {
 		return nil, err
 	}
@@ -98,23 +98,23 @@ func (u *Usecase) CreateDrinkInvite(ctx context.Context, input CreateInput) (map
 	}
 
 	row, err := u.repository.CreateInvite(ctx, input.AuthToken, NewInvite{
-		FromUserID: fromUserID,
-		ToUserID:   toUserID,
-		InviteDate: inviteDate,
+		InviterUserID: inviterUserID,
+		InviteeUserID: inviteeUserID,
+		ScheduledDate: scheduledDate,
 	})
 	if err != nil {
 		return nil, err
 	}
 	if u.publisher != nil {
-		if event, ok := NewDrinkInviteCreatedEvent(row); ok {
+		if event, ok := NewInviteCreatedEvent(row); ok {
 			u.publisher.Publish(ctx, input.AuthToken, event)
 		}
 	}
 	return row, nil
 }
 
-func (u *Usecase) UpdateDrinkInvite(ctx context.Context, input UpdateInput) (map[string]any, error) {
-	inviteID, err := CleanUUID(input.InviteID, "drink invite id")
+func (u *Usecase) UpdateInvite(ctx context.Context, input UpdateInput) (map[string]any, error) {
+	inviteID, err := CleanUUID(input.InviteID, "invite id")
 	if err != nil {
 		return nil, err
 	}
@@ -132,10 +132,10 @@ func (u *Usecase) UpdateDrinkInvite(ctx context.Context, input UpdateInput) (map
 		return nil, err
 	}
 	if row == nil {
-		return nil, UserError{Kind: ErrorKindNotFound, Message: "drink invite not found"}
+		return nil, UserError{Kind: ErrorKindNotFound, Message: "invite not found"}
 	}
 	if status == InviteStatusAccepted && u.publisher != nil {
-		if event, ok := NewDrinkInviteAcceptedEvent(row); ok {
+		if event, ok := NewInviteAcceptedEvent(row); ok {
 			u.publisher.Publish(ctx, input.AuthToken, event)
 		}
 	}

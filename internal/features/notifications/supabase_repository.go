@@ -12,7 +12,7 @@ import (
 	"github.com/yota/nomo/backend/internal/supabase"
 )
 
-const notificationSelectColumns = "id,kind,title,message,created_at,read_at,actor_user_id,drink_log_id,friend_request_id,drink_invite_id,notification_date,system_key,actor:profiles!notifications_actor_user_id_fkey(id,user_id,display_name,avatar_url),friend_request:friend_requests!notifications_friend_request_id_fkey(id,status),drink_invite:drink_invites!notifications_drink_invite_id_fkey(id,status)"
+const notificationSelectColumns = "id,kind,title,message,created_at,read_at,actor_user_id,memory_id,friend_request_id,invite_id,notification_date,system_key,actor:profiles!notifications_actor_user_id_fkey(id,user_id,display_name,avatar_url),friend_request:friend_requests!notifications_friend_request_id_fkey(id,status),invite:invites!notifications_invite_id_fkey(id,status)"
 
 type SupabaseRepository struct {
 	client         *supabase.Client
@@ -89,35 +89,35 @@ func (r *SupabaseRepository) DisplayName(ctx context.Context, authToken, userID 
 	return displayNameFromProfile(rows[0]), nil
 }
 
-func (r *SupabaseRepository) DrinkLogOwnerUserID(ctx context.Context, authToken, logID string) (string, error) {
+func (r *SupabaseRepository) MemoryOwnerUserID(ctx context.Context, authToken, memoryID string) (string, error) {
 	q := url.Values{}
 	q.Set("select", "id,owner_user_id")
-	q.Set("id", "eq."+logID)
+	q.Set("id", "eq."+memoryID)
 	q.Set("limit", "1")
-	var logs []map[string]any
-	if err := r.client.Get(ctx, authToken, "drink_logs", q, &logs); err != nil {
+	var memories []map[string]any
+	if err := r.client.Get(ctx, authToken, "memories", q, &memories); err != nil {
 		return "", err
 	}
-	if len(logs) == 0 {
+	if len(memories) == 0 {
 		return "", nil
 	}
-	ownerUserID, _ := logs[0]["owner_user_id"].(string)
+	ownerUserID, _ := memories[0]["owner_user_id"].(string)
 	return ownerUserID, nil
 }
 
-func (r *SupabaseRepository) TodayAcceptedInvites(ctx context.Context, authToken, userID, date string) ([]DrinkInvite, error) {
+func (r *SupabaseRepository) TodayAcceptedInvites(ctx context.Context, authToken, userID, date string) ([]Invite, error) {
 	q := url.Values{}
-	q.Set("select", "id,from_user_id,to_user_id,invite_date,status")
-	q.Set("invite_date", "eq."+date)
+	q.Set("select", "id,inviter_user_id,invitee_user_id,scheduled_date,status")
+	q.Set("scheduled_date", "eq."+date)
 	q.Set("status", "eq.accepted")
-	q.Set("or", "(from_user_id.eq."+userID+",to_user_id.eq."+userID+")")
+	q.Set("or", "(inviter_user_id.eq."+userID+",invitee_user_id.eq."+userID+")")
 	var rows []map[string]any
-	if err := r.client.Get(ctx, authToken, "drink_invites", q, &rows); err != nil {
+	if err := r.client.Get(ctx, authToken, "invites", q, &rows); err != nil {
 		return nil, err
 	}
-	invites := make([]DrinkInvite, 0, len(rows))
+	invites := make([]Invite, 0, len(rows))
 	for _, row := range rows {
-		invites = append(invites, DrinkInviteFromRow(row))
+		invites = append(invites, InviteFromRow(row))
 	}
 	return invites, nil
 }

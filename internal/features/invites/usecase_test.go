@@ -1,4 +1,4 @@
-package drinkinvites
+package invites
 
 import (
 	"context"
@@ -68,11 +68,11 @@ func (f *fakeRepository) CreateInvite(_ context.Context, _ string, invite NewInv
 		return f.created, nil
 	}
 	return map[string]any{
-		"id":           testInviteID,
-		"from_user_id": invite.FromUserID,
-		"to_user_id":   invite.ToUserID,
-		"invite_date":  invite.InviteDate,
-		"status":       string(InviteStatusPending),
+		"id":              testInviteID,
+		"inviter_user_id": invite.InviterUserID,
+		"invitee_user_id": invite.InviteeUserID,
+		"scheduled_date":  invite.ScheduledDate,
+		"status":          string(InviteStatusPending),
 	}, nil
 }
 
@@ -93,15 +93,15 @@ func (f *fakePublisher) Publish(_ context.Context, _ string, event DomainEvent) 
 	f.events = append(f.events, event)
 }
 
-func TestCreateDrinkInviteRejectsSelfInviteBeforeRepositoryAccess(t *testing.T) {
+func TestCreateInviteRejectsSelfInviteBeforeRepositoryAccess(t *testing.T) {
 	repo := &fakeRepository{}
 	usecase := NewUsecase(Dependencies{Repository: repo})
 
-	_, err := usecase.CreateDrinkInvite(context.Background(), CreateInput{
-		AuthToken:  testAuthToken,
-		FromUserID: testUserID,
-		ToUserID:   testUserID,
-		InviteDate: "2026-05-23",
+	_, err := usecase.CreateInvite(context.Background(), CreateInput{
+		AuthToken:     testAuthToken,
+		InviterUserID: testUserID,
+		InviteeUserID: testUserID,
+		ScheduledDate: "2026-05-23",
 	})
 
 	assertUserError(t, err, ErrorKindInvalidInput, "cannot invite yourself")
@@ -110,32 +110,32 @@ func TestCreateDrinkInviteRejectsSelfInviteBeforeRepositoryAccess(t *testing.T) 
 	}
 }
 
-func TestCreateDrinkInviteBlocksUnavailableDailyStatus(t *testing.T) {
-	repo := &fakeRepository{dailyStatus: "liver_rest"}
+func TestCreateInviteBlocksHasPlansDailyStatus(t *testing.T) {
+	repo := &fakeRepository{dailyStatus: "has_plans"}
 	usecase := NewUsecase(Dependencies{Repository: repo})
 
-	_, err := usecase.CreateDrinkInvite(context.Background(), CreateInput{
-		AuthToken:  testAuthToken,
-		FromUserID: testUserID,
-		ToUserID:   otherUserID,
-		InviteDate: "2026-05-23",
+	_, err := usecase.CreateInvite(context.Background(), CreateInput{
+		AuthToken:     testAuthToken,
+		InviterUserID: testUserID,
+		InviteeUserID: otherUserID,
+		ScheduledDate: "2026-05-23",
 	})
 
-	assertUserError(t, err, ErrorKindConflict, "相手が休肝日のため今日は誘えません。")
+	assertUserError(t, err, ErrorKindConflict, "相手に予定があるため今日は誘えません。")
 	if want := []string{"block", "daily_status"}; !reflect.DeepEqual(repo.calls, want) {
 		t.Fatalf("repository calls = %v, want %v", repo.calls, want)
 	}
 }
 
-func TestCreateDrinkInviteRejectsExistingAcceptedInvite(t *testing.T) {
+func TestCreateInviteRejectsExistingAcceptedInvite(t *testing.T) {
 	repo := &fakeRepository{existing: &ExistingInvite{ID: testInviteID, Status: InviteStatusAccepted}}
 	usecase := NewUsecase(Dependencies{Repository: repo})
 
-	_, err := usecase.CreateDrinkInvite(context.Background(), CreateInput{
-		AuthToken:  testAuthToken,
-		FromUserID: testUserID,
-		ToUserID:   otherUserID,
-		InviteDate: "2026-05-23",
+	_, err := usecase.CreateInvite(context.Background(), CreateInput{
+		AuthToken:     testAuthToken,
+		InviterUserID: testUserID,
+		InviteeUserID: otherUserID,
+		ScheduledDate: "2026-05-23",
 	})
 
 	assertUserError(t, err, ErrorKindConflict, "今日はもう予約済みです。")
@@ -144,27 +144,27 @@ func TestCreateDrinkInviteRejectsExistingAcceptedInvite(t *testing.T) {
 	}
 }
 
-func TestCreateDrinkInviteCreatesPendingInviteAndNotifiesRecipient(t *testing.T) {
+func TestCreateInviteCreatesPendingInviteAndNotifiesRecipient(t *testing.T) {
 	repo := &fakeRepository{}
 	publisher := &fakePublisher{}
 	usecase := NewUsecase(Dependencies{Repository: repo, Publisher: publisher})
 
-	row, err := usecase.CreateDrinkInvite(context.Background(), CreateInput{
-		AuthToken:  testAuthToken,
-		FromUserID: testUserID,
-		ToUserID:   otherUserID,
-		InviteDate: "2026-05-23",
+	row, err := usecase.CreateInvite(context.Background(), CreateInput{
+		AuthToken:     testAuthToken,
+		InviterUserID: testUserID,
+		InviteeUserID: otherUserID,
+		ScheduledDate: "2026-05-23",
 	})
 	if err != nil {
-		t.Fatalf("CreateDrinkInvite returned error: %v", err)
+		t.Fatalf("CreateInvite returned error: %v", err)
 	}
 	if row["status"] != string(InviteStatusPending) {
 		t.Fatalf("created status = %#v", row["status"])
 	}
-	if repo.createdInvite.InviteDate != "2026-05-23" || repo.createdInvite.FromUserID != testUserID || repo.createdInvite.ToUserID != otherUserID {
+	if repo.createdInvite.ScheduledDate != "2026-05-23" || repo.createdInvite.InviterUserID != testUserID || repo.createdInvite.InviteeUserID != otherUserID {
 		t.Fatalf("created invite = %#v", repo.createdInvite)
 	}
-	if len(publisher.events) != 1 || publisher.events[0].Kind != EventDrinkInviteCreated || publisher.events[0].Invite.ToUserID != otherUserID {
+	if len(publisher.events) != 1 || publisher.events[0].Kind != EventInviteCreated || publisher.events[0].Invite.InviteeUserID != otherUserID {
 		t.Fatalf("events = %#v", publisher.events)
 	}
 	if want := []string{"block", "daily_status", "find_active", "create"}; !reflect.DeepEqual(repo.calls, want) {
@@ -172,9 +172,9 @@ func TestCreateDrinkInviteCreatesPendingInviteAndNotifiesRecipient(t *testing.T)
 	}
 }
 
-func TestUpdateDrinkInviteAcceptedNotifiesRequester(t *testing.T) {
+func TestUpdateInviteAcceptedNotifiesRequester(t *testing.T) {
 	respondedAt := time.Date(2026, 5, 23, 12, 34, 56, 0, time.FixedZone("JST", 9*60*60))
-	repo := &fakeRepository{updated: map[string]any{"id": testInviteID, "from_user_id": otherUserID, "to_user_id": testUserID, "invite_date": "2026-05-23", "status": string(InviteStatusAccepted)}}
+	repo := &fakeRepository{updated: map[string]any{"id": testInviteID, "inviter_user_id": otherUserID, "invitee_user_id": testUserID, "scheduled_date": "2026-05-23", "status": string(InviteStatusAccepted)}}
 	publisher := &fakePublisher{}
 	usecase := NewUsecase(Dependencies{
 		Repository: repo,
@@ -182,14 +182,14 @@ func TestUpdateDrinkInviteAcceptedNotifiesRequester(t *testing.T) {
 		Now:        func() time.Time { return respondedAt },
 	})
 
-	row, err := usecase.UpdateDrinkInvite(context.Background(), UpdateInput{
+	row, err := usecase.UpdateInvite(context.Background(), UpdateInput{
 		AuthToken:       testAuthToken,
 		InviteID:        testInviteID,
 		RecipientUserID: testUserID,
 		Status:          "accepted",
 	})
 	if err != nil {
-		t.Fatalf("UpdateDrinkInvite returned error: %v", err)
+		t.Fatalf("UpdateInvite returned error: %v", err)
 	}
 	if row["id"] != testInviteID {
 		t.Fatalf("updated row = %#v", row)
@@ -200,42 +200,42 @@ func TestUpdateDrinkInviteAcceptedNotifiesRequester(t *testing.T) {
 	if got := repo.updatedInvite.respondedAt; !got.Equal(respondedAt.UTC()) {
 		t.Fatalf("respondedAt = %s, want %s", got, respondedAt.UTC())
 	}
-	if len(publisher.events) != 1 || publisher.events[0].Kind != EventDrinkInviteAccepted {
+	if len(publisher.events) != 1 || publisher.events[0].Kind != EventInviteAccepted {
 		t.Fatalf("events = %#v", publisher.events)
 	}
 }
 
-func TestUpdateDrinkInviteRejectedDoesNotNotify(t *testing.T) {
-	repo := &fakeRepository{updated: map[string]any{"id": testInviteID, "from_user_id": otherUserID, "to_user_id": testUserID, "invite_date": "2026-05-23", "status": string(InviteStatusRejected)}}
+func TestUpdateInviteRejectedDoesNotNotify(t *testing.T) {
+	repo := &fakeRepository{updated: map[string]any{"id": testInviteID, "inviter_user_id": otherUserID, "invitee_user_id": testUserID, "scheduled_date": "2026-05-23", "status": string(InviteStatusRejected)}}
 	publisher := &fakePublisher{}
 	usecase := NewUsecase(Dependencies{Repository: repo, Publisher: publisher})
 
-	_, err := usecase.UpdateDrinkInvite(context.Background(), UpdateInput{
+	_, err := usecase.UpdateInvite(context.Background(), UpdateInput{
 		AuthToken:       testAuthToken,
 		InviteID:        testInviteID,
 		RecipientUserID: testUserID,
 		Status:          "rejected",
 	})
 	if err != nil {
-		t.Fatalf("UpdateDrinkInvite returned error: %v", err)
+		t.Fatalf("UpdateInvite returned error: %v", err)
 	}
 	if len(publisher.events) != 0 {
 		t.Fatalf("events = %#v, want none", publisher.events)
 	}
 }
 
-func TestUpdateDrinkInviteReturnsNotFoundWhenRepositoryUpdatesNoRows(t *testing.T) {
+func TestUpdateInviteReturnsNotFoundWhenRepositoryUpdatesNoRows(t *testing.T) {
 	repo := &fakeRepository{}
 	usecase := NewUsecase(Dependencies{Repository: repo})
 
-	_, err := usecase.UpdateDrinkInvite(context.Background(), UpdateInput{
+	_, err := usecase.UpdateInvite(context.Background(), UpdateInput{
 		AuthToken:       testAuthToken,
 		InviteID:        testInviteID,
 		RecipientUserID: testUserID,
 		Status:          "accepted",
 	})
 
-	assertUserError(t, err, ErrorKindNotFound, "drink invite not found")
+	assertUserError(t, err, ErrorKindNotFound, "invite not found")
 }
 
 func assertUserError(t *testing.T, err error, wantKind ErrorKind, wantMessage string) {

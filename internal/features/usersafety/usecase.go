@@ -26,10 +26,10 @@ type ListInput struct {
 	UserID    string
 }
 
-type DrinkLogInput struct {
-	AuthToken  string
-	UserID     string
-	DrinkLogID string
+type MemoryInput struct {
+	AuthToken string
+	UserID    string
+	MemoryID  string
 }
 
 func (u *Usecase) ListBlockedUsers(ctx context.Context, input ListInput) ([]map[string]any, error) {
@@ -103,20 +103,20 @@ func (u *Usecase) ReportUser(ctx context.Context, input UserTargetInput) (map[st
 	})
 }
 
-func (u *Usecase) HideDrinkLog(ctx context.Context, input DrinkLogInput) (map[string]any, error) {
-	hidden, err := cleanHiddenDrinkLog(input)
+func (u *Usecase) HideMemory(ctx context.Context, input MemoryInput) (map[string]any, error) {
+	hidden, err := cleanHiddenMemory(input)
 	if err != nil {
 		return nil, err
 	}
-	return u.repository.HideDrinkLog(ctx, input.AuthToken, hidden)
+	return u.repository.HideMemory(ctx, input.AuthToken, hidden)
 }
 
-func (u *Usecase) UnhideDrinkLog(ctx context.Context, input DrinkLogInput) error {
-	hidden, err := cleanHiddenDrinkLog(input)
+func (u *Usecase) UnhideMemory(ctx context.Context, input MemoryInput) error {
+	hidden, err := cleanHiddenMemory(input)
 	if err != nil {
 		return err
 	}
-	return u.repository.UnhideDrinkLog(ctx, input.AuthToken, hidden)
+	return u.repository.UnhideMemory(ctx, input.AuthToken, hidden)
 }
 
 func cleanUserRelation(input UserTargetInput) (UserRelation, error) {
@@ -134,14 +134,14 @@ func cleanUserRelation(input UserTargetInput) (UserRelation, error) {
 	return UserRelation{ActorUserID: actorUserID, TargetUserID: targetUserID}, nil
 }
 
-func cleanHiddenDrinkLog(input DrinkLogInput) (HiddenDrinkLog, error) {
+func cleanHiddenMemory(input MemoryInput) (HiddenMemory, error) {
 	userID, err := CleanUUID(input.UserID, "user id")
 	if err != nil {
-		return HiddenDrinkLog{}, err
+		return HiddenMemory{}, err
 	}
-	drinkLogID, err := CleanUUID(input.DrinkLogID, "drink log id")
+	memoryID, err := CleanUUID(input.MemoryID, "memory id")
 	if err != nil {
-		return HiddenDrinkLog{}, err
+		return HiddenMemory{}, err
 	}
-	return HiddenDrinkLog{UserID: userID, DrinkLogID: drinkLogID}, nil
+	return HiddenMemory{UserID: userID, MemoryID: memoryID}, nil
 }

@@ -20,7 +20,7 @@ type fakeRepository struct {
 
 func (f *fakeRepository) GetDailyStatus(context.Context, string, string, string) ([]map[string]any, error) {
 	f.getDate = "called"
-	return []map[string]any{{"status": "can_drink_today"}}, nil
+	return []map[string]any{{"status": "available"}}, nil
 }
 
 func (f *fakeRepository) ListMonthlyStatuses(_ context.Context, _ string, _ string, startDate string, endDate string) ([]map[string]any, error) {
@@ -54,11 +54,11 @@ func TestUpsertDailyStatusValidatesStatusAndDefaultsDate(t *testing.T) {
 	now := time.Date(2026, 5, 28, 12, 0, 0, 0, time.UTC)
 	usecase := NewUsecase(Dependencies{Repository: repo, Now: func() time.Time { return now }})
 
-	_, err := usecase.UpsertDailyStatus(context.Background(), UpsertInput{AuthToken: testAuthToken, UserID: testUserID, Status: " liver_rest "})
+	_, err := usecase.UpsertDailyStatus(context.Background(), UpsertInput{AuthToken: testAuthToken, UserID: testUserID, Status: " depends_on_time "})
 	if err != nil {
 		t.Fatalf("UpsertDailyStatus returned error: %v", err)
 	}
-	if repo.upserted.UserID != testUserID || repo.upserted.StatusDate != "2026-05-28" || repo.upserted.Status != StatusLiverRest {
+	if repo.upserted.UserID != testUserID || repo.upserted.StatusDate != "2026-05-28" || repo.upserted.Status != StatusDependsOnTime {
 		t.Fatalf("upserted = %#v", repo.upserted)
 	}
 }

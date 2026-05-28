@@ -1,4 +1,4 @@
-package drinklogs
+package memories
 
 import (
 	"crypto/rand"
@@ -128,21 +128,21 @@ func CleanCaptionY(value *float64) float64 {
 }
 
 type DayWindowInput struct {
-	DrankOn               string
+	HappenedOn            string
 	TimezoneOffsetMinutes *int
 }
 
-func DrinkLogDayWindow(input DayWindowInput, drankAt time.Time) (time.Time, time.Time, error) {
-	drankOn := strings.TrimSpace(input.DrankOn)
-	if drankOn == "" {
-		utc := drankAt.UTC()
+func MemoryDayWindow(input DayWindowInput, happenedAt time.Time) (time.Time, time.Time, error) {
+	happenedOn := strings.TrimSpace(input.HappenedOn)
+	if happenedOn == "" {
+		utc := happenedAt.UTC()
 		start := time.Date(utc.Year(), utc.Month(), utc.Day(), 0, 0, 0, 0, time.UTC)
 		return start, start.AddDate(0, 0, 1), nil
 	}
 
-	day, err := time.Parse(time.DateOnly, drankOn)
+	day, err := time.Parse(time.DateOnly, happenedOn)
 	if err != nil {
-		return time.Time{}, time.Time{}, UserError{Kind: ErrorKindInvalidInput, Message: "drank_on must be YYYY-MM-DD"}
+		return time.Time{}, time.Time{}, UserError{Kind: ErrorKindInvalidInput, Message: "happened_on must be YYYY-MM-DD"}
 	}
 	offsetMinutes := 0
 	if input.TimezoneOffsetMinutes != nil {
@@ -168,9 +168,9 @@ func CleanUserPhotoPath(ownerUserID, value string) (string, error) {
 	if strings.HasPrefix(path, "/") || strings.Contains(path, "..") || strings.Contains(path, "\\") {
 		return "", UserError{Kind: ErrorKindInvalidInput, Message: "photo_path is invalid"}
 	}
-	prefix := "users/" + ownerUserID + "/drink_logs/"
+	prefix := "users/" + ownerUserID + "/memories/"
 	if !strings.HasPrefix(path, prefix) {
-		return "", UserError{Kind: ErrorKindInvalidInput, Message: "photo_path must be an uploaded drink-log photo"}
+		return "", UserError{Kind: ErrorKindInvalidInput, Message: "photo_path must be an uploaded memory photo"}
 	}
 	if !hasAllowedPhotoExtension(path) {
 		return "", UserError{Kind: ErrorKindInvalidInput, Message: "photo_path file type is unsupported"}
@@ -233,7 +233,7 @@ func CleanModerationStatus(value string) (ModerationStatus, error) {
 
 type Report struct {
 	ID             string
-	DrinkLogID     string
+	MemoryID       string
 	ReporterUserID string
 	Reason         ReportReason
 	Status         ModerationStatus
@@ -256,9 +256,9 @@ func NewReportBody(report Report, duplicate bool) map[string]any {
 	}
 }
 
-type NewDrinkLog struct {
+type NewMemory struct {
 	OwnerUserID  string
-	DrankAt      time.Time
+	HappenedAt   time.Time
 	PlaceName    string
 	PlaceLat     *float64
 	PlaceLng     *float64
@@ -282,14 +282,14 @@ type ReportResult struct {
 type DomainEventKind string
 
 const (
-	EventDrinkLogTagged   DomainEventKind = "drink_log.tagged"
-	EventDrinkLogLiked    DomainEventKind = "drink_log.liked"
-	EventDrinkLogReported DomainEventKind = "drink_log.reported"
+	EventMemoryTagged   DomainEventKind = "memory.tagged"
+	EventMemoryLiked    DomainEventKind = "memory.liked"
+	EventMemoryReported DomainEventKind = "memory.reported"
 )
 
 type DomainEvent struct {
 	Kind             DomainEventKind
-	LogID            string
+	MemoryID         string
 	OwnerUserID      string
 	ActorUserID      string
 	FriendIDs        []string
@@ -297,27 +297,27 @@ type DomainEvent struct {
 	ModerationStatus ModerationStatus
 }
 
-func NewDrinkLogTaggedEvent(logID, ownerUserID string, friendIDs []string) (DomainEvent, bool) {
-	if logID == "" || ownerUserID == "" || len(friendIDs) == 0 {
+func NewMemoryTaggedEvent(memoryID, ownerUserID string, friendIDs []string) (DomainEvent, bool) {
+	if memoryID == "" || ownerUserID == "" || len(friendIDs) == 0 {
 		return DomainEvent{}, false
 	}
-	return DomainEvent{Kind: EventDrinkLogTagged, LogID: logID, OwnerUserID: ownerUserID, ActorUserID: ownerUserID, FriendIDs: append([]string(nil), friendIDs...)}, true
+	return DomainEvent{Kind: EventMemoryTagged, MemoryID: memoryID, OwnerUserID: ownerUserID, ActorUserID: ownerUserID, FriendIDs: append([]string(nil), friendIDs...)}, true
 }
 
-func NewDrinkLogLikedEvent(logID, actorUserID string) (DomainEvent, bool) {
-	if logID == "" || actorUserID == "" {
+func NewMemoryLikedEvent(memoryID, actorUserID string) (DomainEvent, bool) {
+	if memoryID == "" || actorUserID == "" {
 		return DomainEvent{}, false
 	}
-	return DomainEvent{Kind: EventDrinkLogLiked, LogID: logID, ActorUserID: actorUserID}, true
+	return DomainEvent{Kind: EventMemoryLiked, MemoryID: memoryID, ActorUserID: actorUserID}, true
 }
 
-func NewDrinkLogReportedEvent(logID, ownerUserID, reporterUserID string, reason ReportReason) (DomainEvent, bool) {
-	if logID == "" || ownerUserID == "" || reporterUserID == "" || ownerUserID == reporterUserID {
+func NewMemoryReportedEvent(memoryID, ownerUserID, reporterUserID string, reason ReportReason) (DomainEvent, bool) {
+	if memoryID == "" || ownerUserID == "" || reporterUserID == "" || ownerUserID == reporterUserID {
 		return DomainEvent{}, false
 	}
 	return DomainEvent{
-		Kind:             EventDrinkLogReported,
-		LogID:            logID,
+		Kind:             EventMemoryReported,
+		MemoryID:         memoryID,
 		OwnerUserID:      ownerUserID,
 		ActorUserID:      reporterUserID,
 		ReportReason:     reason,

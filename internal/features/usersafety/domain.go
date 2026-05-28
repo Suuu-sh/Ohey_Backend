@@ -59,9 +59,9 @@ type UserReport struct {
 	Reason         string
 }
 
-type HiddenDrinkLog struct {
-	UserID     string
-	DrinkLogID string
+type HiddenMemory struct {
+	UserID   string
+	MemoryID string
 }
 
 func CleanReportReason(value string) (string, error) {

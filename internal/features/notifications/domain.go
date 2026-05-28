@@ -68,22 +68,22 @@ func CleanUUIDs(values []string, field string) ([]string, error) {
 type Kind string
 
 const (
-	KindDrinkLogLike             Kind = "drink_log_like"
+	KindMemoryLike               Kind = "memory_like"
 	KindFriendRequestReceived    Kind = "friend_request_received"
 	KindFriendRequestAccepted    Kind = "friend_request_accepted"
-	KindDrinkInviteReceived      Kind = "drink_invite_received"
-	KindDrinkInviteAccepted      Kind = "drink_invite_accepted"
+	KindInviteReceived           Kind = "invite_received"
+	KindInviteAccepted           Kind = "invite_accepted"
 	KindTodayReservationReminder Kind = "today_reservation_reminder"
-	KindDrinkLogTagged           Kind = "drink_log_tagged"
+	KindMemoryTagged             Kind = "memory_tagged"
 	KindSystem                   Kind = "system"
 )
 
 type Notification struct {
 	RecipientUserID  string
 	ActorUserID      string
-	DrinkLogID       string
+	MemoryID         string
 	FriendRequestID  string
-	DrinkInviteID    string
+	InviteID         string
 	NotificationDate string
 	Kind             Kind
 	Title            string
@@ -101,14 +101,14 @@ func (n Notification) Payload() map[string]any {
 	if n.ActorUserID != "" {
 		payload["actor_user_id"] = n.ActorUserID
 	}
-	if n.DrinkLogID != "" {
-		payload["drink_log_id"] = n.DrinkLogID
+	if n.MemoryID != "" {
+		payload["memory_id"] = n.MemoryID
 	}
 	if n.FriendRequestID != "" {
 		payload["friend_request_id"] = n.FriendRequestID
 	}
-	if n.DrinkInviteID != "" {
-		payload["drink_invite_id"] = n.DrinkInviteID
+	if n.InviteID != "" {
+		payload["invite_id"] = n.InviteID
 	}
 	if n.NotificationDate != "" {
 		payload["notification_date"] = n.NotificationDate
@@ -121,33 +121,33 @@ func (n Notification) Payload() map[string]any {
 
 func (n Notification) PushData() map[string]string {
 	data := map[string]string{"kind": string(n.Kind)}
-	if n.DrinkLogID != "" {
-		data["drink_log_id"] = n.DrinkLogID
+	if n.MemoryID != "" {
+		data["memory_id"] = n.MemoryID
 	}
 	if n.FriendRequestID != "" {
 		data["friend_request_id"] = n.FriendRequestID
 	}
-	if n.DrinkInviteID != "" {
-		data["drink_invite_id"] = n.DrinkInviteID
+	if n.InviteID != "" {
+		data["invite_id"] = n.InviteID
 	}
 	return data
 }
 
-type DrinkInvite struct {
-	ID         string
-	FromUserID string
-	ToUserID   string
-	InviteDate string
-	Status     string
+type Invite struct {
+	ID            string
+	InviterUserID string
+	InviteeUserID string
+	ScheduledDate string
+	Status        string
 }
 
-func DrinkInviteFromRow(row map[string]any) DrinkInvite {
+func InviteFromRow(row map[string]any) Invite {
 	id, _ := row["id"].(string)
-	fromUserID, _ := row["from_user_id"].(string)
-	toUserID, _ := row["to_user_id"].(string)
-	inviteDate, _ := row["invite_date"].(string)
+	inviterUserID, _ := row["inviter_user_id"].(string)
+	inviteeUserID, _ := row["invitee_user_id"].(string)
+	scheduledDate, _ := row["scheduled_date"].(string)
 	status, _ := row["status"].(string)
-	return DrinkInvite{ID: id, FromUserID: fromUserID, ToUserID: toUserID, InviteDate: inviteDate, Status: status}
+	return Invite{ID: id, InviterUserID: inviterUserID, InviteeUserID: inviteeUserID, ScheduledDate: scheduledDate, Status: status}
 }
 
 func FriendRequestIDs(row map[string]any) (requestID, fromUserID, toUserID string) {
@@ -161,7 +161,7 @@ func DateOrEmpty(value string) string {
 	return strings.TrimSpace(value)
 }
 
-func InviteDatePhrase(value string, now time.Time) string {
+func ScheduledDatePhrase(value string, now time.Time) string {
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" {
 		return "今日"

@@ -96,10 +96,10 @@ func BuildFeedItem(row map[string]any, currentUserID string) (FeedItem, bool) {
 	}
 	owner := mapValue(row, "owner")
 	authorName := feedAuthorName(owner, isOfficial)
-	sortAt := stringValue(row, "drank_at")
+	sortAt := stringValue(row, "happened_at")
 	item := FeedItem{
 		ID:          id,
-		Type:        "drink_log",
+		Type:        "memory",
 		PostKind:    postKind,
 		Displayable: true,
 		AuthorName:  authorName,
@@ -149,13 +149,13 @@ func AttachFeedItem(row map[string]any, item FeedItem) map[string]any {
 	return row
 }
 
-func HideReportedRows(rows []map[string]any, hiddenDrinkLogIDs map[string]bool) []map[string]any {
-	if len(hiddenDrinkLogIDs) == 0 {
+func HideReportedRows(rows []map[string]any, hiddenMemoryIDs map[string]bool) []map[string]any {
+	if len(hiddenMemoryIDs) == 0 {
 		return rows
 	}
 	filtered := make([]map[string]any, 0, len(rows))
 	for _, row := range rows {
-		if id := stringValue(row, "id"); id != "" && hiddenDrinkLogIDs[id] {
+		if id := stringValue(row, "id"); id != "" && hiddenMemoryIDs[id] {
 			continue
 		}
 		filtered = append(filtered, row)
@@ -359,7 +359,7 @@ func mapValue(row map[string]any, key string) map[string]any {
 }
 
 func RowTime(row map[string]any) time.Time {
-	parsed, err := time.Parse(time.RFC3339, stringValue(row, "drank_at"))
+	parsed, err := time.Parse(time.RFC3339, stringValue(row, "happened_at"))
 	if err == nil {
 		return parsed
 	}

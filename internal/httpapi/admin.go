@@ -12,7 +12,7 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/yota/nomo/backend/internal/features/drinklogs"
+	"github.com/yota/nomo/backend/internal/features/memories"
 	"github.com/yota/nomo/backend/internal/features/profiles"
 )
 
@@ -286,28 +286,28 @@ func (r *router) adminDeleteUser(w http.ResponseWriter, req *http.Request, admin
 	writeJSON(w, http.StatusOK, map[string]string{"id": targetID})
 }
 
-func (r *router) adminListDrinkLogs(w http.ResponseWriter, req *http.Request, _ AuthUser) {
+func (r *router) adminListMemories(w http.ResponseWriter, req *http.Request, _ AuthUser) {
 	q := url.Values{}
-	q.Set("select", "id,owner_user_id,drank_at,place_name,place_lat,place_lng,memo,caption_y,photo_path,link_url,marker_rarity,is_official,created_at,owner:profiles!drink_logs_owner_user_id_fkey(id,user_id,display_name,avatar_url,is_plus)")
+	q.Set("select", "id,owner_user_id,happened_at,place_name,place_lat,place_lng,memo,caption_y,photo_path,link_url,marker_rarity,is_official,created_at,owner:profiles!memories_owner_user_id_fkey(id,user_id,display_name,avatar_url,is_plus)")
 	q.Set("order", "created_at.desc")
 	q.Set("limit", "80")
 	var rows []map[string]any
-	if err := r.deps.AdminSupabase.Get(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "drink_logs", q, &rows); err != nil {
+	if err := r.deps.AdminSupabase.Get(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "memories", q, &rows); err != nil {
 		writeSupabaseError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, rows)
 }
 
-func (r *router) adminListDrinkLogReports(w http.ResponseWriter, req *http.Request, _ AuthUser) {
+func (r *router) adminListMemoryReports(w http.ResponseWriter, req *http.Request, _ AuthUser) {
 	status := strings.TrimSpace(req.URL.Query().Get("status"))
-	rows, err := r.adminDrinkLogReports(req, true, status)
+	rows, err := r.adminMemoryReports(req, true, status)
 	if err != nil {
 		if status != "" && status != "all" {
 			writeSupabaseError(w, err)
 			return
 		}
-		rows, err = r.adminDrinkLogReports(req, false, status)
+		rows, err = r.adminMemoryReports(req, false, status)
 	}
 	if err != nil {
 		writeSupabaseError(w, err)
@@ -324,10 +324,10 @@ func (r *router) adminListDrinkLogReports(w http.ResponseWriter, req *http.Reque
 	writeJSON(w, http.StatusOK, rows)
 }
 
-func (r *router) adminDrinkLogReports(req *http.Request, includeModerationColumns bool, status string) ([]map[string]any, error) {
-	selectColumns := "id,drink_log_id,reporter_user_id,reason,created_at,drink_log:drink_logs!drink_log_reports_drink_log_id_fkey(id,owner_user_id,drank_at,memo,photo_path,is_official,owner:profiles!drink_logs_owner_user_id_fkey(id,user_id,display_name,avatar_url)),reporter:profiles!drink_log_reports_reporter_user_id_fkey(id,user_id,display_name,avatar_url)"
+func (r *router) adminMemoryReports(req *http.Request, includeModerationColumns bool, status string) ([]map[string]any, error) {
+	selectColumns := "id,memory_id,reporter_user_id,reason,created_at,memory:memories!memory_reports_memory_id_fkey(id,owner_user_id,happened_at,memo,photo_path,is_official,owner:profiles!memories_owner_user_id_fkey(id,user_id,display_name,avatar_url)),reporter:profiles!memory_reports_reporter_user_id_fkey(id,user_id,display_name,avatar_url)"
 	if includeModerationColumns {
-		selectColumns = "id,drink_log_id,reporter_user_id,reason,status,hidden_at,reviewed_at,reviewed_by_user_id,moderation_note,created_at,drink_log:drink_logs!drink_log_reports_drink_log_id_fkey(id,owner_user_id,drank_at,memo,photo_path,is_official,owner:profiles!drink_logs_owner_user_id_fkey(id,user_id,display_name,avatar_url)),reporter:profiles!drink_log_reports_reporter_user_id_fkey(id,user_id,display_name,avatar_url)"
+		selectColumns = "id,memory_id,reporter_user_id,reason,status,hidden_at,reviewed_at,reviewed_by_user_id,moderation_note,created_at,memory:memories!memory_reports_memory_id_fkey(id,owner_user_id,happened_at,memo,photo_path,is_official,owner:profiles!memories_owner_user_id_fkey(id,user_id,display_name,avatar_url)),reporter:profiles!memory_reports_reporter_user_id_fkey(id,user_id,display_name,avatar_url)"
 	}
 	q := url.Values{}
 	q.Set("select", selectColumns)
@@ -337,25 +337,25 @@ func (r *router) adminDrinkLogReports(req *http.Request, includeModerationColumn
 		q.Set("status", "eq."+status)
 	}
 	var rows []map[string]any
-	if err := r.deps.AdminSupabase.Get(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "drink_log_reports", q, &rows); err != nil {
+	if err := r.deps.AdminSupabase.Get(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "memory_reports", q, &rows); err != nil {
 		return nil, err
 	}
 	return rows, nil
 }
 
-func (r *router) adminUpdateDrinkLogReport(w http.ResponseWriter, req *http.Request, adminUser AuthUser) {
+func (r *router) adminUpdateMemoryReport(w http.ResponseWriter, req *http.Request, adminUser AuthUser) {
 	reportID, errMessage := cleanUUID(req.PathValue("id"), "report id")
 	if errMessage != "" {
 		writeError(w, http.StatusBadRequest, errMessage)
 		return
 	}
-	var input AdminUpdateDrinkLogReportRequest
+	var input AdminUpdateMemoryReportRequest
 	if !decodeJSONBody(w, req, &input) {
 		return
 	}
-	status, err := drinklogs.CleanModerationStatus(input.Status)
+	status, err := memories.CleanModerationStatus(input.Status)
 	if err != nil {
-		writeDrinkLogError(w, err)
+		writeMemoryError(w, err)
 		return
 	}
 	payload := map[string]any{
@@ -367,15 +367,15 @@ func (r *router) adminUpdateDrinkLogReport(w http.ResponseWriter, req *http.Requ
 	q := url.Values{}
 	q.Set("id", "eq."+reportID)
 	var rows []map[string]any
-	if err := r.deps.AdminSupabase.Patch(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "drink_log_reports", q, payload, &rows); err != nil {
+	if err := r.deps.AdminSupabase.Patch(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "memory_reports", q, payload, &rows); err != nil {
 		writeSupabaseError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, rows)
 }
 
-func (r *router) adminCreateDrinkLog(w http.ResponseWriter, req *http.Request, _ AuthUser) {
-	var input AdminCreateDrinkLogRequest
+func (r *router) adminCreateMemory(w http.ResponseWriter, req *http.Request, _ AuthUser) {
+	var input AdminCreateMemoryRequest
 	if !decodeJSONBody(w, req, &input) {
 		return
 	}
@@ -405,45 +405,45 @@ func (r *router) adminCreateDrinkLog(w http.ResponseWriter, req *http.Request, _
 		writeError(w, http.StatusBadRequest, errMessage)
 		return
 	}
-	drankAt := input.DrankAt
-	if drankAt.IsZero() {
-		drankAt = time.Now()
+	happenedAt := input.HappenedAt
+	if happenedAt.IsZero() {
+		happenedAt = time.Now()
 	}
 	payload := map[string]any{
 		"owner_user_id": input.OwnerUserID,
-		"drank_at":      drankAt.Format(time.RFC3339),
+		"happened_at":   happenedAt.Format(time.RFC3339),
 		"place_name":    strings.TrimSpace(input.PlaceName),
 		"memo":          strings.TrimSpace(input.Memo),
-		"caption_y":     cleanDrinkLogCaptionY(input.CaptionY),
+		"caption_y":     cleanMemoryCaptionY(input.CaptionY),
 		"photo_path":    strings.TrimSpace(input.PhotoPath),
 		"link_url":      strings.TrimSpace(input.LinkURL),
-		"marker_rarity": cleanDrinkLogMarkerRarity(input.MarkerRarity),
+		"marker_rarity": cleanMemoryMarkerRarity(input.MarkerRarity),
 		"is_official":   input.IsOfficial,
 	}
-	var rows []DrinkLog
-	if err := r.deps.AdminSupabase.Post(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "drink_logs", nil, payload, &rows); err != nil {
+	var rows []Memory
+	if err := r.deps.AdminSupabase.Post(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "memories", nil, payload, &rows); err != nil {
 		writeSupabaseError(w, err)
 		return
 	}
 	if len(rows) == 0 {
-		writeError(w, http.StatusBadGateway, "drink log insert returned no rows")
+		writeError(w, http.StatusBadGateway, "memory insert returned no rows")
 		return
 	}
-	if err := r.adminInsertDrinkLogFriends(req, rows[0].ID, friendIDs); err != nil {
+	if err := r.adminInsertMemoryFriends(req, rows[0].ID, friendIDs); err != nil {
 		writeSupabaseError(w, err)
 		return
 	}
-	r.createDrinkLogTaggedNotifications(req, r.deps.Config.SupabaseServiceRoleKey, rows[0].ID, input.OwnerUserID, friendIDs)
+	r.createMemoryTaggedNotifications(req, r.deps.Config.SupabaseServiceRoleKey, rows[0].ID, input.OwnerUserID, friendIDs)
 	writeJSON(w, http.StatusCreated, rows[0])
 }
 
-func (r *router) adminUpdateDrinkLog(w http.ResponseWriter, req *http.Request, _ AuthUser) {
-	logID, errMessage := cleanUUID(req.PathValue("id"), "drink log id")
+func (r *router) adminUpdateMemory(w http.ResponseWriter, req *http.Request, _ AuthUser) {
+	memoryID, errMessage := cleanUUID(req.PathValue("id"), "memory id")
 	if errMessage != "" {
 		writeError(w, http.StatusBadRequest, errMessage)
 		return
 	}
-	var input AdminUpdateDrinkLogRequest
+	var input AdminUpdateMemoryRequest
 	if !decodeJSONBody(w, req, &input) {
 		return
 	}
@@ -456,8 +456,8 @@ func (r *router) adminUpdateDrinkLog(w http.ResponseWriter, req *http.Request, _
 		}
 		payload["owner_user_id"] = ownerID
 	}
-	if input.DrankAt != nil {
-		payload["drank_at"] = input.DrankAt.Format(time.RFC3339)
+	if input.HappenedAt != nil {
+		payload["happened_at"] = input.HappenedAt.Format(time.RFC3339)
 	}
 	if input.PlaceName != nil {
 		payload["place_name"] = strings.TrimSpace(*input.PlaceName)
@@ -466,7 +466,7 @@ func (r *router) adminUpdateDrinkLog(w http.ResponseWriter, req *http.Request, _
 		payload["memo"] = strings.TrimSpace(*input.Memo)
 	}
 	if input.CaptionY != nil {
-		payload["caption_y"] = cleanDrinkLogCaptionY(input.CaptionY)
+		payload["caption_y"] = cleanMemoryCaptionY(input.CaptionY)
 	}
 	if input.PhotoPath != nil {
 		payload["photo_path"] = strings.TrimSpace(*input.PhotoPath)
@@ -475,7 +475,7 @@ func (r *router) adminUpdateDrinkLog(w http.ResponseWriter, req *http.Request, _
 		payload["link_url"] = strings.TrimSpace(*input.LinkURL)
 	}
 	if input.MarkerRarity != nil {
-		payload["marker_rarity"] = cleanDrinkLogMarkerRarity(*input.MarkerRarity)
+		payload["marker_rarity"] = cleanMemoryMarkerRarity(*input.MarkerRarity)
 	}
 	if input.IsOfficial != nil {
 		payload["is_official"] = *input.IsOfficial
@@ -489,13 +489,13 @@ func (r *router) adminUpdateDrinkLog(w http.ResponseWriter, req *http.Request, _
 		}
 	}
 	if len(payload) == 0 {
-		writeJSON(w, http.StatusOK, map[string]string{"id": logID})
+		writeJSON(w, http.StatusOK, map[string]string{"id": memoryID})
 		return
 	}
 	q := url.Values{}
-	q.Set("id", "eq."+logID)
-	var rows []DrinkLog
-	if err := r.deps.AdminSupabase.Patch(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "drink_logs", q, payload, &rows); err != nil {
+	q.Set("id", "eq."+memoryID)
+	var rows []Memory
+	if err := r.deps.AdminSupabase.Patch(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "memories", q, payload, &rows); err != nil {
 		writeSupabaseError(w, err)
 		return
 	}
@@ -565,16 +565,16 @@ func randomAdminPassword() (string, error) {
 	return "Nomo!" + hex.EncodeToString(bytes[:]), nil
 }
 
-func (r *router) adminDeleteDrinkLog(w http.ResponseWriter, req *http.Request, _ AuthUser) {
-	logID, errMessage := cleanUUID(req.PathValue("id"), "drink log id")
+func (r *router) adminDeleteMemory(w http.ResponseWriter, req *http.Request, _ AuthUser) {
+	memoryID, errMessage := cleanUUID(req.PathValue("id"), "memory id")
 	if errMessage != "" {
 		writeError(w, http.StatusBadRequest, errMessage)
 		return
 	}
 	q := url.Values{}
-	q.Set("id", "eq."+logID)
-	var rows []DrinkLog
-	if err := r.deps.AdminSupabase.Delete(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "drink_logs", q, &rows); err != nil {
+	q.Set("id", "eq."+memoryID)
+	var rows []Memory
+	if err := r.deps.AdminSupabase.Delete(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "memories", q, &rows); err != nil {
 		writeSupabaseError(w, err)
 		return
 	}
@@ -683,13 +683,13 @@ func (r *router) isAdminUser(user AuthUser) bool {
 	return false
 }
 
-func (r *router) adminInsertDrinkLogFriends(req *http.Request, drinkLogID string, friendIDs []string) error {
-	links := drinkLogFriendLinks(drinkLogID, friendIDs)
+func (r *router) adminInsertMemoryFriends(req *http.Request, memoryID string, friendIDs []string) error {
+	links := memoryFriendLinks(memoryID, friendIDs)
 	if len(links) == 0 {
 		return nil
 	}
 	var ignored []map[string]any
-	return r.deps.AdminSupabase.Post(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "drink_log_friends", nil, links, &ignored)
+	return r.deps.AdminSupabase.Post(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "memory_tagged_users", nil, links, &ignored)
 }
 
 func validateAdminProfileInput(userID, displayName string) string {

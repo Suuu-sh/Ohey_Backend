@@ -23,8 +23,8 @@ Authenticated write endpoints return `429 Too Many Requests` with `Retry-After` 
 
 Current in-memory limits:
 
-- `POST /v1/drink-logs/{id}/report`: 10 / hour
-- `POST /v1/drink-invites`: 20 / hour
+- `POST /v1/memories/{id}/report`: 10 / hour
+- `POST /v1/invites`: 20 / hour
 - `POST /v1/friend-requests`: 20 / hour
 - `POST /v1/media/upload-url`: 30 / hour
 - `POST /v1/user-blocks`: 30 / hour
@@ -41,7 +41,7 @@ Query:
 - `limit`: positive integer。default `50`、max `100`。
 - `cursor`: 前回 response の最後の row の `feed_cursor`。旧 `sort_at` RFC3339 も互換で受け付ける。
 
-Response: drink log row の array。各 row は raw fields に加えて以下を持ちます。
+Response: memory row の array。各 row は raw fields に加えて以下を持ちます。
 
 - `feed_item`
 - `feed_post_kind`
@@ -56,7 +56,7 @@ Response: drink log row の array。各 row は raw fields に加えて以下を
 
 方針:
 
-- Mobile は Home 表示では `/v1/drink-logs` ではなく `/v1/home/feed` を使う。
+- Mobile は Home 表示では `/v1/memories` ではなく `/v1/home/feed` を使う。
 - reported / hidden / blocked / muted user は ranking 前に除外する。
 - `rank_score` は Backend 内部の並び制御用。Mobile は表示ロジックとして解釈しない。
 
@@ -71,15 +71,15 @@ Response: drink log row の array。各 row は raw fields に加えて以下を
 Body:
 
 ```json
-{"status_date":"2026-05-28","status":"can_drink_today"}
+{"status_date":"2026-05-28","status":"available"}
 ```
 
 Allowed status:
 
 - `unselected`
-- `can_drink_today`
-- `non_alcohol`
-- `liver_rest`
+- `available`
+- `maybe_available`
+- `depends_on_time`
 - `has_plans`
 
 ### `GET /v1/daily-statuses/month?month=YYYY-MM`
@@ -153,17 +153,17 @@ Allowed status:
 
 ## User Safety
 
-### `POST /v1/feed-hidden-drink-logs`
+### `POST /v1/memory-hides`
 
 Body:
 
 ```json
-{"drink_log_id":"<uuid>"}
+{"memory_id":"<uuid>"}
 ```
 
 自分の feed から対象投稿を非表示にする。通報とは分ける。
 
-### `DELETE /v1/feed-hidden-drink-logs/{drink_log_id}`
+### `DELETE /v1/memory-hides/{memory_id}`
 
 非表示を解除する。
 
@@ -196,8 +196,8 @@ Body:
 対象 user を block する。Backend は以下を行う。
 
 - feed から対象 user の投稿を除外
-- friend request / drink invite 作成時に block 関係を拒否
-- block 作成時に既存 friendship / pending friend request / pending drink invite を整理
+- friend request / invite 作成時に block 関係を拒否
+- block 作成時に既存 friendship / pending friend request / pending invite を整理
 
 ### `GET /v1/user-blocks`
 
@@ -211,23 +211,23 @@ block を解除する。解除しても過去に整理した friendship / reques
 
 ### `POST /v1/media/upload-url`
 
-Drink log photo 用の Supabase Storage signed upload URL を返す。
+Memory photo 用の Supabase Storage signed upload URL を返す。
 
 ### `POST /v1/media/display-url`
 
 Body:
 
 ```json
-{"path":"users/<user_id>/drink_logs/photo.jpg"}
+{"path":"users/<user_id>/memories/photo.jpg"}
 ```
 
 Storage display 用 signed URL を Backend から返す。Mobile は raw `photo_path` を受け取ったらこの endpoint を優先する。
 
-Drink log 削除時は Backend が `nomo-photos` object cleanup を best-effort で行う。
+Memory 削除時は Backend が `nomo-photos` object cleanup を best-effort で行う。
 
-### `GET /v1/admin/media/orphan-drink-log-photos?user_id=<uuid>&limit=100`
+### `GET /v1/admin/media/orphan-memory-photos?user_id=<uuid>&limit=100`
 
-指定 user の `users/<user_id>/drink_logs` prefix を Storage から確認し、`drink_logs.photo_path` に存在しない object path を候補として返す。実削除はしない。
+指定 user の `users/<user_id>/memories` prefix を Storage から確認し、`memories.photo_path` に存在しない object path を候補として返す。実削除はしない。
 
 ## Notifications / Outbox
 
@@ -251,13 +251,13 @@ FCM が token-specific invalid response を返した場合、Backend は service
 
 Domain events:
 
-- `drink_invite.created`
-- `drink_invite.accepted`
+- `invite.created`
+- `invite.accepted`
 - `friend_request.created`
 - `friend_request.accepted`
-- `drink_log.tagged`
-- `drink_log.liked`
-- `drink_log.reported`
+- `memory.tagged`
+- `memory.liked`
+- `memory.reported`
 - `system_notification.created`
 
 Backend は event を `notification_outbox` に保存し、in-process dispatch 後に `processed` / `failed` を更新します。
@@ -275,7 +275,7 @@ Due な `pending` / `failed` outbox rows を再処理する。
 
 ## Moderation
 
-### `POST /v1/drink-logs/{id}/report`
+### `POST /v1/memories/{id}/report`
 
 Body:
 
@@ -292,13 +292,13 @@ Allowed reason:
 - `minor_safety`
 - `other`
 
-同じ user が同じ drink log を再 report した場合は duplicate として扱う。
+同じ user が同じ memory を再 report した場合は duplicate として扱う。
 
-### `GET /v1/admin/drink-log-reports?status=pending|reviewing|resolved|dismissed|all`
+### `GET /v1/admin/memory-reports?status=pending|reviewing|resolved|dismissed|all`
 
 通報 queue を取得する。
 
-### `PATCH /v1/admin/drink-log-reports/{id}`
+### `PATCH /v1/admin/memory-reports/{id}`
 
 Body:
 

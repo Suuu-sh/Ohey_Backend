@@ -1,4 +1,4 @@
-package drinklogs
+package memories
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 	"github.com/yota/nomo/backend/internal/supabase"
 )
 
-const drinkLogSelectColumns = "id,owner_user_id,drank_at,place_name,place_lat,place_lng,memo,caption_y,photo_path,link_url,marker_rarity,is_official,owner:profiles!drink_logs_owner_user_id_fkey(id,user_id,display_name,gender,character_key,avatar_url,is_plus),drink_log_likes(user_id),drink_log_friends(profiles(id,user_id,display_name,gender,character_key,avatar_url,is_plus))"
+const memorySelectColumns = "id,owner_user_id,happened_at,place_name,place_lat,place_lng,memo,caption_y,photo_path,link_url,marker_rarity,is_official,owner:profiles!memories_owner_user_id_fkey(id,user_id,display_name,gender,character_key,avatar_url,is_plus),memory_likes(user_id),memory_tagged_users(profiles(id,user_id,display_name,gender,character_key,avatar_url,is_plus))"
 
 type SupabaseRepository struct {
 	client *supabase.Client
@@ -44,43 +44,43 @@ func (r *SupabaseRepository) VisibleFeedUserIDs(ctx context.Context, authToken, 
 	return ids, nil
 }
 
-func (r *SupabaseRepository) ListDrinkLogs(ctx context.Context, authToken string, ownerUserIDs []string) ([]map[string]any, error) {
+func (r *SupabaseRepository) ListMemories(ctx context.Context, authToken string, ownerUserIDs []string) ([]map[string]any, error) {
 	if len(ownerUserIDs) == 0 {
 		return []map[string]any{}, nil
 	}
 	q := url.Values{}
-	q.Set("select", drinkLogSelectColumns)
+	q.Set("select", memorySelectColumns)
 	q.Set("owner_user_id", "in.("+strings.Join(ownerUserIDs, ",")+")")
-	q.Set("order", "drank_at.desc")
+	q.Set("order", "happened_at.desc")
 	var rows []map[string]any
-	if err := r.client.Get(ctx, authToken, "drink_logs", q, &rows); err != nil {
+	if err := r.client.Get(ctx, authToken, "memories", q, &rows); err != nil {
 		return nil, err
 	}
 	return rows, nil
 }
 
-func (r *SupabaseRepository) ListOfficialDrinkLogs(ctx context.Context, authToken string) ([]map[string]any, error) {
+func (r *SupabaseRepository) ListOfficialMemories(ctx context.Context, authToken string) ([]map[string]any, error) {
 	q := url.Values{}
-	q.Set("select", drinkLogSelectColumns)
+	q.Set("select", memorySelectColumns)
 	q.Set("is_official", "eq.true")
-	q.Set("order", "drank_at.desc")
+	q.Set("order", "happened_at.desc")
 	var rows []map[string]any
-	if err := r.client.Get(ctx, authToken, "drink_logs", q, &rows); err != nil {
+	if err := r.client.Get(ctx, authToken, "memories", q, &rows); err != nil {
 		return nil, err
 	}
 	return rows, nil
 }
 
-func (r *SupabaseRepository) HasDrinkLogInWindow(ctx context.Context, authToken, ownerUserID string, start, end time.Time) (bool, error) {
+func (r *SupabaseRepository) HasMemoryInWindow(ctx context.Context, authToken, ownerUserID string, start, end time.Time) (bool, error) {
 	q := url.Values{}
 	q.Set("select", "id")
 	q.Set("owner_user_id", "eq."+ownerUserID)
 	q.Set("is_official", "eq.false")
-	q.Add("drank_at", "gte."+start.Format(time.RFC3339))
-	q.Add("drank_at", "lt."+end.Format(time.RFC3339))
+	q.Add("happened_at", "gte."+start.Format(time.RFC3339))
+	q.Add("happened_at", "lt."+end.Format(time.RFC3339))
 	q.Set("limit", "1")
 	var rows []map[string]any
-	if err := r.client.Get(ctx, authToken, "drink_logs", q, &rows); err != nil {
+	if err := r.client.Get(ctx, authToken, "memories", q, &rows); err != nil {
 		return false, err
 	}
 	return len(rows) > 0, nil
@@ -98,49 +98,49 @@ func (r *SupabaseRepository) FriendshipExists(ctx context.Context, authToken, us
 	return len(rows) > 0, nil
 }
 
-func (r *SupabaseRepository) CreateDrinkLog(ctx context.Context, authToken string, log NewDrinkLog) (map[string]any, error) {
+func (r *SupabaseRepository) CreateMemory(ctx context.Context, authToken string, memory NewMemory) (map[string]any, error) {
 	payload := map[string]any{
-		"owner_user_id": log.OwnerUserID,
-		"drank_at":      log.DrankAt.Format(time.RFC3339),
-		"place_name":    strings.TrimSpace(log.PlaceName),
-		"place_lat":     log.PlaceLat,
-		"place_lng":     log.PlaceLng,
-		"memo":          strings.TrimSpace(log.Memo),
-		"caption_y":     log.CaptionY,
-		"photo_path":    log.PhotoPath,
-		"marker_rarity": string(log.MarkerRarity),
-		"is_official":   log.IsOfficial,
+		"owner_user_id": memory.OwnerUserID,
+		"happened_at":   memory.HappenedAt.Format(time.RFC3339),
+		"place_name":    strings.TrimSpace(memory.PlaceName),
+		"place_lat":     memory.PlaceLat,
+		"place_lng":     memory.PlaceLng,
+		"memo":          strings.TrimSpace(memory.Memo),
+		"caption_y":     memory.CaptionY,
+		"photo_path":    memory.PhotoPath,
+		"marker_rarity": string(memory.MarkerRarity),
+		"is_official":   memory.IsOfficial,
 	}
 	var rows []map[string]any
-	if err := r.client.Post(ctx, authToken, "drink_logs", nil, payload, &rows); err != nil {
+	if err := r.client.Post(ctx, authToken, "memories", nil, payload, &rows); err != nil {
 		return nil, err
 	}
 	if len(rows) == 0 {
-		return nil, UserError{Kind: ErrorKindUpstream, Message: "drink log insert returned no rows"}
+		return nil, UserError{Kind: ErrorKindUpstream, Message: "memory insert returned no rows"}
 	}
 	return rows[0], nil
 }
 
-func (r *SupabaseRepository) CreateDrinkLogFriendLinks(ctx context.Context, authToken, drinkLogID string, friendIDs []string) error {
+func (r *SupabaseRepository) CreateMemoryFriendLinks(ctx context.Context, authToken, memoryID string, friendIDs []string) error {
 	if len(friendIDs) == 0 {
 		return nil
 	}
 	links := make([]map[string]string, 0, len(friendIDs))
 	for _, id := range friendIDs {
 		if id != "" {
-			links = append(links, map[string]string{"drink_log_id": drinkLogID, "friend_user_id": id})
+			links = append(links, map[string]string{"memory_id": memoryID, "tagged_user_id": id})
 		}
 	}
 	var ignored []map[string]any
-	return r.client.Post(ctx, authToken, "drink_log_friends", nil, links, &ignored)
+	return r.client.Post(ctx, authToken, "memory_tagged_users", nil, links, &ignored)
 }
 
-func (r *SupabaseRepository) DeleteOwnedDrinkLog(ctx context.Context, authToken, logID, ownerUserID string) (map[string]any, error) {
+func (r *SupabaseRepository) DeleteOwnedMemory(ctx context.Context, authToken, memoryID, ownerUserID string) (map[string]any, error) {
 	q := url.Values{}
-	q.Set("id", "eq."+logID)
+	q.Set("id", "eq."+memoryID)
 	q.Set("owner_user_id", "eq."+ownerUserID)
 	var rows []map[string]any
-	if err := r.client.Delete(ctx, authToken, "drink_logs", q, &rows); err != nil {
+	if err := r.client.Delete(ctx, authToken, "memories", q, &rows); err != nil {
 		return nil, err
 	}
 	if len(rows) == 0 {
@@ -149,10 +149,10 @@ func (r *SupabaseRepository) DeleteOwnedDrinkLog(ctx context.Context, authToken,
 	return rows[0], nil
 }
 
-func (r *SupabaseRepository) CreateLike(ctx context.Context, authToken, logID, userID string) (bool, error) {
-	payload := map[string]any{"drink_log_id": logID, "user_id": userID}
+func (r *SupabaseRepository) CreateLike(ctx context.Context, authToken, memoryID, userID string) (bool, error) {
+	payload := map[string]any{"memory_id": memoryID, "user_id": userID}
 	var ignored []map[string]any
-	if err := r.client.Post(ctx, authToken, "drink_log_likes", nil, payload, &ignored); err != nil {
+	if err := r.client.Post(ctx, authToken, "memory_likes", nil, payload, &ignored); err != nil {
 		var apiErr supabase.APIError
 		if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusConflict {
 			return false, nil
@@ -162,20 +162,20 @@ func (r *SupabaseRepository) CreateLike(ctx context.Context, authToken, logID, u
 	return true, nil
 }
 
-func (r *SupabaseRepository) DeleteLike(ctx context.Context, authToken, logID, userID string) error {
+func (r *SupabaseRepository) DeleteLike(ctx context.Context, authToken, memoryID, userID string) error {
 	q := url.Values{}
-	q.Set("drink_log_id", "eq."+logID)
+	q.Set("memory_id", "eq."+memoryID)
 	q.Set("user_id", "eq."+userID)
 	var ignored []map[string]any
-	return r.client.Delete(ctx, authToken, "drink_log_likes", q, &ignored)
+	return r.client.Delete(ctx, authToken, "memory_likes", q, &ignored)
 }
 
-func (r *SupabaseRepository) LikeState(ctx context.Context, authToken, logID, userID string) (LikeState, error) {
+func (r *SupabaseRepository) LikeState(ctx context.Context, authToken, memoryID, userID string) (LikeState, error) {
 	q := url.Values{}
 	q.Set("select", "user_id")
-	q.Set("drink_log_id", "eq."+logID)
+	q.Set("memory_id", "eq."+memoryID)
 	var likes []map[string]any
-	if err := r.client.Get(ctx, authToken, "drink_log_likes", q, &likes); err != nil {
+	if err := r.client.Get(ctx, authToken, "memory_likes", q, &likes); err != nil {
 		return LikeState{}, err
 	}
 	likedByMe := false
@@ -188,33 +188,33 @@ func (r *SupabaseRepository) LikeState(ctx context.Context, authToken, logID, us
 	return LikeState{LikeCount: len(likes), LikedByMe: likedByMe}, nil
 }
 
-func (r *SupabaseRepository) HiddenDrinkLogIDs(ctx context.Context, authToken, userID string) (map[string]bool, error) {
+func (r *SupabaseRepository) HiddenMemoryIDs(ctx context.Context, authToken, userID string) (map[string]bool, error) {
 	q := url.Values{}
-	q.Set("select", "drink_log_id")
+	q.Set("select", "memory_id")
 	q.Set("reporter_user_id", "eq."+userID)
 	var rows []map[string]any
-	if err := r.client.Get(ctx, authToken, "drink_log_reports", q, &rows); err != nil {
+	if err := r.client.Get(ctx, authToken, "memory_reports", q, &rows); err != nil {
 		return nil, err
 	}
 	hidden := make(map[string]bool, len(rows))
 	for _, row := range rows {
-		id, _ := row["drink_log_id"].(string)
+		id, _ := row["memory_id"].(string)
 		if id != "" {
 			hidden[id] = true
 		}
 	}
 	q = url.Values{}
-	q.Set("select", "drink_log_id")
+	q.Set("select", "memory_id")
 	q.Set("user_id", "eq."+userID)
 	var feedHiddenRows []map[string]any
-	if err := r.client.Get(ctx, authToken, "feed_hidden_drink_logs", q, &feedHiddenRows); err != nil {
+	if err := r.client.Get(ctx, authToken, "memory_hides", q, &feedHiddenRows); err != nil {
 		if isOptionalSafetyTableMissing(err) {
 			return hidden, nil
 		}
 		return nil, err
 	}
 	for _, row := range feedHiddenRows {
-		id, _ := row["drink_log_id"].(string)
+		id, _ := row["memory_id"].(string)
 		if id != "" {
 			hidden[id] = true
 		}
@@ -259,13 +259,13 @@ func (r *SupabaseRepository) HiddenUserIDs(ctx context.Context, authToken, userI
 	return hidden, nil
 }
 
-func (r *SupabaseRepository) DrinkLogOwnerUserID(ctx context.Context, authToken, logID string) (string, error) {
+func (r *SupabaseRepository) MemoryOwnerUserID(ctx context.Context, authToken, memoryID string) (string, error) {
 	q := url.Values{}
 	q.Set("select", "owner_user_id")
-	q.Set("id", "eq."+logID)
+	q.Set("id", "eq."+memoryID)
 	q.Set("limit", "1")
 	var rows []map[string]any
-	if err := r.client.Get(ctx, authToken, "drink_logs", q, &rows); err != nil {
+	if err := r.client.Get(ctx, authToken, "memories", q, &rows); err != nil {
 		return "", err
 	}
 	if len(rows) == 0 {
@@ -275,14 +275,14 @@ func (r *SupabaseRepository) DrinkLogOwnerUserID(ctx context.Context, authToken,
 	return ownerUserID, nil
 }
 
-func (r *SupabaseRepository) FindReport(ctx context.Context, authToken, logID, reporterUserID string) (*Report, error) {
+func (r *SupabaseRepository) FindReport(ctx context.Context, authToken, memoryID, reporterUserID string) (*Report, error) {
 	q := url.Values{}
-	q.Set("select", "id,drink_log_id,reporter_user_id,reason")
-	q.Set("drink_log_id", "eq."+logID)
+	q.Set("select", "id,memory_id,reporter_user_id,reason")
+	q.Set("memory_id", "eq."+memoryID)
 	q.Set("reporter_user_id", "eq."+reporterUserID)
 	q.Set("limit", "1")
 	var rows []map[string]any
-	if err := r.client.Get(ctx, authToken, "drink_log_reports", q, &rows); err != nil {
+	if err := r.client.Get(ctx, authToken, "memory_reports", q, &rows); err != nil {
 		return nil, err
 	}
 	if len(rows) == 0 {
@@ -292,7 +292,7 @@ func (r *SupabaseRepository) FindReport(ctx context.Context, authToken, logID, r
 	reason, _ := CleanReportReason(stringValue(row, "reason"))
 	return &Report{
 		ID:             stringValue(row, "id"),
-		DrinkLogID:     stringValue(row, "drink_log_id"),
+		MemoryID:       stringValue(row, "memory_id"),
 		ReporterUserID: stringValue(row, "reporter_user_id"),
 		Reason:         reason,
 		Status:         ModerationStatusPending,
@@ -300,9 +300,9 @@ func (r *SupabaseRepository) FindReport(ctx context.Context, authToken, logID, r
 }
 
 func (r *SupabaseRepository) CreateReport(ctx context.Context, authToken string, report Report) error {
-	payload := map[string]any{"drink_log_id": report.DrinkLogID, "reporter_user_id": report.ReporterUserID, "reason": string(report.Reason)}
+	payload := map[string]any{"memory_id": report.MemoryID, "reporter_user_id": report.ReporterUserID, "reason": string(report.Reason)}
 	var rows []map[string]any
-	if err := r.client.Post(ctx, authToken, "drink_log_reports", nil, payload, &rows); err != nil {
+	if err := r.client.Post(ctx, authToken, "memory_reports", nil, payload, &rows); err != nil {
 		var apiErr supabase.APIError
 		if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusConflict {
 			return nil
@@ -398,7 +398,7 @@ func AppendUniqueRows(rows []map[string]any, extraRows ...map[string]any) []map[
 
 func AttachLikeState(rows []map[string]any, userID string) {
 	for _, row := range rows {
-		rawLikes, _ := row["drink_log_likes"].([]any)
+		rawLikes, _ := row["memory_likes"].([]any)
 		row["like_count"] = len(rawLikes)
 		likedByMe := false
 		for _, rawLike := range rawLikes {
@@ -412,14 +412,14 @@ func AttachLikeState(rows []map[string]any, userID string) {
 	}
 }
 
-func SortRowsByDrankAtDesc(rows []map[string]any) {
+func SortRowsByHappenedAtDesc(rows []map[string]any) {
 	sort.SliceStable(rows, func(i, j int) bool {
 		return rowTime(rows[i]).After(rowTime(rows[j]))
 	})
 }
 
 func rowTime(row map[string]any) time.Time {
-	value, _ := row["drank_at"].(string)
+	value, _ := row["happened_at"].(string)
 	parsed, err := time.Parse(time.RFC3339, value)
 	if err == nil {
 		return parsed

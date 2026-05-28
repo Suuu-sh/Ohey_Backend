@@ -30,8 +30,8 @@ type actionRateLimiter struct {
 var timeNow = time.Now
 
 var (
-	rateLimitReportDrinkLog = rateLimitPolicy{
-		Action: "drink_log_report",
+	rateLimitReportMemory = rateLimitPolicy{
+		Action: "memory_report",
 		Limit:  10,
 		Window: time.Hour,
 	}
@@ -40,8 +40,8 @@ var (
 		Limit:  10,
 		Window: time.Hour,
 	}
-	rateLimitCreateDrinkInvite = rateLimitPolicy{
-		Action: "drink_invite_create",
+	rateLimitCreateInvite = rateLimitPolicy{
+		Action: "invite_create",
 		Limit:  20,
 		Window: time.Hour,
 	}

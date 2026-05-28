@@ -1,4 +1,4 @@
-package drinklogs
+package memories
 
 import (
 	"context"
@@ -44,8 +44,8 @@ type ListInput struct {
 type CreateInput struct {
 	AuthToken             string
 	OwnerUserID           string
-	DrankAt               *time.Time
-	DrankOn               string
+	HappenedAt            *time.Time
+	HappenedOn            string
 	TimezoneOffsetMinutes *int
 	PlaceName             string
 	PlaceLat              *float64
@@ -59,24 +59,24 @@ type CreateInput struct {
 
 type DeleteInput struct {
 	AuthToken   string
-	LogID       string
+	MemoryID    string
 	OwnerUserID string
 }
 
 type LikeInput struct {
 	AuthToken string
-	LogID     string
+	MemoryID  string
 	UserID    string
 }
 
 type ReportInput struct {
 	AuthToken      string
-	LogID          string
+	MemoryID       string
 	ReporterUserID string
 	Reason         string
 }
 
-func (u *Usecase) ListDrinkLogs(ctx context.Context, input ListInput) ([]map[string]any, error) {
+func (u *Usecase) ListMemories(ctx context.Context, input ListInput) ([]map[string]any, error) {
 	userID, err := CleanUUID(input.UserID, "user id")
 	if err != nil {
 		return nil, err
@@ -90,15 +90,15 @@ func (u *Usecase) ListDrinkLogs(ctx context.Context, input ListInput) ([]map[str
 		return nil, err
 	}
 	visibleUserIDs = ExcludeHiddenUserIDs(visibleUserIDs, hiddenUserIDs)
-	rows, err := u.repository.ListDrinkLogs(ctx, input.AuthToken, visibleUserIDs)
+	rows, err := u.repository.ListMemories(ctx, input.AuthToken, visibleUserIDs)
 	if err != nil {
 		return nil, err
 	}
-	officialRows, err := u.repository.ListOfficialDrinkLogs(ctx, input.AuthToken)
+	officialRows, err := u.repository.ListOfficialMemories(ctx, input.AuthToken)
 	if err != nil {
 		return nil, err
 	}
-	hiddenIDs, err := u.repository.HiddenDrinkLogIDs(ctx, input.AuthToken, userID)
+	hiddenIDs, err := u.repository.HiddenMemoryIDs(ctx, input.AuthToken, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -106,11 +106,11 @@ func (u *Usecase) ListDrinkLogs(ctx context.Context, input ListInput) ([]map[str
 	rows = HideRowsByID(rows, hiddenIDs)
 	rows = HideRowsByOwner(rows, hiddenUserIDs)
 	AttachLikeState(rows, userID)
-	SortRowsByDrankAtDesc(rows)
+	SortRowsByHappenedAtDesc(rows)
 	return rows, nil
 }
 
-func (u *Usecase) CreateDrinkLog(ctx context.Context, input CreateInput) (map[string]any, error) {
+func (u *Usecase) CreateMemory(ctx context.Context, input CreateInput) (map[string]any, error) {
 	ownerUserID, err := CleanUUID(input.OwnerUserID, "owner user id")
 	if err != nil {
 		return nil, err
@@ -132,18 +132,18 @@ func (u *Usecase) CreateDrinkLog(ctx context.Context, input CreateInput) (map[st
 		}
 	}
 
-	drankAt := u.now()
-	if input.DrankAt != nil {
-		drankAt = *input.DrankAt
+	happenedAt := u.now()
+	if input.HappenedAt != nil {
+		happenedAt = *input.HappenedAt
 	}
-	start, end, err := DrinkLogDayWindow(DayWindowInput{
-		DrankOn:               input.DrankOn,
+	start, end, err := MemoryDayWindow(DayWindowInput{
+		HappenedOn:            input.HappenedOn,
 		TimezoneOffsetMinutes: input.TimezoneOffsetMinutes,
-	}, drankAt)
+	}, happenedAt)
 	if err != nil {
 		return nil, err
 	}
-	exists, err := u.repository.HasDrinkLogInWindow(ctx, input.AuthToken, ownerUserID, start, end)
+	exists, err := u.repository.HasMemoryInWindow(ctx, input.AuthToken, ownerUserID, start, end)
 	if err != nil {
 		return nil, err
 	}
@@ -154,9 +154,9 @@ func (u *Usecase) CreateDrinkLog(ctx context.Context, input CreateInput) (map[st
 	if err != nil {
 		return nil, err
 	}
-	row, err := u.repository.CreateDrinkLog(ctx, input.AuthToken, NewDrinkLog{
+	row, err := u.repository.CreateMemory(ctx, input.AuthToken, NewMemory{
 		OwnerUserID:  ownerUserID,
-		DrankAt:      drankAt,
+		HappenedAt:   happenedAt,
 		PlaceName:    strings.TrimSpace(input.PlaceName),
 		PlaceLat:     input.PlaceLat,
 		PlaceLng:     input.PlaceLng,
@@ -169,23 +169,23 @@ func (u *Usecase) CreateDrinkLog(ctx context.Context, input CreateInput) (map[st
 	if err != nil {
 		return nil, err
 	}
-	logID, _ := row["id"].(string)
-	if logID == "" {
-		return nil, UserError{Kind: ErrorKindUpstream, Message: "drink log insert returned no id"}
+	memoryID, _ := row["id"].(string)
+	if memoryID == "" {
+		return nil, UserError{Kind: ErrorKindUpstream, Message: "memory insert returned no id"}
 	}
-	if err := u.repository.CreateDrinkLogFriendLinks(ctx, input.AuthToken, logID, friendIDs); err != nil {
+	if err := u.repository.CreateMemoryFriendLinks(ctx, input.AuthToken, memoryID, friendIDs); err != nil {
 		return nil, err
 	}
 	if u.publisher != nil {
-		if event, ok := NewDrinkLogTaggedEvent(logID, ownerUserID, friendIDs); ok {
+		if event, ok := NewMemoryTaggedEvent(memoryID, ownerUserID, friendIDs); ok {
 			u.publisher.Publish(ctx, input.AuthToken, event)
 		}
 	}
 	return row, nil
 }
 
-func (u *Usecase) DeleteDrinkLog(ctx context.Context, input DeleteInput) (map[string]any, error) {
-	logID, err := CleanUUID(input.LogID, "drink log id")
+func (u *Usecase) DeleteMemory(ctx context.Context, input DeleteInput) (map[string]any, error) {
+	memoryID, err := CleanUUID(input.MemoryID, "memory id")
 	if err != nil {
 		return nil, err
 	}
@@ -193,53 +193,53 @@ func (u *Usecase) DeleteDrinkLog(ctx context.Context, input DeleteInput) (map[st
 	if err != nil {
 		return nil, err
 	}
-	row, err := u.repository.DeleteOwnedDrinkLog(ctx, input.AuthToken, logID, ownerUserID)
+	row, err := u.repository.DeleteOwnedMemory(ctx, input.AuthToken, memoryID, ownerUserID)
 	if err != nil {
 		return nil, err
 	}
 	if row == nil {
-		return nil, UserError{Kind: ErrorKindNotFound, Message: "drink log not found"}
+		return nil, UserError{Kind: ErrorKindNotFound, Message: "memory not found"}
 	}
 	if u.mediaCleaner != nil {
 		if photoPath := strings.TrimSpace(stringValue(row, "photo_path")); photoPath != "" {
-			if err := u.mediaCleaner.DeleteDrinkLogPhoto(ctx, photoPath); err != nil && u.logger != nil {
-				u.logger.Warn("failed to delete drink log photo", "drink_log_id", logID, "photo_path", photoPath, "error", err)
+			if err := u.mediaCleaner.DeleteMemoryPhoto(ctx, photoPath); err != nil && u.logger != nil {
+				u.logger.Warn("failed to delete memory photo", "memory_id", memoryID, "photo_path", photoPath, "error", err)
 			}
 		}
 	}
 	return row, nil
 }
 
-func (u *Usecase) LikeDrinkLog(ctx context.Context, input LikeInput) (LikeState, error) {
-	logID, userID, err := cleanLikeInput(input)
+func (u *Usecase) LikeMemory(ctx context.Context, input LikeInput) (LikeState, error) {
+	memoryID, userID, err := cleanLikeInput(input)
 	if err != nil {
 		return LikeState{}, err
 	}
-	created, err := u.repository.CreateLike(ctx, input.AuthToken, logID, userID)
+	created, err := u.repository.CreateLike(ctx, input.AuthToken, memoryID, userID)
 	if err != nil {
 		return LikeState{}, err
 	}
 	if created && u.publisher != nil {
-		if event, ok := NewDrinkLogLikedEvent(logID, userID); ok {
+		if event, ok := NewMemoryLikedEvent(memoryID, userID); ok {
 			u.publisher.Publish(ctx, input.AuthToken, event)
 		}
 	}
-	return u.repository.LikeState(ctx, input.AuthToken, logID, userID)
+	return u.repository.LikeState(ctx, input.AuthToken, memoryID, userID)
 }
 
-func (u *Usecase) UnlikeDrinkLog(ctx context.Context, input LikeInput) (LikeState, error) {
-	logID, userID, err := cleanLikeInput(input)
+func (u *Usecase) UnlikeMemory(ctx context.Context, input LikeInput) (LikeState, error) {
+	memoryID, userID, err := cleanLikeInput(input)
 	if err != nil {
 		return LikeState{}, err
 	}
-	if err := u.repository.DeleteLike(ctx, input.AuthToken, logID, userID); err != nil {
+	if err := u.repository.DeleteLike(ctx, input.AuthToken, memoryID, userID); err != nil {
 		return LikeState{}, err
 	}
-	return u.repository.LikeState(ctx, input.AuthToken, logID, userID)
+	return u.repository.LikeState(ctx, input.AuthToken, memoryID, userID)
 }
 
-func (u *Usecase) ReportDrinkLog(ctx context.Context, input ReportInput) (ReportResult, error) {
-	logID, err := CleanUUID(input.LogID, "drink log id")
+func (u *Usecase) ReportMemory(ctx context.Context, input ReportInput) (ReportResult, error) {
+	memoryID, err := CleanUUID(input.MemoryID, "memory id")
 	if err != nil {
 		return ReportResult{}, err
 	}
@@ -251,29 +251,29 @@ func (u *Usecase) ReportDrinkLog(ctx context.Context, input ReportInput) (Report
 	if err != nil {
 		return ReportResult{}, err
 	}
-	ownerUserID, err := u.repository.DrinkLogOwnerUserID(ctx, input.AuthToken, logID)
+	ownerUserID, err := u.repository.MemoryOwnerUserID(ctx, input.AuthToken, memoryID)
 	if err != nil {
 		return ReportResult{}, err
 	}
 	if ownerUserID == "" {
-		return ReportResult{}, UserError{Kind: ErrorKindNotFound, Message: "drink log not found"}
+		return ReportResult{}, UserError{Kind: ErrorKindNotFound, Message: "memory not found"}
 	}
 	if ownerUserID == reporterUserID {
-		return ReportResult{}, UserError{Kind: ErrorKindForbidden, Message: "cannot report your own drink log"}
+		return ReportResult{}, UserError{Kind: ErrorKindForbidden, Message: "cannot report your own memory"}
 	}
-	existing, err := u.repository.FindReport(ctx, input.AuthToken, logID, reporterUserID)
+	existing, err := u.repository.FindReport(ctx, input.AuthToken, memoryID, reporterUserID)
 	if err != nil {
 		return ReportResult{}, err
 	}
 	if existing != nil {
 		return ReportResult{Created: false, Body: NewReportBody(*existing, true)}, nil
 	}
-	report := Report{DrinkLogID: logID, ReporterUserID: reporterUserID, Reason: reason, Status: ModerationStatusPending}
+	report := Report{MemoryID: memoryID, ReporterUserID: reporterUserID, Reason: reason, Status: ModerationStatusPending}
 	if err := u.repository.CreateReport(ctx, input.AuthToken, report); err != nil {
 		return ReportResult{}, err
 	}
 	if u.publisher != nil {
-		if event, ok := NewDrinkLogReportedEvent(logID, ownerUserID, reporterUserID, reason); ok {
+		if event, ok := NewMemoryReportedEvent(memoryID, ownerUserID, reporterUserID, reason); ok {
 			u.publisher.Publish(ctx, input.AuthToken, event)
 		}
 	}
@@ -281,7 +281,7 @@ func (u *Usecase) ReportDrinkLog(ctx context.Context, input ReportInput) (Report
 }
 
 func cleanLikeInput(input LikeInput) (string, string, error) {
-	logID, err := CleanUUID(input.LogID, "drink log id")
+	memoryID, err := CleanUUID(input.MemoryID, "memory id")
 	if err != nil {
 		return "", "", err
 	}
@@ -289,5 +289,5 @@ func cleanLikeInput(input LikeInput) (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
-	return logID, userID, nil
+	return memoryID, userID, nil
 }

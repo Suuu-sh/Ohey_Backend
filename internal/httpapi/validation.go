@@ -64,11 +64,11 @@ func shortText(value string, limit int) string {
 	return string(runes[:limit])
 }
 
-func drinkLogFriendLinks(drinkLogID string, friendIDs []string) []map[string]string {
+func memoryFriendLinks(memoryID string, friendIDs []string) []map[string]string {
 	links := make([]map[string]string, 0, len(friendIDs))
 	for _, id := range friendIDs {
 		if id != "" {
-			links = append(links, map[string]string{"drink_log_id": drinkLogID, "friend_user_id": id})
+			links = append(links, map[string]string{"memory_id": memoryID, "tagged_user_id": id})
 		}
 	}
 	return links

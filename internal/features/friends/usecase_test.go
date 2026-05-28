@@ -15,17 +15,17 @@ const (
 )
 
 type fakeRepository struct {
-	calls          []string
-	friendships    []map[string]any
-	alreadyFriend  bool
-	blocked        bool
-	pendingRequest map[string]any
-	createdRequest map[string]any
-	updatedRequest map[string]any
-	favoriteRow    map[string]any
-	friendshipRow  map[string]any
-	statusesDate   string
-	drinkStatsUser string
+	calls           []string
+	friendships     []map[string]any
+	alreadyFriend   bool
+	blocked         bool
+	pendingRequest  map[string]any
+	createdRequest  map[string]any
+	updatedRequest  map[string]any
+	favoriteRow     map[string]any
+	friendshipRow   map[string]any
+	statusesDate    string
+	memoryStatsUser string
 }
 
 func (f *fakeRepository) ListFriendships(context.Context, string, string) ([]map[string]any, error) {
@@ -39,9 +39,9 @@ func (f *fakeRepository) AttachTodayStatuses(_ context.Context, _ string, _ []ma
 	return nil
 }
 
-func (f *fakeRepository) AttachDrinkStats(_ context.Context, _ string, currentUserID string, _ []map[string]any) error {
+func (f *fakeRepository) AttachMemoryStats(_ context.Context, _ string, currentUserID string, _ []map[string]any) error {
 	f.calls = append(f.calls, "stats")
-	f.drinkStatsUser = currentUserID
+	f.memoryStatsUser = currentUserID
 	return nil
 }
 
@@ -118,8 +118,8 @@ func TestListFriendsAttachesStatusAndStats(t *testing.T) {
 	if want := []string{"list", "statuses", "stats"}; !reflect.DeepEqual(repo.calls, want) {
 		t.Fatalf("calls = %v, want %v", repo.calls, want)
 	}
-	if repo.statusesDate != "2026-05-24" || repo.drinkStatsUser != testUserID {
-		t.Fatalf("date/user = %q/%q", repo.statusesDate, repo.drinkStatsUser)
+	if repo.statusesDate != "2026-05-24" || repo.memoryStatsUser != testUserID {
+		t.Fatalf("date/user = %q/%q", repo.statusesDate, repo.memoryStatsUser)
 	}
 }
 

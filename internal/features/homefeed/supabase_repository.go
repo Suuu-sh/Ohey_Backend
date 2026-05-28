@@ -10,7 +10,7 @@ import (
 	"github.com/yota/nomo/backend/internal/supabase"
 )
 
-const homeFeedDrinkLogSelectColumns = "id,owner_user_id,drank_at,place_name,place_lat,place_lng,memo,caption_y,photo_path,link_url,marker_rarity,is_official,owner:profiles!drink_logs_owner_user_id_fkey(id,user_id,display_name,gender,character_key,avatar_url,is_plus),drink_log_likes(user_id),drink_log_friends(profiles(id,user_id,display_name,gender,character_key,avatar_url,is_plus))"
+const homeFeedMemorySelectColumns = "id,owner_user_id,happened_at,place_name,place_lat,place_lng,memo,caption_y,photo_path,link_url,marker_rarity,is_official,owner:profiles!memories_owner_user_id_fkey(id,user_id,display_name,gender,character_key,avatar_url,is_plus),memory_likes(user_id),memory_tagged_users(profiles(id,user_id,display_name,gender,character_key,avatar_url,is_plus))"
 
 type SupabaseRepository struct {
 	client *supabase.Client
@@ -42,33 +42,33 @@ func (r *SupabaseRepository) VisibleFeedUserIDs(ctx context.Context, authToken, 
 	return ids, nil
 }
 
-func (r *SupabaseRepository) HiddenDrinkLogIDs(ctx context.Context, authToken, userID string) (map[string]bool, error) {
+func (r *SupabaseRepository) HiddenMemoryIDs(ctx context.Context, authToken, userID string) (map[string]bool, error) {
 	q := url.Values{}
-	q.Set("select", "drink_log_id")
+	q.Set("select", "memory_id")
 	q.Set("reporter_user_id", "eq."+userID)
 	var rows []map[string]any
-	if err := r.client.Get(ctx, authToken, "drink_log_reports", q, &rows); err != nil {
+	if err := r.client.Get(ctx, authToken, "memory_reports", q, &rows); err != nil {
 		return nil, err
 	}
 	hidden := make(map[string]bool, len(rows))
 	for _, row := range rows {
-		id, _ := row["drink_log_id"].(string)
+		id, _ := row["memory_id"].(string)
 		if id != "" {
 			hidden[id] = true
 		}
 	}
 	q = url.Values{}
-	q.Set("select", "drink_log_id")
+	q.Set("select", "memory_id")
 	q.Set("user_id", "eq."+userID)
 	var feedHiddenRows []map[string]any
-	if err := r.client.Get(ctx, authToken, "feed_hidden_drink_logs", q, &feedHiddenRows); err != nil {
+	if err := r.client.Get(ctx, authToken, "memory_hides", q, &feedHiddenRows); err != nil {
 		if isOptionalSafetyTableMissing(err) {
 			return hidden, nil
 		}
 		return nil, err
 	}
 	for _, row := range feedHiddenRows {
-		id, _ := row["drink_log_id"].(string)
+		id, _ := row["memory_id"].(string)
 		if id != "" {
 			hidden[id] = true
 		}
@@ -127,28 +127,28 @@ func isOptionalSafetyTableMissing(err error) bool {
 	return false
 }
 
-func (r *SupabaseRepository) ListDrinkLogs(ctx context.Context, authToken string, ownerUserIDs []string) ([]map[string]any, error) {
+func (r *SupabaseRepository) ListMemories(ctx context.Context, authToken string, ownerUserIDs []string) ([]map[string]any, error) {
 	if len(ownerUserIDs) == 0 {
 		return []map[string]any{}, nil
 	}
 	q := url.Values{}
-	q.Set("select", homeFeedDrinkLogSelectColumns)
+	q.Set("select", homeFeedMemorySelectColumns)
 	q.Set("owner_user_id", "in.("+strings.Join(ownerUserIDs, ",")+")")
-	q.Set("order", "drank_at.desc")
+	q.Set("order", "happened_at.desc")
 	var rows []map[string]any
-	if err := r.client.Get(ctx, authToken, "drink_logs", q, &rows); err != nil {
+	if err := r.client.Get(ctx, authToken, "memories", q, &rows); err != nil {
 		return nil, err
 	}
 	return rows, nil
 }
 
-func (r *SupabaseRepository) ListOfficialDrinkLogs(ctx context.Context, authToken string) ([]map[string]any, error) {
+func (r *SupabaseRepository) ListOfficialMemories(ctx context.Context, authToken string) ([]map[string]any, error) {
 	q := url.Values{}
-	q.Set("select", homeFeedDrinkLogSelectColumns)
+	q.Set("select", homeFeedMemorySelectColumns)
 	q.Set("is_official", "eq.true")
-	q.Set("order", "drank_at.desc")
+	q.Set("order", "happened_at.desc")
 	var rows []map[string]any
-	if err := r.client.Get(ctx, authToken, "drink_logs", q, &rows); err != nil {
+	if err := r.client.Get(ctx, authToken, "memories", q, &rows); err != nil {
 		return nil, err
 	}
 	return rows, nil

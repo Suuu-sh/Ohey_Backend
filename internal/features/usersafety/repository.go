@@ -10,7 +10,7 @@ type Repository interface {
 	MuteUser(ctx context.Context, authToken string, relation UserRelation) (map[string]any, error)
 	UnmuteUser(ctx context.Context, authToken string, relation UserRelation) error
 	ReportUser(ctx context.Context, authToken string, report UserReport) (map[string]any, error)
-	HideDrinkLog(ctx context.Context, authToken string, hidden HiddenDrinkLog) (map[string]any, error)
-	UnhideDrinkLog(ctx context.Context, authToken string, hidden HiddenDrinkLog) error
+	HideMemory(ctx context.Context, authToken string, hidden HiddenMemory) (map[string]any, error)
+	UnhideMemory(ctx context.Context, authToken string, hidden HiddenMemory) error
 	CleanupBlockedRelations(ctx context.Context, relation UserRelation) error
 }

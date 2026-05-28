@@ -32,27 +32,27 @@ func (r *router) createFriendRequestAcceptedNotification(req *http.Request, auth
 	}
 }
 
-func (r *router) createDrinkInviteReceivedNotification(req *http.Request, authToken string, inviteRow map[string]any) {
-	if err := r.notificationUsecase(req).NotifyDrinkInviteReceived(req.Context(), authToken, inviteRow); err != nil && r.deps.Logger != nil {
-		r.deps.Logger.Warn("failed to dispatch drink invite received notification", "error", err)
+func (r *router) createInviteReceivedNotification(req *http.Request, authToken string, inviteRow map[string]any) {
+	if err := r.notificationUsecase(req).NotifyInviteReceived(req.Context(), authToken, inviteRow); err != nil && r.deps.Logger != nil {
+		r.deps.Logger.Warn("failed to dispatch invite received notification", "error", err)
 	}
 }
 
-func (r *router) createDrinkInviteAcceptedNotification(req *http.Request, authToken string, inviteRow map[string]any) {
-	if err := r.notificationUsecase(req).NotifyDrinkInviteAccepted(req.Context(), authToken, inviteRow); err != nil && r.deps.Logger != nil {
-		r.deps.Logger.Warn("failed to dispatch drink invite accepted notification", "error", err)
+func (r *router) createInviteAcceptedNotification(req *http.Request, authToken string, inviteRow map[string]any) {
+	if err := r.notificationUsecase(req).NotifyInviteAccepted(req.Context(), authToken, inviteRow); err != nil && r.deps.Logger != nil {
+		r.deps.Logger.Warn("failed to dispatch invite accepted notification", "error", err)
 	}
 }
 
-func (r *router) createDrinkLogTaggedNotifications(req *http.Request, authToken, logID, ownerUserID string, friendIDs []string) {
-	if err := r.notificationUsecase(req).NotifyDrinkLogTagged(req.Context(), authToken, logID, ownerUserID, friendIDs); err != nil && r.deps.Logger != nil {
-		r.deps.Logger.Warn("failed to dispatch drink log tagged notification", "error", err)
+func (r *router) createMemoryTaggedNotifications(req *http.Request, authToken, memoryID, ownerUserID string, friendIDs []string) {
+	if err := r.notificationUsecase(req).NotifyMemoryTagged(req.Context(), authToken, memoryID, ownerUserID, friendIDs); err != nil && r.deps.Logger != nil {
+		r.deps.Logger.Warn("failed to dispatch memory tagged notification", "error", err)
 	}
 }
 
-func (r *router) createDrinkLogLikeNotification(req *http.Request, authToken, logID, actorUserID string) {
-	if err := r.notificationUsecase(req).NotifyDrinkLogLiked(req.Context(), authToken, logID, actorUserID); err != nil && r.deps.Logger != nil {
-		r.deps.Logger.Warn("failed to dispatch drink log liked notification", "error", err)
+func (r *router) createMemoryLikeNotification(req *http.Request, authToken, memoryID, actorUserID string) {
+	if err := r.notificationUsecase(req).NotifyMemoryLiked(req.Context(), authToken, memoryID, actorUserID); err != nil && r.deps.Logger != nil {
+		r.deps.Logger.Warn("failed to dispatch memory liked notification", "error", err)
 	}
 }
 
@@ -143,15 +143,15 @@ func (r *router) dispatchNotificationOutboxEvent(ctx context.Context, authToken 
 		return usecase.NotifyFriendRequestReceived(ctx, authToken, event.Payload)
 	case "friend_request.accepted":
 		return usecase.NotifyFriendRequestAccepted(ctx, authToken, event.Payload)
-	case "drink_invite.created":
-		return usecase.NotifyDrinkInviteReceived(ctx, authToken, event.Payload)
-	case "drink_invite.accepted":
-		return usecase.NotifyDrinkInviteAccepted(ctx, authToken, event.Payload)
-	case "drink_log.tagged":
-		return usecase.NotifyDrinkLogTagged(ctx, authToken, stringValue(event.Payload, "log_id"), stringValue(event.Payload, "owner_user_id"), stringSliceValue(event.Payload, "friend_ids"))
-	case "drink_log.liked":
-		return usecase.NotifyDrinkLogLiked(ctx, authToken, stringValue(event.Payload, "log_id"), stringValue(event.Payload, "actor_user_id"))
-	case "drink_log.reported", "system_notification.created":
+	case "invite.created":
+		return usecase.NotifyInviteReceived(ctx, authToken, event.Payload)
+	case "invite.accepted":
+		return usecase.NotifyInviteAccepted(ctx, authToken, event.Payload)
+	case "memory.tagged":
+		return usecase.NotifyMemoryTagged(ctx, authToken, stringValue(event.Payload, "memory_id"), stringValue(event.Payload, "owner_user_id"), stringSliceValue(event.Payload, "friend_ids"))
+	case "memory.liked":
+		return usecase.NotifyMemoryLiked(ctx, authToken, stringValue(event.Payload, "memory_id"), stringValue(event.Payload, "actor_user_id"))
+	case "memory.reported", "system_notification.created":
 		return nil
 	default:
 		return fmt.Errorf("unsupported notification outbox event kind: %s", event.EventKind)

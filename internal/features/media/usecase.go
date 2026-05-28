@@ -41,7 +41,7 @@ func (u *Usecase) CreateDisplayURL(ctx context.Context, input DisplayURLRequest)
 	if _, err := CleanUUID(input.UserID, "user id"); err != nil {
 		return DisplayURL{}, err
 	}
-	path, err := CleanDrinkLogPhotoPath(input.Path)
+	path, err := CleanMemoryPhotoPath(input.Path)
 	if err != nil {
 		return DisplayURL{}, err
 	}

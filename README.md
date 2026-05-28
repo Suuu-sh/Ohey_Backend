@@ -46,14 +46,14 @@ Authenticated requests must include:
 - `GET /v1/friend-requests/status?friend_id={id}`
 - `POST /v1/friend-requests`
 - `PATCH /v1/friend-requests/{id}`
-- `GET /v1/drink-logs`
-- `POST /v1/drink-logs`
-- `DELETE /v1/drink-logs/{id}`
-- `PUT /v1/drink-logs/{id}/like`
-- `DELETE /v1/drink-logs/{id}/like`
-- `POST /v1/drink-logs/{id}/report`
-- `POST /v1/feed-hidden-drink-logs`
-- `DELETE /v1/feed-hidden-drink-logs/{drink_log_id}`
+- `GET /v1/memories`
+- `POST /v1/memories`
+- `DELETE /v1/memories/{id}`
+- `PUT /v1/memories/{id}/like`
+- `DELETE /v1/memories/{id}/like`
+- `POST /v1/memories/{id}/report`
+- `POST /v1/memory-hides`
+- `DELETE /v1/memory-hides/{memory_id}`
 - `POST /v1/user-mutes`
 - `GET /v1/user-mutes`
 - `DELETE /v1/user-mutes/{user_id}`
@@ -65,11 +65,11 @@ Authenticated requests must include:
 - `GET /v1/daily-status?date=YYYY-MM-DD`
 - `GET /v1/daily-statuses/month?month=YYYY-MM`
 - `PUT /v1/daily-status`
-- `GET /v1/drink-invites/today-reservations?date=YYYY-MM-DD`
-- `GET /v1/drink-invites/incoming-pending?date=YYYY-MM-DD`
-- `GET /v1/drink-invites/outgoing-active?date=YYYY-MM-DD`
-- `POST /v1/drink-invites`
-- `PATCH /v1/drink-invites/{id}`
+- `GET /v1/invites/today-reservations?date=YYYY-MM-DD`
+- `GET /v1/invites/incoming-pending?date=YYYY-MM-DD`
+- `GET /v1/invites/outgoing-active?date=YYYY-MM-DD`
+- `POST /v1/invites`
+- `PATCH /v1/invites/{id}`
 - `GET /v1/notifications`
 - `PATCH /v1/notifications/read-all`
 - `PUT /v1/me/push-token`
@@ -94,15 +94,15 @@ Available endpoints:
 - `POST /v1/admin/users`
 - `PATCH /v1/admin/users/{id}`
 - `DELETE /v1/admin/users/{id}`
-- `GET /v1/admin/drink-logs`
-- `GET /v1/admin/drink-log-reports`
-- `PATCH /v1/admin/drink-log-reports/{id}`
+- `GET /v1/admin/memories`
+- `GET /v1/admin/memory-reports`
+- `PATCH /v1/admin/memory-reports/{id}`
 - `GET /v1/admin/notification-outbox`
 - `POST /v1/admin/notification-outbox/process`
-- `GET /v1/admin/media/orphan-drink-log-photos`
-- `POST /v1/admin/drink-logs`
-- `PATCH /v1/admin/drink-logs/{id}`
-- `DELETE /v1/admin/drink-logs/{id}`
+- `GET /v1/admin/media/orphan-memory-photos`
+- `POST /v1/admin/memories`
+- `PATCH /v1/admin/memories/{id}`
+- `DELETE /v1/admin/memories/{id}`
 
 
 ## Push notifications
@@ -117,4 +117,4 @@ Required setup:
 4. Set `FCM_SERVICE_ACCOUNT_JSON` on the backend to the Firebase service account JSON (raw JSON or base64-encoded JSON).
 5. Run the Supabase migration that creates `public.push_tokens`.
 
-When the app starts on iOS or Android, it asks notification permission and registers the FCM token through `PUT /v1/me/push-token`. The backend sends pushes when it creates notifications for likes, friend requests, and drink invites.
+When the app starts on iOS or Android, it asks notification permission and registers the FCM token through `PUT /v1/me/push-token`. The backend sends pushes when it creates notifications for likes, friend requests, and invites.

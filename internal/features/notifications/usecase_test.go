@@ -12,7 +12,7 @@ const (
 	testUserID    = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 	otherUserID   = "bbbbbbbb-cccc-dddd-eeee-ffffffffffff"
 	thirdUserID   = "cccccccc-dddd-eeee-ffff-000000000000"
-	testLogID     = "11111111-2222-3333-4444-555555555555"
+	testMemoryID  = "11111111-2222-3333-4444-555555555555"
 	testRequestID = "22222222-3333-4444-5555-666666666666"
 	testInviteID  = "33333333-4444-5555-6666-777777777777"
 )
@@ -22,8 +22,8 @@ type fakeRepository struct {
 	listRows         []map[string]any
 	updatedCount     int
 	displayNames     map[string]string
-	drinkLogOwnerID  string
-	invites          []DrinkInvite
+	memoryOwnerID    string
+	invites          []Invite
 	allProfileIDs    []string
 	pushTokens       []string
 	deletedTokens    []string
@@ -61,11 +61,11 @@ func (f *fakeRepository) DisplayName(_ context.Context, _ string, userID string)
 	return "Actor", nil
 }
 
-func (f *fakeRepository) DrinkLogOwnerUserID(context.Context, string, string) (string, error) {
-	return f.drinkLogOwnerID, nil
+func (f *fakeRepository) MemoryOwnerUserID(context.Context, string, string) (string, error) {
+	return f.memoryOwnerID, nil
 }
 
-func (f *fakeRepository) TodayAcceptedInvites(context.Context, string, string, string) ([]DrinkInvite, error) {
+func (f *fakeRepository) TodayAcceptedInvites(context.Context, string, string, string) ([]Invite, error) {
 	return f.invites, nil
 }
 
@@ -89,7 +89,7 @@ type fakePushSender struct {
 }
 
 func (f *fakePushSender) Send(_ context.Context, token, title, body string, data map[string]string) error {
-	f.sent = append(f.sent, map[string]string{"token": token, "title": title, "body": body, "kind": data["kind"], "drink_log_id": data["drink_log_id"]})
+	f.sent = append(f.sent, map[string]string{"token": token, "title": title, "body": body, "kind": data["kind"], "memory_id": data["memory_id"]})
 	return f.err
 }
 
@@ -125,11 +125,11 @@ func TestNotifyFriendRequestReceivedCreatesProductCopy(t *testing.T) {
 	}
 }
 
-func TestNotifyDrinkLogTaggedDeduplicatesRecipientsAndSkipsOwner(t *testing.T) {
+func TestNotifyMemoryTaggedDeduplicatesRecipientsAndSkipsOwner(t *testing.T) {
 	repo := &fakeRepository{}
 	usecase := NewUsecase(Dependencies{Repository: repo})
 
-	usecase.NotifyDrinkLogTagged(context.Background(), testAuthToken, testLogID, testUserID, []string{otherUserID, otherUserID, testUserID, thirdUserID})
+	usecase.NotifyMemoryTagged(context.Background(), testAuthToken, testMemoryID, testUserID, []string{otherUserID, otherUserID, testUserID, thirdUserID})
 
 	if len(repo.created) != 2 {
 		t.Fatalf("created = %d, want 2", len(repo.created))
@@ -141,7 +141,7 @@ func TestNotifyDrinkLogTaggedDeduplicatesRecipientsAndSkipsOwner(t *testing.T) {
 	}
 }
 
-func TestNotifyDrinkLogLikedSkipsSelfAndPushesOnCreated(t *testing.T) {
+func TestNotifyMemoryLikedSkipsSelfAndPushesOnCreated(t *testing.T) {
 	for _, tc := range []struct {
 		name              string
 		ownerID           string
@@ -154,11 +154,11 @@ func TestNotifyDrinkLogLikedSkipsSelfAndPushesOnCreated(t *testing.T) {
 		{name: "created", ownerID: otherUserID, created: true, wantNotifications: 1, wantPushes: 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			repo := &fakeRepository{drinkLogOwnerID: tc.ownerID, createReturn: []bool{tc.created}, pushTokens: []string{"token"}}
+			repo := &fakeRepository{memoryOwnerID: tc.ownerID, createReturn: []bool{tc.created}, pushTokens: []string{"token"}}
 			push := &fakePushSender{}
 			usecase := NewUsecase(Dependencies{Repository: repo, PushSender: push})
 
-			usecase.NotifyDrinkLogLiked(context.Background(), testAuthToken, testLogID, testUserID)
+			usecase.NotifyMemoryLiked(context.Background(), testAuthToken, testMemoryID, testUserID)
 
 			if len(repo.created) != tc.wantNotifications {
 				t.Fatalf("created = %d, want %d", len(repo.created), tc.wantNotifications)
@@ -172,14 +172,14 @@ func TestNotifyDrinkLogLikedSkipsSelfAndPushesOnCreated(t *testing.T) {
 
 func TestInvalidPushTokenIsDeletedAfterSendFailure(t *testing.T) {
 	repo := &fakeRepository{
-		drinkLogOwnerID: otherUserID,
-		createReturn:    []bool{true},
-		pushTokens:      []string{"bad-token"},
+		memoryOwnerID: otherUserID,
+		createReturn:  []bool{true},
+		pushTokens:    []string{"bad-token"},
 	}
 	push := &fakePushSender{err: fakeInvalidPushTokenError{}}
 	usecase := NewUsecase(Dependencies{Repository: repo, PushSender: push})
 
-	usecase.NotifyDrinkLogLiked(context.Background(), testAuthToken, testLogID, testUserID)
+	usecase.NotifyMemoryLiked(context.Background(), testAuthToken, testMemoryID, testUserID)
 
 	if len(repo.deletedTokens) != 1 || repo.deletedTokens[0] != "bad-token" {
 		t.Fatalf("deletedTokens = %#v, want bad-token", repo.deletedTokens)
@@ -189,11 +189,11 @@ func TestInvalidPushTokenIsDeletedAfterSendFailure(t *testing.T) {
 func TestListNotificationsCreatesTodayReminderThenLists(t *testing.T) {
 	repo := &fakeRepository{
 		displayNames: map[string]string{otherUserID: "花子"},
-		invites: []DrinkInvite{{
-			ID:         testInviteID,
-			FromUserID: otherUserID,
-			ToUserID:   testUserID,
-			InviteDate: "2026-05-23",
+		invites: []Invite{{
+			ID:            testInviteID,
+			InviterUserID: otherUserID,
+			InviteeUserID: testUserID,
+			ScheduledDate: "2026-05-23",
 		}},
 		listRows: []map[string]any{{"id": "notification"}},
 	}

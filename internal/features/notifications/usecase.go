@@ -138,14 +138,14 @@ func (u *Usecase) systemRecipientIDs(ctx context.Context, input CreateSystemInpu
 }
 
 func (u *Usecase) NotifyFriendRequestReceived(ctx context.Context, authToken string, requestRow map[string]any) error {
-	requestID, fromUserID, toUserID := FriendRequestIDs(requestRow)
-	if requestID == "" || fromUserID == "" || toUserID == "" || fromUserID == toUserID {
+	requestID, inviterUserID, inviteeUserID := FriendRequestIDs(requestRow)
+	if requestID == "" || inviterUserID == "" || inviteeUserID == "" || inviterUserID == inviteeUserID {
 		return nil
 	}
-	actorName := u.actorName(ctx, authToken, fromUserID, KindFriendRequestReceived)
+	actorName := u.actorName(ctx, authToken, inviterUserID, KindFriendRequestReceived)
 	return u.tryCreateAndPush(ctx, authToken, Notification{
-		RecipientUserID: toUserID,
-		ActorUserID:     fromUserID,
+		RecipientUserID: inviteeUserID,
+		ActorUserID:     inviterUserID,
 		FriendRequestID: requestID,
 		Kind:            KindFriendRequestReceived,
 		Title:           "フレンズ申請が届きました",
@@ -154,14 +154,14 @@ func (u *Usecase) NotifyFriendRequestReceived(ctx context.Context, authToken str
 }
 
 func (u *Usecase) NotifyFriendRequestAccepted(ctx context.Context, authToken string, requestRow map[string]any) error {
-	requestID, fromUserID, toUserID := FriendRequestIDs(requestRow)
-	if requestID == "" || fromUserID == "" || toUserID == "" || fromUserID == toUserID {
+	requestID, inviterUserID, inviteeUserID := FriendRequestIDs(requestRow)
+	if requestID == "" || inviterUserID == "" || inviteeUserID == "" || inviterUserID == inviteeUserID {
 		return nil
 	}
-	actorName := u.actorName(ctx, authToken, toUserID, KindFriendRequestAccepted)
+	actorName := u.actorName(ctx, authToken, inviteeUserID, KindFriendRequestAccepted)
 	return u.tryCreateAndPush(ctx, authToken, Notification{
-		RecipientUserID: fromUserID,
-		ActorUserID:     toUserID,
+		RecipientUserID: inviterUserID,
+		ActorUserID:     inviteeUserID,
 		FriendRequestID: requestID,
 		Kind:            KindFriendRequestAccepted,
 		Title:           "フレンズ申請が承認されました",
@@ -169,45 +169,45 @@ func (u *Usecase) NotifyFriendRequestAccepted(ctx context.Context, authToken str
 	})
 }
 
-func (u *Usecase) NotifyDrinkInviteReceived(ctx context.Context, authToken string, inviteRow map[string]any) error {
-	invite := DrinkInviteFromRow(inviteRow)
-	if invite.ID == "" || invite.FromUserID == "" || invite.ToUserID == "" || invite.FromUserID == invite.ToUserID {
+func (u *Usecase) NotifyInviteReceived(ctx context.Context, authToken string, inviteRow map[string]any) error {
+	invite := InviteFromRow(inviteRow)
+	if invite.ID == "" || invite.InviterUserID == "" || invite.InviteeUserID == "" || invite.InviterUserID == invite.InviteeUserID {
 		return nil
 	}
-	actorName := u.actorName(ctx, authToken, invite.FromUserID, KindDrinkInviteReceived)
+	actorName := u.actorName(ctx, authToken, invite.InviterUserID, KindInviteReceived)
 	return u.tryCreateAndPush(ctx, authToken, Notification{
-		RecipientUserID:  invite.ToUserID,
-		ActorUserID:      invite.FromUserID,
-		DrinkInviteID:    invite.ID,
-		NotificationDate: DateOrEmpty(invite.InviteDate),
-		Kind:             KindDrinkInviteReceived,
+		RecipientUserID:  invite.InviteeUserID,
+		ActorUserID:      invite.InviterUserID,
+		InviteID:         invite.ID,
+		NotificationDate: DateOrEmpty(invite.ScheduledDate),
+		Kind:             KindInviteReceived,
 		Title:            "お誘いが届きました",
-		Message:          actorName + "さんから" + InviteDatePhrase(invite.InviteDate, u.now()) + "のお誘いが届きました。",
+		Message:          actorName + "さんから" + ScheduledDatePhrase(invite.ScheduledDate, u.now()) + "のお誘いが届きました。",
 	})
 }
 
-func (u *Usecase) NotifyDrinkInviteAccepted(ctx context.Context, authToken string, inviteRow map[string]any) error {
-	invite := DrinkInviteFromRow(inviteRow)
-	if invite.ID == "" || invite.FromUserID == "" || invite.ToUserID == "" || invite.FromUserID == invite.ToUserID {
+func (u *Usecase) NotifyInviteAccepted(ctx context.Context, authToken string, inviteRow map[string]any) error {
+	invite := InviteFromRow(inviteRow)
+	if invite.ID == "" || invite.InviterUserID == "" || invite.InviteeUserID == "" || invite.InviterUserID == invite.InviteeUserID {
 		return nil
 	}
-	actorName := u.actorName(ctx, authToken, invite.ToUserID, KindDrinkInviteAccepted)
+	actorName := u.actorName(ctx, authToken, invite.InviteeUserID, KindInviteAccepted)
 	return u.tryCreateAndPush(ctx, authToken, Notification{
-		RecipientUserID:  invite.FromUserID,
-		ActorUserID:      invite.ToUserID,
-		DrinkInviteID:    invite.ID,
-		NotificationDate: DateOrEmpty(invite.InviteDate),
-		Kind:             KindDrinkInviteAccepted,
+		RecipientUserID:  invite.InviterUserID,
+		ActorUserID:      invite.InviteeUserID,
+		InviteID:         invite.ID,
+		NotificationDate: DateOrEmpty(invite.ScheduledDate),
+		Kind:             KindInviteAccepted,
 		Title:            "お誘いが承認されました",
-		Message:          actorName + "さんが" + InviteDatePhrase(invite.InviteDate, u.now()) + "のお誘いを承認しました。",
+		Message:          actorName + "さんが" + ScheduledDatePhrase(invite.ScheduledDate, u.now()) + "のお誘いを承認しました。",
 	})
 }
 
-func (u *Usecase) NotifyDrinkLogTagged(ctx context.Context, authToken, logID, ownerUserID string, friendIDs []string) error {
-	if logID == "" || ownerUserID == "" || len(friendIDs) == 0 {
+func (u *Usecase) NotifyMemoryTagged(ctx context.Context, authToken, memoryID, ownerUserID string, friendIDs []string) error {
+	if memoryID == "" || ownerUserID == "" || len(friendIDs) == 0 {
 		return nil
 	}
-	actorName := u.actorName(ctx, authToken, ownerUserID, KindDrinkLogTagged)
+	actorName := u.actorName(ctx, authToken, ownerUserID, KindMemoryTagged)
 	seen := map[string]bool{}
 	var firstErr error
 	for _, rawID := range friendIDs {
@@ -219,8 +219,8 @@ func (u *Usecase) NotifyDrinkLogTagged(ctx context.Context, authToken, logID, ow
 		if err := u.tryCreateAndPush(ctx, authToken, Notification{
 			RecipientUserID: friendID,
 			ActorUserID:     ownerUserID,
-			DrinkLogID:      logID,
-			Kind:            KindDrinkLogTagged,
+			MemoryID:        memoryID,
+			Kind:            KindMemoryTagged,
 			Title:           "思い出に追加されました",
 			Message:         actorName + "さんがあなたを一緒に過ごしたフレンズに追加しました。",
 		}); err != nil && firstErr == nil {
@@ -230,24 +230,24 @@ func (u *Usecase) NotifyDrinkLogTagged(ctx context.Context, authToken, logID, ow
 	return firstErr
 }
 
-func (u *Usecase) NotifyDrinkLogLiked(ctx context.Context, authToken, logID, actorUserID string) error {
-	if logID == "" || actorUserID == "" {
+func (u *Usecase) NotifyMemoryLiked(ctx context.Context, authToken, memoryID, actorUserID string) error {
+	if memoryID == "" || actorUserID == "" {
 		return nil
 	}
-	recipientUserID, err := u.repository.DrinkLogOwnerUserID(ctx, authToken, logID)
+	recipientUserID, err := u.repository.MemoryOwnerUserID(ctx, authToken, memoryID)
 	if err != nil {
-		u.warn("failed to fetch drink log for like notification", KindDrinkLogLike, err)
+		u.warn("failed to fetch memory for like notification", KindMemoryLike, err)
 		return err
 	}
 	if recipientUserID == "" || recipientUserID == actorUserID {
 		return nil
 	}
-	actorName := u.actorName(ctx, authToken, actorUserID, KindDrinkLogLike)
+	actorName := u.actorName(ctx, authToken, actorUserID, KindMemoryLike)
 	return u.tryCreateAndPush(ctx, authToken, Notification{
 		RecipientUserID: recipientUserID,
 		ActorUserID:     actorUserID,
-		DrinkLogID:      logID,
-		Kind:            KindDrinkLogLike,
+		MemoryID:        memoryID,
+		Kind:            KindMemoryLike,
 		Title:           "思い出にいいねされました",
 		Message:         actorName + "さんがあなたの思い出にいいねしました。",
 	})
@@ -266,9 +266,9 @@ func (u *Usecase) CreateTodayReservationReminders(ctx context.Context, authToken
 		return err
 	}
 	for _, invite := range invites {
-		actorUserID := invite.FromUserID
+		actorUserID := invite.InviterUserID
 		if actorUserID == userID {
-			actorUserID = invite.ToUserID
+			actorUserID = invite.InviteeUserID
 		}
 		if invite.ID == "" || actorUserID == "" || actorUserID == userID {
 			continue
@@ -277,7 +277,7 @@ func (u *Usecase) CreateTodayReservationReminders(ctx context.Context, authToken
 		if err := u.tryCreateAndPush(ctx, authToken, Notification{
 			RecipientUserID:  userID,
 			ActorUserID:      actorUserID,
-			DrinkInviteID:    invite.ID,
+			InviteID:         invite.ID,
 			NotificationDate: date,
 			Kind:             KindTodayReservationReminder,
 			Title:            "今日の予定があります",

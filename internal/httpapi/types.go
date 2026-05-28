@@ -23,9 +23,9 @@ type Friend struct {
 	IsPlus       bool   `json:"is_plus"`
 }
 
-type DrinkLog struct {
+type Memory struct {
 	ID           string    `json:"id"`
-	DrankAt      time.Time `json:"drank_at"`
+	HappenedAt   time.Time `json:"happened_at"`
 	PlaceName    string    `json:"place_name,omitempty"`
 	PlaceLat     *float64  `json:"place_lat,omitempty"`
 	PlaceLng     *float64  `json:"place_lng,omitempty"`
@@ -37,9 +37,9 @@ type DrinkLog struct {
 	IsOfficial   bool      `json:"is_official"`
 }
 
-type CreateDrinkLogRequest struct {
-	DrankAt               *time.Time `json:"drank_at"`
-	DrankOn               string     `json:"drank_on"`
+type CreateMemoryRequest struct {
+	HappenedAt            *time.Time `json:"happened_at"`
+	HappenedOn            string     `json:"happened_on"`
 	TimezoneOffsetMinutes *int       `json:"timezone_offset_minutes"`
 	PlaceName             string     `json:"place_name"`
 	PlaceLat              *float64   `json:"place_lat"`
@@ -91,9 +91,9 @@ type AdminUpdateUserRequest struct {
 	IsPlus      *bool   `json:"is_plus"`
 }
 
-type AdminCreateDrinkLogRequest struct {
+type AdminCreateMemoryRequest struct {
 	OwnerUserID  string    `json:"owner_user_id"`
-	DrankAt      time.Time `json:"drank_at"`
+	HappenedAt   time.Time `json:"happened_at"`
 	PlaceName    string    `json:"place_name"`
 	Memo         string    `json:"memo"`
 	CaptionY     *float64  `json:"caption_y"`
@@ -104,9 +104,9 @@ type AdminCreateDrinkLogRequest struct {
 	IsOfficial   bool      `json:"is_official"`
 }
 
-type AdminUpdateDrinkLogRequest struct {
+type AdminUpdateMemoryRequest struct {
 	OwnerUserID  *string    `json:"owner_user_id"`
-	DrankAt      *time.Time `json:"drank_at"`
+	HappenedAt   *time.Time `json:"happened_at"`
 	PlaceName    *string    `json:"place_name"`
 	Memo         *string    `json:"memo"`
 	CaptionY     *float64   `json:"caption_y"`
@@ -116,7 +116,7 @@ type AdminUpdateDrinkLogRequest struct {
 	IsOfficial   *bool      `json:"is_official"`
 }
 
-type AdminUpdateDrinkLogReportRequest struct {
+type AdminUpdateMemoryReportRequest struct {
 	Status         string `json:"status"`
 	ModerationNote string `json:"moderation_note"`
 }

@@ -12,13 +12,13 @@ Run this before TestFlight / production release. For Nomo dev checks, use iOS Si
 - [ ] Gender cannot be changed after initial profile creation.
 - [ ] Admin account can open admin screen; normal account cannot.
 
-## Drink logs / media
+## Memories / media
 
-- [ ] Create drink log without photo.
-- [ ] Create drink log with photo upload URL.
+- [ ] Create memory without photo.
+- [ ] Create memory with photo upload URL.
 - [ ] Created photo displays via Backend display URL.
 - [ ] Tagged friends are saved and shown.
-- [ ] Delete drink log removes DB row and best-effort photo cleanup does not error.
+- [ ] Delete memory removes DB row and best-effort photo cleanup does not error.
 - [ ] Home feed still loads after deletion.
 
 ## Home feed
@@ -32,9 +32,9 @@ Run this before TestFlight / production release. For Nomo dev checks, use iOS Si
 
 - [ ] Friend request create succeeds.
 - [ ] Friend request accept creates friendship.
-- [ ] Drink invite create succeeds for an available friend.
-- [ ] Drink invite accept updates both users' relevant views.
-- [ ] Blocked users cannot create friend requests or drink invites.
+- [ ] Invite create succeeds for an available friend.
+- [ ] Invite accept updates both users' relevant views.
+- [ ] Blocked users cannot create friend requests or invites.
 
 ## Safety / moderation
 
@@ -50,8 +50,8 @@ Run this before TestFlight / production release. For Nomo dev checks, use iOS Si
 - [ ] Register push token after login.
 - [ ] Friend request created notification appears.
 - [ ] Friend request accepted notification appears.
-- [ ] Drink invite created / accepted notifications appear.
-- [ ] Drink log like / tag notifications appear.
+- [ ] Invite created / accepted notifications appear.
+- [ ] Memory like / tag notifications appear.
 - [ ] Logout unregisters the current push token best-effort.
 - [ ] Invalid FCM token failure deletes that token from `push_tokens`.
 
@@ -69,5 +69,5 @@ Run this before TestFlight / production release. For Nomo dev checks, use iOS Si
 - Backend/Supabase target: dev environment.
 - Result: build/run succeeded and an existing Admin session loaded. Feed/profile/settings surfaces rendered. Admin screen and 通報 tab loaded; status/note/post-delete controls were visible without executing destructive actions.
 - GitHub Actions: latest `Supabase Dev Migrate` run on `development` succeeded: https://github.com/Suuu-sh/Nomo_Mobile/actions/runs/26548996618
-- Not fully executed in this pass: mutating manual flows (`drink log create`, `photo upload`, `invite/accept`, `block/mute/hide/report`) and push notification delivery. Run those with prepared dev accounts before production/TestFlight release.
+- Not fully executed in this pass: mutating manual flows (`memory create`, `photo upload`, `invite/accept`, `block/mute/hide/report`) and push notification delivery. Run those with prepared dev accounts before production/TestFlight release.
 

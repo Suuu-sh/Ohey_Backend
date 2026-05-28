@@ -87,7 +87,7 @@ func (r *SupabaseRepository) AttachTodayStatuses(ctx context.Context, authToken 
 	return nil
 }
 
-func (r *SupabaseRepository) AttachDrinkStats(ctx context.Context, authToken, currentUserID string, rows []map[string]any) error {
+func (r *SupabaseRepository) AttachMemoryStats(ctx context.Context, authToken, currentUserID string, rows []map[string]any) error {
 	profiles := map[string]map[string]any{}
 	for _, row := range rows {
 		for _, key := range []string{"user_a", "user_b"} {
@@ -109,76 +109,76 @@ func (r *SupabaseRepository) AttachDrinkStats(ctx context.Context, authToken, cu
 		friendIDs = append(friendIDs, id)
 	}
 	sort.Strings(friendIDs)
-	stats := make(map[string]*DrinkStats, len(friendIDs))
+	stats := make(map[string]*MemoryStats, len(friendIDs))
 	for _, id := range friendIDs {
-		stats[id] = &DrinkStats{}
+		stats[id] = &MemoryStats{}
 	}
-	if err := r.attachOwnedDrinkStats(ctx, authToken, currentUserID, friendIDs, stats); err != nil {
+	if err := r.attachOwnedMemoryStats(ctx, authToken, currentUserID, friendIDs, stats); err != nil {
 		return err
 	}
-	if err := r.attachTaggedDrinkStats(ctx, authToken, currentUserID, friendIDs, stats); err != nil {
+	if err := r.attachTaggedMemoryStats(ctx, authToken, currentUserID, friendIDs, stats); err != nil {
 		return err
 	}
 	for id, profile := range profiles {
 		stat := stats[id]
 		if stat == nil {
-			profile["total_drink_count"] = 0
+			profile["total_memory_count"] = 0
 			continue
 		}
-		profile["total_drink_count"] = stat.Count
-		if !stat.LastDrinkAt.IsZero() {
-			profile["last_drink_at"] = stat.LastDrinkAt.Format(time.RFC3339)
+		profile["total_memory_count"] = stat.Count
+		if !stat.LastMemoryAt.IsZero() {
+			profile["last_memory_at"] = stat.LastMemoryAt.Format(time.RFC3339)
 		}
 	}
 	return nil
 }
 
-func (r *SupabaseRepository) attachOwnedDrinkStats(ctx context.Context, authToken, currentUserID string, friendIDs []string, stats map[string]*DrinkStats) error {
+func (r *SupabaseRepository) attachOwnedMemoryStats(ctx context.Context, authToken, currentUserID string, friendIDs []string, stats map[string]*MemoryStats) error {
 	q := url.Values{}
-	q.Set("select", "profile_id,drink_logs!inner(owner_user_id,drank_at)")
-	q.Set("profile_id", "in.("+strings.Join(friendIDs, ",")+")")
-	q.Set("drink_logs.owner_user_id", "eq."+currentUserID)
+	q.Set("select", "tagged_user_id,memories!inner(owner_user_id,happened_at)")
+	q.Set("tagged_user_id", "in.("+strings.Join(friendIDs, ",")+")")
+	q.Set("memories.owner_user_id", "eq."+currentUserID)
 	var rows []map[string]any
-	if err := r.client.Get(ctx, authToken, "drink_log_friends", q, &rows); err != nil {
+	if err := r.client.Get(ctx, authToken, "memory_tagged_users", q, &rows); err != nil {
 		return err
 	}
 	for _, row := range rows {
-		friendID, _ := row["profile_id"].(string)
+		friendID, _ := row["tagged_user_id"].(string)
 		if stat := stats[friendID]; stat != nil {
-			stat.Add(embeddedDrinkLogTime(row))
+			stat.Add(embeddedMemoryTime(row))
 		}
 	}
 	return nil
 }
 
-func (r *SupabaseRepository) attachTaggedDrinkStats(ctx context.Context, authToken, currentUserID string, friendIDs []string, stats map[string]*DrinkStats) error {
+func (r *SupabaseRepository) attachTaggedMemoryStats(ctx context.Context, authToken, currentUserID string, friendIDs []string, stats map[string]*MemoryStats) error {
 	q := url.Values{}
-	q.Set("select", "profile_id,drink_logs!inner(owner_user_id,drank_at)")
-	q.Set("profile_id", "eq."+currentUserID)
-	q.Set("drink_logs.owner_user_id", "in.("+strings.Join(friendIDs, ",")+")")
+	q.Set("select", "tagged_user_id,memories!inner(owner_user_id,happened_at)")
+	q.Set("tagged_user_id", "eq."+currentUserID)
+	q.Set("memories.owner_user_id", "in.("+strings.Join(friendIDs, ",")+")")
 	var rows []map[string]any
-	if err := r.client.Get(ctx, authToken, "drink_log_friends", q, &rows); err != nil {
+	if err := r.client.Get(ctx, authToken, "memory_tagged_users", q, &rows); err != nil {
 		return err
 	}
 	for _, row := range rows {
-		log, ok := row["drink_logs"].(map[string]any)
+		log, ok := row["memories"].(map[string]any)
 		if !ok {
 			continue
 		}
 		friendID, _ := log["owner_user_id"].(string)
 		if stat := stats[friendID]; stat != nil {
-			stat.Add(embeddedDrinkLogTime(row))
+			stat.Add(embeddedMemoryTime(row))
 		}
 	}
 	return nil
 }
 
-func embeddedDrinkLogTime(row map[string]any) time.Time {
-	log, ok := row["drink_logs"].(map[string]any)
+func embeddedMemoryTime(row map[string]any) time.Time {
+	log, ok := row["memories"].(map[string]any)
 	if !ok {
 		return time.Time{}
 	}
-	value, _ := log["drank_at"].(string)
+	value, _ := log["happened_at"].(string)
 	parsed, err := time.Parse(time.RFC3339, value)
 	if err == nil {
 		return parsed
