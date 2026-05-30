@@ -37,6 +37,7 @@ func NewRouter(deps Dependencies) http.Handler {
 
 func (r *router) routes() {
 	r.mux.HandleFunc("GET /healthz", r.health)
+	r.mux.HandleFunc("POST /v1/auth/signup", r.signupWithPassword)
 	r.mux.HandleFunc("GET /v1/me/profile", r.auth(r.getProfile))
 	r.mux.HandleFunc("PUT /v1/me/profile", r.auth(r.upsertProfile))
 	r.mux.HandleFunc("PATCH /v1/me/profile", r.auth(r.updateProfile))
