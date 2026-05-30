@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yota/nomo/backend/internal/supabase"
+	"github.com/yota/ohey/backend/internal/supabase"
 )
 
 const notificationSelectColumns = "id,kind,title,message,created_at,read_at,actor_user_id,memory_id,friend_request_id,invite_id,notification_date,system_key,actor:profiles!notifications_actor_user_id_fkey(id,user_id,display_name,avatar_url),friend_request:friend_requests!notifications_friend_request_id_fkey(id,status),invite:invites!notifications_invite_id_fkey(id,status)"

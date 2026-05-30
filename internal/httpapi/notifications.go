@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yota/nomo/backend/internal/features/notifications"
+	"github.com/yota/ohey/backend/internal/features/notifications"
 )
 
 func (r *router) notificationUsecase(_ *http.Request) *notifications.Usecase {

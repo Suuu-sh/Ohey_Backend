@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/yota/nomo/backend/internal/features/media"
-	"github.com/yota/nomo/backend/internal/features/memories"
+	"github.com/yota/ohey/backend/internal/features/media"
+	"github.com/yota/ohey/backend/internal/features/memories"
 )
 
 type MediaUploadURLRequest struct {
@@ -31,7 +31,7 @@ func (r *router) createMediaUploadURL(w http.ResponseWriter, req *http.Request, 
 	}
 	result, err := r.mediaUsecase().CreateUploadURL(req.Context(), media.UploadRequest{
 		Kind:          input.Kind,
-		UserID:        req.Header.Get("X-Nomo-User-ID"),
+		UserID:        req.Header.Get("X-Ohey-User-ID"),
 		ContentType:   input.ContentType,
 		FileExtension: input.FileExtension,
 	})
@@ -48,7 +48,7 @@ func (r *router) createMediaDisplayURL(w http.ResponseWriter, req *http.Request,
 		return
 	}
 	result, err := r.mediaUsecase().CreateDisplayURL(req.Context(), media.DisplayURLRequest{
-		UserID: req.Header.Get("X-Nomo-User-ID"),
+		UserID: req.Header.Get("X-Ohey-User-ID"),
 		Path:   input.Path,
 	})
 	if err != nil {

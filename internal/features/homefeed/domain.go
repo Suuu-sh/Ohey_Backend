@@ -269,14 +269,14 @@ func ParseCursor(value string) (FeedCursor, bool) {
 
 func feedAuthorName(owner map[string]any, isOfficial bool) string {
 	if isOfficial {
-		return "Nomo"
+		return "Ohey"
 	}
 	for _, key := range []string{"display_name", "user_id"} {
 		if value := strings.TrimSpace(stringValue(owner, key)); value != "" {
 			return value
 		}
 	}
-	return "nomo_user"
+	return "ohey_user"
 }
 
 func captionYValue(row map[string]any) float64 {

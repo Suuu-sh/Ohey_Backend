@@ -1,17 +1,17 @@
 services:
   - type: web
-    name: nomo-backend
+    name: ohey-backend
     runtime: docker
     plan: free
     healthCheckPath: /healthz
     envVars:
-      - key: NOMO_ENV
+      - key: OHEY_ENV
         value: production
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_ANON_KEY
         sync: false
-      - key: NOMO_ADMIN_EMAILS
+      - key: OHEY_ADMIN_EMAILS
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false

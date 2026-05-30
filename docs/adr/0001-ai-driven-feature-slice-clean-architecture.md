@@ -2,11 +2,11 @@
 
 - Status: Accepted
 - Date: 2026-05-28
-- Scope: Nomo Backend
+- Scope: Ohey Backend
 
 ## Context
 
-Nomo Backend は現在、Go の HTTP API として Supabase/PostgREST を呼び出す構成になっている。
+Ohey Backend は現在、Go の HTTP API として Supabase/PostgREST を呼び出す構成になっている。
 README でも「authenticated requests を Supabase/PostgREST に proxy し、RLS を Supabase 側で効かせる」方針が明記されている。
 
 現状の主な構成は以下。
@@ -32,7 +32,7 @@ internal/supabase
 
 ## Decision
 
-Nomo Backend では、今後の通常実装方針として **Feature Slice 型の軽量 Clean Architecture** を採用する。
+Ohey Backend では、今後の通常実装方針として **Feature Slice 型の軽量 Clean Architecture** を採用する。
 
 DDD は全面採用しない。
 代わりに、業務ルールが濃い feature だけに必要な domain model / domain function を置く。
@@ -65,7 +65,7 @@ internal/infrastructure
 internal/interfaces
 ```
 
-この構成は大規模開発では有効だが、Nomo の現在の規模と AI による局所修正を考えると、feature 単位で関連コードが近くにある方が安全に変更しやすい。
+この構成は大規模開発では有効だが、Ohey の現在の規模と AI による局所修正を考えると、feature 単位で関連コードが近くにある方が安全に変更しやすい。
 
 Feature Slice では、`invites` の変更ならまず `internal/features/invites` を見ればよい。
 AI にも「この feature の範囲だけ変更する」と指示しやすい。
@@ -94,7 +94,7 @@ Domain
 
 ## Why not Full DDD
 
-Nomo Backend では現時点でフル DDD は採用しない。
+Ohey Backend では現時点でフル DDD は採用しない。
 
 理由:
 
@@ -103,7 +103,7 @@ Nomo Backend では現時点でフル DDD は採用しない。
 2. Go では過剰設計になりやすい
    - package や interface が増えすぎると、むしろ見通しが悪くなる。
 3. Supabase/RLS と責務が重複しやすい
-   - Nomo は Supabase RLS、DB constraint、PostgREST を活用しているため、全ルールを domain に閉じ込める思想とは相性が悪い部分がある。
+   - Ohey は Supabase RLS、DB constraint、PostgREST を活用しているため、全ルールを domain に閉じ込める思想とは相性が悪い部分がある。
 4. 仕様がまだ変わる段階では aggregate 設計を固定しすぎるリスクがある
 5. 「DDD 風のフォルダ」だけが増え、domain がただの struct 置き場になるリスクがある
 

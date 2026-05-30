@@ -4,13 +4,13 @@ WORKDIR /src
 COPY go.mod ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o /out/nomo-api ./cmd/api
-RUN CGO_ENABLED=0 GOOS=linux go build -o /out/nomo-notification-worker ./cmd/notification_worker
+RUN CGO_ENABLED=0 GOOS=linux go build -o /out/ohey-api ./cmd/api
+RUN CGO_ENABLED=0 GOOS=linux go build -o /out/ohey-notification-worker ./cmd/notification_worker
 
 FROM alpine:3.21
-RUN adduser -D -H nomo
-USER nomo
-COPY --from=build /out/nomo-api /nomo-api
-COPY --from=build /out/nomo-notification-worker /nomo-notification-worker
+RUN adduser -D -H ohey
+USER ohey
+COPY --from=build /out/ohey-api /ohey-api
+COPY --from=build /out/ohey-notification-worker /ohey-notification-worker
 EXPOSE 8080
-CMD ["/nomo-api"]
+CMD ["/ohey-api"]

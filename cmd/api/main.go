@@ -6,9 +6,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/yota/nomo/backend/internal/config"
-	"github.com/yota/nomo/backend/internal/httpapi"
-	"github.com/yota/nomo/backend/internal/supabase"
+	"github.com/yota/ohey/backend/internal/config"
+	"github.com/yota/ohey/backend/internal/httpapi"
+	"github.com/yota/ohey/backend/internal/supabase"
 )
 
 func main() {
@@ -41,7 +41,7 @@ func main() {
 		MaxHeaderBytes:    1 << 20,
 	}
 
-	logger.Info("starting nomo backend", "port", cfg.Port, "env", cfg.Environment)
+	logger.Info("starting ohey backend", "port", cfg.Port, "env", cfg.Environment)
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		logger.Error("server stopped", "error", err)
 		os.Exit(1)

@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/url"
 
-	"github.com/yota/nomo/backend/internal/supabase"
+	"github.com/yota/ohey/backend/internal/supabase"
 )
 
 const profileSelectColumns = "id,user_id,display_name,gender,character_key,avatar_url,is_plus"

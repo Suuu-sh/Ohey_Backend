@@ -91,7 +91,7 @@ func TestCreateDisplayURLValidatesMemoryPhotoPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateDisplayURL returned error: %v", err)
 	}
-	if result.SignedURL != "https://example.test/display" || storage.displayPath != "nomo-photos/users/"+testUserID+"/memories/photo.jpg" {
+	if result.SignedURL != "https://example.test/display" || storage.displayPath != "ohey-photos/users/"+testUserID+"/memories/photo.jpg" {
 		t.Fatalf("result = %#v displayPath = %q", result, storage.displayPath)
 	}
 }
@@ -107,8 +107,8 @@ func TestCreateDisplayURLRejectsInvalidPath(t *testing.T) {
 }
 
 func TestEscapedStoragePathKeepsFolderSeparators(t *testing.T) {
-	got := escapedStoragePath("nomo-photos", "users/abc/memories/photo 1.jpg")
-	if !strings.Contains(got, "/") || got != "nomo-photos/users/abc/memories/photo%201.jpg" {
+	got := escapedStoragePath("ohey-photos", "users/abc/memories/photo 1.jpg")
+	if !strings.Contains(got, "/") || got != "ohey-photos/users/abc/memories/photo%201.jpg" {
 		t.Fatalf("escaped path = %q", got)
 	}
 }

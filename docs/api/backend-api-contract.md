@@ -1,4 +1,4 @@
-# Nomo Backend API Contract
+# Ohey Backend API Contract
 
 Last updated: 2026-05-28
 
@@ -7,7 +7,7 @@ Last updated: 2026-05-28
 
 ## Data model naming freeze
 
-Nomo は飲み専用アプリではないため、public app schema / Backend API では generic naming を正とする。
+Ohey は飲み専用アプリではないため、public app schema / Backend API では generic naming を正とする。
 
 - 投稿: `memories` / `/v1/memories`
 - 投稿タグ: `memory_tagged_users`
@@ -23,13 +23,13 @@ Nomo は飲み専用アプリではないため、public app schema / Backend AP
 通常 endpoint は以下の headers が必須です。
 
 - `Authorization: Bearer <supabase access token>`
-- `X-Nomo-User-ID: <auth.users.id>`
+- `X-Ohey-User-ID: <auth.users.id>`
 
-Admin endpoint は backend 側で `NOMO_ADMIN_EMAILS` に一致する Supabase Auth user のみ許可します。
+Admin endpoint は backend 側で `OHEY_ADMIN_EMAILS` に一致する Supabase Auth user のみ許可します。
 
 ### `DELETE /v1/me/account`
 
-ログイン中の本人アカウントを削除する。Backend が caller JWT と `X-Nomo-User-ID` の一致を検証した後、trusted server 側の Supabase service role で Auth user を削除する。Mobile は呼び出し前に push token unregister を best-effort で実行し、成功後は local session を破棄する。
+ログイン中の本人アカウントを削除する。Backend が caller JWT と `X-Ohey-User-ID` の一致を検証した後、trusted server 側の Supabase service role で Auth user を削除する。Mobile は呼び出し前に push token unregister を best-effort で実行し、成功後は local session を破棄する。
 
 ## Rate limit / Abuse control
 
@@ -139,7 +139,7 @@ Response:
 - `from_user`
 - `to_user`
 
-Mobile は `X-Nomo-User-ID` と `from_user_id` / `to_user_id` を比較し、送信中 / 受信中に分けて表示する。
+Mobile は `X-Ohey-User-ID` と `from_user_id` / `to_user_id` を比較し、送信中 / 受信中に分けて表示する。
 
 ### `POST /v1/friend-requests`
 
@@ -237,7 +237,7 @@ Body:
 
 Storage display 用 signed URL を Backend から返す。Mobile は raw `photo_path` を受け取ったらこの endpoint を優先する。
 
-Memory 削除時は Backend が `nomo-photos` object cleanup を best-effort で行う。
+Memory 削除時は Backend が `ohey-photos` object cleanup を best-effort で行う。
 
 ### `GET /v1/admin/media/orphan-memory-photos?user_id=<uuid>&limit=100`
 
@@ -285,7 +285,7 @@ Outbox の直近 rows を確認する。
 Due な `pending` / `failed` outbox rows を再処理する。
 本番 Render cron は課金対象のため、現時点では作成しない。ユーザー数が増えて Pro / paid cron を使う必要が出るまでは、必要時にこの admin endpoint を手動実行する。
 
-将来 cron を有効化する場合は `/nomo-notification-worker` を 5分ごとに実行し、production の `SUPABASE_SERVICE_ROLE_KEY` と `FCM_SERVICE_ACCOUNT_JSON` を設定する。
+将来 cron を有効化する場合は `/ohey-notification-worker` を 5分ごとに実行し、production の `SUPABASE_SERVICE_ROLE_KEY` と `FCM_SERVICE_ACCOUNT_JSON` を設定する。
 
 ## Moderation
 

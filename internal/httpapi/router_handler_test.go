@@ -11,8 +11,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/yota/nomo/backend/internal/config"
-	"github.com/yota/nomo/backend/internal/supabase"
+	"github.com/yota/ohey/backend/internal/config"
+	"github.com/yota/ohey/backend/internal/supabase"
 )
 
 const (
@@ -98,7 +98,7 @@ func testRouter(fake *fakeSupabase, adminEmails ...string) http.Handler {
 func authedRequest(method, path, body string) *http.Request {
 	req := httptest.NewRequest(method, path, strings.NewReader(body))
 	req.Header.Set("Authorization", "Bearer access-token")
-	req.Header.Set("X-Nomo-User-ID", testUserID)
+	req.Header.Set("X-Ohey-User-ID", testUserID)
 	return req
 }
 
@@ -111,7 +111,7 @@ func writeFakeJSON(w http.ResponseWriter, status int, value any) {
 func TestAuthRejectsUserIDMismatch(t *testing.T) {
 	fake := newFakeSupabase(t, nil)
 	req := authedRequest(http.MethodGet, "/v1/me/profile", "")
-	req.Header.Set("X-Nomo-User-ID", otherUserID)
+	req.Header.Set("X-Ohey-User-ID", otherUserID)
 	w := httptest.NewRecorder()
 
 	testRouter(fake).ServeHTTP(w, req)
@@ -698,9 +698,9 @@ func TestAdminCreateNotificationRejectsInvalidRecipient(t *testing.T) {
 
 func TestCreateMediaUploadURLCreatesUserScopedMemoryPhotoPath(t *testing.T) {
 	fake := newFakeSupabase(t, func(w http.ResponseWriter, req *http.Request) {
-		if strings.HasPrefix(req.URL.Path, "/storage/v1/object/upload/sign/nomo-photos/users/"+testUserID+"/memories/") {
+		if strings.HasPrefix(req.URL.Path, "/storage/v1/object/upload/sign/ohey-photos/users/"+testUserID+"/memories/") {
 			writeFakeJSON(w, http.StatusOK, map[string]any{
-				"url":   "/object/upload/sign/nomo-photos/users/" + testUserID + "/memories/photo.jpg?token=upload-token",
+				"url":   "/object/upload/sign/ohey-photos/users/" + testUserID + "/memories/photo.jpg?token=upload-token",
 				"token": "upload-token",
 			})
 			return
@@ -718,14 +718,14 @@ func TestCreateMediaUploadURLCreatesUserScopedMemoryPhotoPath(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if body["bucket"] != "nomo-photos" || body["token"] != "upload-token" || body["content_type"] != "image/jpeg" {
+	if body["bucket"] != "ohey-photos" || body["token"] != "upload-token" || body["content_type"] != "image/jpeg" {
 		t.Fatalf("response = %#v", body)
 	}
 	path, _ := body["path"].(string)
 	if !strings.HasPrefix(path, "users/"+testUserID+"/memories/") || !strings.HasSuffix(path, ".jpg") {
 		t.Fatalf("path = %q", path)
 	}
-	request, ok := fake.lastRequest("/storage/v1/object/upload/sign/nomo-photos/" + path)
+	request, ok := fake.lastRequest("/storage/v1/object/upload/sign/ohey-photos/" + path)
 	if !ok {
 		t.Fatalf("storage signed upload request for %q was not sent", path)
 	}

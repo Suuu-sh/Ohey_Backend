@@ -45,8 +45,8 @@ func TestBootstrapProfileNormalizesAndDefaults(t *testing.T) {
 		AuthToken:  testAuthToken,
 		AuthUserID: testUserID,
 		Request: BootstrapRequest{
-			UserID:      " nomo_user ",
-			DisplayName: "  Nomo User  ",
+			UserID:      " ohey_user ",
+			DisplayName: "  Ohey User  ",
 			Gender:      "",
 			AvatarURL:   " https://example.test/avatar.png ",
 		},
@@ -54,7 +54,7 @@ func TestBootstrapProfileNormalizesAndDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BootstrapProfile returned error: %v", err)
 	}
-	if row["id"] != testUserID || row["user_id"] != "nomo_user" || row["display_name"] != "Nomo User" {
+	if row["id"] != testUserID || row["user_id"] != "ohey_user" || row["display_name"] != "Ohey User" {
 		t.Fatalf("row = %#v", row)
 	}
 	if row["gender"] != "unspecified" || row["character_key"] != "avatar" || row["avatar_url"] != "https://example.test/avatar.png" {

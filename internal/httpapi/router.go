@@ -7,12 +7,12 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/yota/nomo/backend/internal/config"
-	"github.com/yota/nomo/backend/internal/features/dailystatuses"
-	"github.com/yota/nomo/backend/internal/features/friends"
-	"github.com/yota/nomo/backend/internal/features/memories"
-	"github.com/yota/nomo/backend/internal/features/profiles"
-	"github.com/yota/nomo/backend/internal/supabase"
+	"github.com/yota/ohey/backend/internal/config"
+	"github.com/yota/ohey/backend/internal/features/dailystatuses"
+	"github.com/yota/ohey/backend/internal/features/friends"
+	"github.com/yota/ohey/backend/internal/features/memories"
+	"github.com/yota/ohey/backend/internal/features/profiles"
+	"github.com/yota/ohey/backend/internal/supabase"
 )
 
 type Dependencies struct {
@@ -100,13 +100,13 @@ func (r *router) routes() {
 }
 
 func (r *router) health(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "service": "nomo-backend"})
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "service": "ohey-backend"})
 }
 
 func (r *router) getProfile(w http.ResponseWriter, req *http.Request, authToken string) {
 	profile, err := r.profileUsecase().GetProfile(req.Context(), profiles.AuthInput{
 		AuthToken:  authToken,
-		AuthUserID: req.Header.Get("X-Nomo-User-ID"),
+		AuthUserID: req.Header.Get("X-Ohey-User-ID"),
 	})
 	if err != nil {
 		writeProfileError(w, err)
@@ -122,7 +122,7 @@ func (r *router) updateProfile(w http.ResponseWriter, req *http.Request, authTok
 	}
 	rows, err := r.profileUsecase().UpdateProfile(req.Context(), profiles.UpdateInput{
 		AuthToken:  authToken,
-		AuthUserID: req.Header.Get("X-Nomo-User-ID"),
+		AuthUserID: req.Header.Get("X-Ohey-User-ID"),
 		Body:       body,
 	})
 	if err != nil {
@@ -135,7 +135,7 @@ func (r *router) updateProfile(w http.ResponseWriter, req *http.Request, authTok
 func (r *router) listFriends(w http.ResponseWriter, req *http.Request, authToken string) {
 	rows, err := r.friendsUsecase(req).ListFriends(req.Context(), friends.ListInput{
 		AuthToken: authToken,
-		UserID:    req.Header.Get("X-Nomo-User-ID"),
+		UserID:    req.Header.Get("X-Ohey-User-ID"),
 		Date:      dateOnlyParam(req, "date"),
 	})
 	if err != nil {
@@ -152,7 +152,7 @@ func (r *router) updateFriendFavorite(w http.ResponseWriter, req *http.Request, 
 	}
 	row, err := r.friendsUsecase(req).UpdateFriendFavorite(req.Context(), friends.FavoriteInput{
 		AuthToken:  authToken,
-		UserID:     req.Header.Get("X-Nomo-User-ID"),
+		UserID:     req.Header.Get("X-Ohey-User-ID"),
 		FriendID:   req.PathValue("id"),
 		IsFavorite: input.IsFavorite,
 	})
@@ -166,7 +166,7 @@ func (r *router) updateFriendFavorite(w http.ResponseWriter, req *http.Request, 
 func (r *router) listMemories(w http.ResponseWriter, req *http.Request, authToken string) {
 	rows, err := r.memoryUsecase(req).ListMemories(req.Context(), memories.ListInput{
 		AuthToken: authToken,
-		UserID:    req.Header.Get("X-Nomo-User-ID"),
+		UserID:    req.Header.Get("X-Ohey-User-ID"),
 	})
 	if err != nil {
 		writeMemoryError(w, err)
@@ -204,7 +204,7 @@ func (r *router) createMemory(w http.ResponseWriter, req *http.Request, authToke
 	}
 	row, err := r.memoryUsecase(req).CreateMemory(req.Context(), memories.CreateInput{
 		AuthToken:             authToken,
-		OwnerUserID:           req.Header.Get("X-Nomo-User-ID"),
+		OwnerUserID:           req.Header.Get("X-Ohey-User-ID"),
 		HappenedAt:            input.HappenedAt,
 		HappenedOn:            input.HappenedOn,
 		TimezoneOffsetMinutes: input.TimezoneOffsetMinutes,
@@ -228,7 +228,7 @@ func (r *router) deleteMemory(w http.ResponseWriter, req *http.Request, authToke
 	row, err := r.memoryUsecase(req).DeleteMemory(req.Context(), memories.DeleteInput{
 		AuthToken:   authToken,
 		MemoryID:    req.PathValue("id"),
-		OwnerUserID: req.Header.Get("X-Nomo-User-ID"),
+		OwnerUserID: req.Header.Get("X-Ohey-User-ID"),
 	})
 	if err != nil {
 		writeMemoryError(w, err)
@@ -240,7 +240,7 @@ func (r *router) deleteMemory(w http.ResponseWriter, req *http.Request, authToke
 func (r *router) getDailyStatus(w http.ResponseWriter, req *http.Request, authToken string) {
 	rows, err := r.dailyStatusUsecase().GetDailyStatus(req.Context(), dailystatuses.GetInput{
 		AuthToken: authToken,
-		UserID:    req.Header.Get("X-Nomo-User-ID"),
+		UserID:    req.Header.Get("X-Ohey-User-ID"),
 		Date:      req.URL.Query().Get("date"),
 	})
 	if err != nil {
@@ -257,7 +257,7 @@ func (r *router) upsertDailyStatus(w http.ResponseWriter, req *http.Request, aut
 	}
 	rows, err := r.dailyStatusUsecase().UpsertDailyStatus(req.Context(), dailystatuses.UpsertInput{
 		AuthToken:  authToken,
-		UserID:     req.Header.Get("X-Nomo-User-ID"),
+		UserID:     req.Header.Get("X-Ohey-User-ID"),
 		StatusDate: input.StatusDate,
 		Status:     input.Status,
 	})
@@ -271,7 +271,7 @@ func (r *router) upsertDailyStatus(w http.ResponseWriter, req *http.Request, aut
 func (r *router) listMonthlyDailyStatuses(w http.ResponseWriter, req *http.Request, authToken string) {
 	rows, err := r.dailyStatusUsecase().ListMonthlyStatuses(req.Context(), dailystatuses.MonthInput{
 		AuthToken: authToken,
-		UserID:    req.Header.Get("X-Nomo-User-ID"),
+		UserID:    req.Header.Get("X-Ohey-User-ID"),
 		Month:     req.URL.Query().Get("month"),
 	})
 	if err != nil {
@@ -293,8 +293,8 @@ func (r *router) auth(next func(http.ResponseWriter, *http.Request, string)) htt
 			writeError(w, http.StatusUnauthorized, "missing Bearer token")
 			return
 		}
-		userID := strings.TrimSpace(req.Header.Get("X-Nomo-User-ID"))
-		cleanUserID, errMessage := cleanUUID(userID, "X-Nomo-User-ID")
+		userID := strings.TrimSpace(req.Header.Get("X-Ohey-User-ID"))
+		cleanUserID, errMessage := cleanUUID(userID, "X-Ohey-User-ID")
 		if errMessage != "" {
 			writeError(w, http.StatusBadRequest, errMessage)
 			return
@@ -313,7 +313,7 @@ func (r *router) auth(next func(http.ResponseWriter, *http.Request, string)) htt
 			writeError(w, http.StatusForbidden, "auth user mismatch")
 			return
 		}
-		req.Header.Set("X-Nomo-User-ID", authUserID)
+		req.Header.Set("X-Ohey-User-ID", authUserID)
 		next(w, req, token)
 	}
 }
@@ -325,7 +325,7 @@ func (r *router) withCORS(next http.Handler) http.Handler {
 			w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
 			w.Header().Set("Vary", "Origin")
 		}
-		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Nomo-User-ID")
+		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Ohey-User-ID")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		if req.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)

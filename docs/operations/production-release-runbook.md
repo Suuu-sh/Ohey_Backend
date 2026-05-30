@@ -1,8 +1,8 @@
-# Nomo production release runbook
+# Ohey production release runbook
 
 Last updated: 2026-05-28
 
-This runbook defines when to move `development` into `main` and what must be checked together for Backend, Supabase, and TestFlight. Nomo is pre-release, so normal implementation work still lands on `development`; production reflection happens as one coordinated release window.
+This runbook defines when to move `development` into `main` and what must be checked together for Backend, Supabase, and TestFlight. Ohey is pre-release, so normal implementation work still lands on `development`; production reflection happens as one coordinated release window.
 
 ## Release gate
 

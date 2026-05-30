@@ -122,7 +122,7 @@ func (l *actionRateLimiter) cleanup(now time.Time) {
 }
 
 func (r *router) enforceRateLimit(w http.ResponseWriter, req *http.Request, policy rateLimitPolicy) bool {
-	userID := req.Header.Get("X-Nomo-User-ID")
+	userID := req.Header.Get("X-Ohey-User-ID")
 	allowed, retryAfter := r.rateLimiter.Allow(userID, policy)
 	if allowed {
 		return true

@@ -6,15 +6,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yota/nomo/backend/internal/features/dailystatuses"
-	"github.com/yota/nomo/backend/internal/features/friendgroups"
-	"github.com/yota/nomo/backend/internal/features/friends"
-	"github.com/yota/nomo/backend/internal/features/homefeed"
-	"github.com/yota/nomo/backend/internal/features/invites"
-	"github.com/yota/nomo/backend/internal/features/memories"
-	"github.com/yota/nomo/backend/internal/features/notifications"
-	"github.com/yota/nomo/backend/internal/features/profiles"
-	"github.com/yota/nomo/backend/internal/features/usersafety"
+	"github.com/yota/ohey/backend/internal/features/dailystatuses"
+	"github.com/yota/ohey/backend/internal/features/friendgroups"
+	"github.com/yota/ohey/backend/internal/features/friends"
+	"github.com/yota/ohey/backend/internal/features/homefeed"
+	"github.com/yota/ohey/backend/internal/features/invites"
+	"github.com/yota/ohey/backend/internal/features/memories"
+	"github.com/yota/ohey/backend/internal/features/notifications"
+	"github.com/yota/ohey/backend/internal/features/profiles"
+	"github.com/yota/ohey/backend/internal/features/usersafety"
 )
 
 type ProfileSaveRequest struct {
@@ -66,7 +66,7 @@ func (r *router) upsertProfile(w http.ResponseWriter, req *http.Request, authTok
 	}
 	row, err := r.profileUsecase().BootstrapProfile(req.Context(), profiles.BootstrapUsecaseInput{
 		AuthToken:  authToken,
-		AuthUserID: req.Header.Get("X-Nomo-User-ID"),
+		AuthUserID: req.Header.Get("X-Ohey-User-ID"),
 		Request: profiles.BootstrapRequest{
 			UserID:       input.UserID,
 			DisplayName:  input.DisplayName,
@@ -105,7 +105,7 @@ func (r *router) createFriendship(w http.ResponseWriter, req *http.Request, auth
 	}
 	row, err := r.friendsUsecase(req).CreateFriendship(req.Context(), friends.FriendInput{
 		AuthToken: authToken,
-		UserID:    req.Header.Get("X-Nomo-User-ID"),
+		UserID:    req.Header.Get("X-Ohey-User-ID"),
 		FriendID:  friendID,
 	})
 	if err != nil {
@@ -118,7 +118,7 @@ func (r *router) createFriendship(w http.ResponseWriter, req *http.Request, auth
 func (r *router) deleteFriendship(w http.ResponseWriter, req *http.Request, authToken string) {
 	row, err := r.friendsUsecase(req).DeleteFriendship(req.Context(), friends.FriendInput{
 		AuthToken: authToken,
-		UserID:    req.Header.Get("X-Nomo-User-ID"),
+		UserID:    req.Header.Get("X-Ohey-User-ID"),
 		FriendID:  req.PathValue("id"),
 	})
 	if err != nil {
@@ -131,7 +131,7 @@ func (r *router) deleteFriendship(w http.ResponseWriter, req *http.Request, auth
 func (r *router) listFriendGroups(w http.ResponseWriter, req *http.Request, authToken string) {
 	groups, err := r.friendGroupsUsecase().ListFriendGroups(req.Context(), friendgroups.AuthInput{
 		AuthToken: authToken,
-		UserID:    req.Header.Get("X-Nomo-User-ID"),
+		UserID:    req.Header.Get("X-Ohey-User-ID"),
 	})
 	if err != nil {
 		writeFriendGroupsError(w, err)
@@ -147,7 +147,7 @@ func (r *router) saveFriendGroups(w http.ResponseWriter, req *http.Request, auth
 	}
 	groups, err := r.friendGroupsUsecase().SaveFriendGroups(req.Context(), friendgroups.SaveInput{
 		AuthToken: authToken,
-		UserID:    req.Header.Get("X-Nomo-User-ID"),
+		UserID:    req.Header.Get("X-Ohey-User-ID"),
 		Body:      input,
 	})
 	if err != nil {
@@ -160,7 +160,7 @@ func (r *router) saveFriendGroups(w http.ResponseWriter, req *http.Request, auth
 func (r *router) getFriendRequestStatus(w http.ResponseWriter, req *http.Request, authToken string) {
 	status, err := r.friendsUsecase(req).GetFriendRequestStatus(req.Context(), friends.FriendInput{
 		AuthToken: authToken,
-		UserID:    req.Header.Get("X-Nomo-User-ID"),
+		UserID:    req.Header.Get("X-Ohey-User-ID"),
 		FriendID:  req.URL.Query().Get("friend_id"),
 	})
 	if err != nil {
@@ -173,7 +173,7 @@ func (r *router) getFriendRequestStatus(w http.ResponseWriter, req *http.Request
 func (r *router) listFriendRequests(w http.ResponseWriter, req *http.Request, authToken string) {
 	rows, err := r.friendsUsecase(req).ListFriendRequests(req.Context(), friends.ListFriendRequestsInput{
 		AuthToken: authToken,
-		UserID:    req.Header.Get("X-Nomo-User-ID"),
+		UserID:    req.Header.Get("X-Ohey-User-ID"),
 		Direction: req.URL.Query().Get("direction"),
 	})
 	if err != nil {
@@ -193,7 +193,7 @@ func (r *router) createFriendRequest(w http.ResponseWriter, req *http.Request, a
 	}
 	row, err := r.friendsUsecase(req).CreateFriendRequest(req.Context(), friends.CreateFriendRequestInput{
 		AuthToken:  authToken,
-		FromUserID: req.Header.Get("X-Nomo-User-ID"),
+		FromUserID: req.Header.Get("X-Ohey-User-ID"),
 		ToUserID:   input.ToUserID,
 		FriendID:   input.FriendID,
 	})
@@ -212,7 +212,7 @@ func (r *router) updateFriendRequest(w http.ResponseWriter, req *http.Request, a
 	row, err := r.friendsUsecase(req).UpdateFriendRequest(req.Context(), friends.UpdateFriendRequestInput{
 		AuthToken: authToken,
 		RequestID: req.PathValue("id"),
-		UserID:    req.Header.Get("X-Nomo-User-ID"),
+		UserID:    req.Header.Get("X-Ohey-User-ID"),
 		Status:    input.Status,
 	})
 	if err != nil {
@@ -226,7 +226,7 @@ func (r *router) likeMemory(w http.ResponseWriter, req *http.Request, authToken 
 	state, err := r.memoryUsecase(req).LikeMemory(req.Context(), memories.LikeInput{
 		AuthToken: authToken,
 		MemoryID:  req.PathValue("id"),
-		UserID:    req.Header.Get("X-Nomo-User-ID"),
+		UserID:    req.Header.Get("X-Ohey-User-ID"),
 	})
 	if err != nil {
 		writeMemoryError(w, err)
@@ -239,7 +239,7 @@ func (r *router) unlikeMemory(w http.ResponseWriter, req *http.Request, authToke
 	state, err := r.memoryUsecase(req).UnlikeMemory(req.Context(), memories.LikeInput{
 		AuthToken: authToken,
 		MemoryID:  req.PathValue("id"),
-		UserID:    req.Header.Get("X-Nomo-User-ID"),
+		UserID:    req.Header.Get("X-Ohey-User-ID"),
 	})
 	if err != nil {
 		writeMemoryError(w, err)
@@ -259,7 +259,7 @@ func (r *router) reportMemory(w http.ResponseWriter, req *http.Request, authToke
 	result, err := r.memoryUsecase(req).ReportMemory(req.Context(), memories.ReportInput{
 		AuthToken:      authToken,
 		MemoryID:       req.PathValue("id"),
-		ReporterUserID: req.Header.Get("X-Nomo-User-ID"),
+		ReporterUserID: req.Header.Get("X-Ohey-User-ID"),
 		Reason:         input.Reason,
 	})
 	if err != nil {
@@ -283,7 +283,7 @@ func (r *router) blockUser(w http.ResponseWriter, req *http.Request, authToken s
 	}
 	row, err := r.userSafetyUsecase().BlockUser(req.Context(), usersafety.UserTargetInput{
 		AuthToken:    authToken,
-		ActorUserID:  req.Header.Get("X-Nomo-User-ID"),
+		ActorUserID:  req.Header.Get("X-Ohey-User-ID"),
 		TargetUserID: firstNonEmpty(input.BlockedUserID, input.TargetUserID, input.UserID),
 	})
 	if err != nil {
@@ -296,7 +296,7 @@ func (r *router) blockUser(w http.ResponseWriter, req *http.Request, authToken s
 func (r *router) listBlockedUsers(w http.ResponseWriter, req *http.Request, authToken string) {
 	rows, err := r.userSafetyUsecase().ListBlockedUsers(req.Context(), usersafety.ListInput{
 		AuthToken: authToken,
-		UserID:    req.Header.Get("X-Nomo-User-ID"),
+		UserID:    req.Header.Get("X-Ohey-User-ID"),
 	})
 	if err != nil {
 		writeUserSafetyError(w, err)
@@ -308,7 +308,7 @@ func (r *router) listBlockedUsers(w http.ResponseWriter, req *http.Request, auth
 func (r *router) unblockUser(w http.ResponseWriter, req *http.Request, authToken string) {
 	err := r.userSafetyUsecase().UnblockUser(req.Context(), usersafety.UserTargetInput{
 		AuthToken:    authToken,
-		ActorUserID:  req.Header.Get("X-Nomo-User-ID"),
+		ActorUserID:  req.Header.Get("X-Ohey-User-ID"),
 		TargetUserID: req.PathValue("id"),
 	})
 	if err != nil {
@@ -328,7 +328,7 @@ func (r *router) muteUser(w http.ResponseWriter, req *http.Request, authToken st
 	}
 	row, err := r.userSafetyUsecase().MuteUser(req.Context(), usersafety.UserTargetInput{
 		AuthToken:    authToken,
-		ActorUserID:  req.Header.Get("X-Nomo-User-ID"),
+		ActorUserID:  req.Header.Get("X-Ohey-User-ID"),
 		TargetUserID: firstNonEmpty(input.MutedUserID, input.TargetUserID, input.UserID),
 	})
 	if err != nil {
@@ -341,7 +341,7 @@ func (r *router) muteUser(w http.ResponseWriter, req *http.Request, authToken st
 func (r *router) listMutedUsers(w http.ResponseWriter, req *http.Request, authToken string) {
 	rows, err := r.userSafetyUsecase().ListMutedUsers(req.Context(), usersafety.ListInput{
 		AuthToken: authToken,
-		UserID:    req.Header.Get("X-Nomo-User-ID"),
+		UserID:    req.Header.Get("X-Ohey-User-ID"),
 	})
 	if err != nil {
 		writeUserSafetyError(w, err)
@@ -353,7 +353,7 @@ func (r *router) listMutedUsers(w http.ResponseWriter, req *http.Request, authTo
 func (r *router) unmuteUser(w http.ResponseWriter, req *http.Request, authToken string) {
 	err := r.userSafetyUsecase().UnmuteUser(req.Context(), usersafety.UserTargetInput{
 		AuthToken:    authToken,
-		ActorUserID:  req.Header.Get("X-Nomo-User-ID"),
+		ActorUserID:  req.Header.Get("X-Ohey-User-ID"),
 		TargetUserID: req.PathValue("id"),
 	})
 	if err != nil {
@@ -373,7 +373,7 @@ func (r *router) reportUser(w http.ResponseWriter, req *http.Request, authToken 
 	}
 	row, err := r.userSafetyUsecase().ReportUser(req.Context(), usersafety.UserTargetInput{
 		AuthToken:    authToken,
-		ActorUserID:  req.Header.Get("X-Nomo-User-ID"),
+		ActorUserID:  req.Header.Get("X-Ohey-User-ID"),
 		TargetUserID: firstNonEmpty(input.TargetUserID, input.UserID),
 		Reason:       input.Reason,
 	})
@@ -391,7 +391,7 @@ func (r *router) hideMemoryFromFeed(w http.ResponseWriter, req *http.Request, au
 	}
 	row, err := r.userSafetyUsecase().HideMemory(req.Context(), usersafety.MemoryInput{
 		AuthToken: authToken,
-		UserID:    req.Header.Get("X-Nomo-User-ID"),
+		UserID:    req.Header.Get("X-Ohey-User-ID"),
 		MemoryID:  input.MemoryID,
 	})
 	if err != nil {
@@ -404,7 +404,7 @@ func (r *router) hideMemoryFromFeed(w http.ResponseWriter, req *http.Request, au
 func (r *router) unhideMemoryFromFeed(w http.ResponseWriter, req *http.Request, authToken string) {
 	err := r.userSafetyUsecase().UnhideMemory(req.Context(), usersafety.MemoryInput{
 		AuthToken: authToken,
-		UserID:    req.Header.Get("X-Nomo-User-ID"),
+		UserID:    req.Header.Get("X-Ohey-User-ID"),
 		MemoryID:  req.PathValue("id"),
 	})
 	if err != nil {
@@ -426,7 +426,7 @@ func firstNonEmpty(values ...string) string {
 func (r *router) listHomeFeed(w http.ResponseWriter, req *http.Request, authToken string) {
 	rows, err := r.homeFeedUsecase().ListHomeFeed(req.Context(), homefeed.ListInput{
 		AuthToken: authToken,
-		UserID:    req.Header.Get("X-Nomo-User-ID"),
+		UserID:    req.Header.Get("X-Ohey-User-ID"),
 		Limit:     req.URL.Query().Get("limit"),
 		Cursor:    req.URL.Query().Get("cursor"),
 	})
@@ -440,7 +440,7 @@ func (r *router) listHomeFeed(w http.ResponseWriter, req *http.Request, authToke
 func (r *router) listNotifications(w http.ResponseWriter, req *http.Request, authToken string) {
 	rows, err := r.notificationUsecase(req).ListNotifications(req.Context(), notifications.ListInput{
 		AuthToken: authToken,
-		UserID:    req.Header.Get("X-Nomo-User-ID"),
+		UserID:    req.Header.Get("X-Ohey-User-ID"),
 		Date:      dateOnlyParam(req, "date"),
 	})
 	if err != nil {
@@ -453,7 +453,7 @@ func (r *router) listNotifications(w http.ResponseWriter, req *http.Request, aut
 func (r *router) markNotificationsRead(w http.ResponseWriter, req *http.Request, authToken string) {
 	updatedCount, err := r.notificationUsecase(req).MarkAllRead(req.Context(), notifications.MarkReadInput{
 		AuthToken: authToken,
-		UserID:    req.Header.Get("X-Nomo-User-ID"),
+		UserID:    req.Header.Get("X-Ohey-User-ID"),
 	})
 	if err != nil {
 		writeNotificationError(w, err)
@@ -463,7 +463,7 @@ func (r *router) markNotificationsRead(w http.ResponseWriter, req *http.Request,
 }
 
 func (r *router) deleteOwnAccount(w http.ResponseWriter, req *http.Request, _ string) {
-	userID := strings.TrimSpace(req.Header.Get("X-Nomo-User-ID"))
+	userID := strings.TrimSpace(req.Header.Get("X-Ohey-User-ID"))
 	if r.deps.AdminSupabase == nil || strings.TrimSpace(r.deps.Config.SupabaseServiceRoleKey) == "" {
 		writeError(w, http.StatusServiceUnavailable, "account deletion is temporarily unavailable")
 		return
@@ -478,7 +478,7 @@ func (r *router) deleteOwnAccount(w http.ResponseWriter, req *http.Request, _ st
 func (r *router) listTodayReservations(w http.ResponseWriter, req *http.Request, authToken string) {
 	rows, err := r.inviteUsecase(req).ListTodayReservations(req.Context(), invites.ListInput{
 		AuthToken:     authToken,
-		UserID:        req.Header.Get("X-Nomo-User-ID"),
+		UserID:        req.Header.Get("X-Ohey-User-ID"),
 		ScheduledDate: dateOnlyParam(req, "date"),
 	})
 	if err != nil {
@@ -491,7 +491,7 @@ func (r *router) listTodayReservations(w http.ResponseWriter, req *http.Request,
 func (r *router) listIncomingPendingInvites(w http.ResponseWriter, req *http.Request, authToken string) {
 	rows, err := r.inviteUsecase(req).ListIncomingPending(req.Context(), invites.ListInput{
 		AuthToken:     authToken,
-		UserID:        req.Header.Get("X-Nomo-User-ID"),
+		UserID:        req.Header.Get("X-Ohey-User-ID"),
 		ScheduledDate: dateOnlyParam(req, "date"),
 	})
 	if err != nil {
@@ -504,7 +504,7 @@ func (r *router) listIncomingPendingInvites(w http.ResponseWriter, req *http.Req
 func (r *router) listOutgoingActiveInvites(w http.ResponseWriter, req *http.Request, authToken string) {
 	rows, err := r.inviteUsecase(req).ListOutgoingActive(req.Context(), invites.ListInput{
 		AuthToken:     authToken,
-		UserID:        req.Header.Get("X-Nomo-User-ID"),
+		UserID:        req.Header.Get("X-Ohey-User-ID"),
 		ScheduledDate: dateOnlyParam(req, "date"),
 	})
 	if err != nil {
@@ -524,7 +524,7 @@ func (r *router) createInvite(w http.ResponseWriter, req *http.Request, authToke
 	}
 	row, err := r.inviteUsecase(req).CreateInvite(req.Context(), invites.CreateInput{
 		AuthToken:     authToken,
-		InviterUserID: req.Header.Get("X-Nomo-User-ID"),
+		InviterUserID: req.Header.Get("X-Ohey-User-ID"),
 		InviteeUserID: input.InviteeUserID,
 		ScheduledDate: input.ScheduledDate,
 	})
@@ -548,7 +548,7 @@ func (r *router) updateInvite(w http.ResponseWriter, req *http.Request, authToke
 	row, err := r.inviteUsecase(req).UpdateInvite(req.Context(), invites.UpdateInput{
 		AuthToken:       authToken,
 		InviteID:        inviteID,
-		RecipientUserID: req.Header.Get("X-Nomo-User-ID"),
+		RecipientUserID: req.Header.Get("X-Ohey-User-ID"),
 		Status:          input.Status,
 	})
 	if err != nil {

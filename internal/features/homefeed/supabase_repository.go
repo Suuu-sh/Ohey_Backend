@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/yota/nomo/backend/internal/supabase"
+	"github.com/yota/ohey/backend/internal/supabase"
 )
 
 const homeFeedMemorySelectColumns = "id,owner_user_id,happened_at,place_name,place_lat,place_lng,memo,caption_y,photo_path,link_url,marker_rarity,is_official,owner:profiles!memories_owner_user_id_fkey(id,user_id,display_name,gender,character_key,avatar_url,is_plus),memory_likes(user_id),memory_tagged_users(profiles(id,user_id,display_name,gender,character_key,avatar_url,is_plus))"

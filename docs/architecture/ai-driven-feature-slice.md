@@ -1,12 +1,12 @@
 # AI駆動開発向け Backend 設計ガイド
 
-この文書は、Nomo Backend を今後 **AI駆動開発で安全に変更しやすい構造** に寄せるための実装ガイドである。
+この文書は、Ohey Backend を今後 **AI駆動開発で安全に変更しやすい構造** に寄せるための実装ガイドである。
 
 採用判断の概要は `docs/adr/0001-ai-driven-feature-slice-clean-architecture.md` を参照する。
 
 ## 結論
 
-Nomo Backend は今後、**Feature Slice 型の軽量 Clean Architecture** を基本方針にする。
+Ohey Backend は今後、**Feature Slice 型の軽量 Clean Architecture** を基本方針にする。
 
 ```text
 internal/features/<feature>/
@@ -78,7 +78,7 @@ internal/infrastructure/supabase/planinvite_repository.go
 internal/interfaces/http/planinvite_handler.go
 ```
 
-後者は理論上きれいだが、Nomo の規模と AI 駆動開発では変更箇所が遠くなりやすい。
+後者は理論上きれいだが、Ohey の規模と AI 駆動開発では変更箇所が遠くなりやすい。
 
 ### 2. Handler は薄くする
 
@@ -112,7 +112,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
     result, err := h.usecase.CreateInvite(r.Context(), CreateInviteInput{
         AuthToken:   bearerToken(r),
-        FromUserID:  nomoUserID(r),
+        FromUserID:  oheyUserID(r),
         ToUserID:    input.ToUserID,
         InviteDate:  input.InviteDate,
     })
@@ -164,7 +164,7 @@ usecase が直接知るべきでないもの:
 
 ### 4. Domain は業務判断だけ置く
 
-domain は「Nomo のルール」を置く場所。
+domain は「Ohey のルール」を置く場所。
 単なる JSON DTO や DB row の置き場にしない。
 
 良い例:
@@ -377,7 +377,7 @@ Supabase の raw error body は client に返さない。
 
 ## Supabase / RLS との関係
 
-Nomo Backend は Supabase RLS を重要な安全境界として使う。
+Ohey Backend は Supabase RLS を重要な安全境界として使う。
 Feature Slice 化してもこの方針は変えない。
 
 方針:
@@ -768,7 +768,7 @@ internal/features/invites/
 
 ## Final Guideline
 
-今後の Nomo Backend では、以下を標準判断にする。
+今後の Ohey Backend では、以下を標準判断にする。
 
 > 複雑な feature は Feature Slice 型の軽量 Clean Architecture に寄せる。  
 > ただしフル DDD は目的化しない。  
@@ -1019,7 +1019,7 @@ Trade-off:
 
 ### Media Lifecycle
 
-memory 削除時、返却 row に `photo_path` がある場合は Supabase Storage の `nomo-photos` object 削除を試みる。
+memory 削除時、返却 row に `photo_path` がある場合は Supabase Storage の `ohey-photos` object 削除を試みる。
 
 判断理由:
 
@@ -1076,7 +1076,7 @@ Domain event は `notification_outbox` に `pending` として保存し、in-pro
 
 - `GET /v1/admin/notification-outbox`
 - `POST /v1/admin/notification-outbox/process`
-- `/nomo-notification-worker` binary
+- `/ohey-notification-worker` binary
 - Render cron は本番未使用
 
 判断理由:
@@ -1141,7 +1141,7 @@ Added a static Supabase migration contract verifier in Mobile (`scripts/verify_s
 
 判断理由:
 
-- Nomo の Supabase migrations は Mobile repository 側で管理され、GitHub Actions が dev / production に順次適用する。
+- Ohey の Supabase migrations は Mobile repository 側で管理され、GitHub Actions が dev / production に順次適用する。
 - 今回は production 適用を行わず、migration file と RLS contract の破れを先に検出できるようにした。
 - `friend_groups`, `friend_group_members`, `user_blocks`, `user_mutes`, `memory_hides`, `notification_outbox`, `memory_reports`, `push_tokens` を重点確認する。
 

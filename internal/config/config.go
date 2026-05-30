@@ -19,14 +19,14 @@ type Config struct {
 
 func Load() (Config, error) {
 	cfg := Config{
-		Environment:            getEnv("NOMO_ENV", "production"),
+		Environment:            getEnv("OHEY_ENV", "production"),
 		Port:                   getEnv("PORT", "8080"),
 		SupabaseURL:            strings.TrimRight(os.Getenv("SUPABASE_URL"), "/"),
 		SupabaseAnonKey:        os.Getenv("SUPABASE_ANON_KEY"),
 		SupabaseServiceRoleKey: strings.TrimSpace(os.Getenv("SUPABASE_SERVICE_ROLE_KEY")),
 		AllowedOrigins:         splitCSV(getEnv("ALLOWED_ORIGINS", "*")),
 		FCMServiceAccountJSON:  strings.TrimSpace(os.Getenv("FCM_SERVICE_ACCOUNT_JSON")),
-		AdminEmails:            splitCSV(os.Getenv("NOMO_ADMIN_EMAILS")),
+		AdminEmails:            splitCSV(os.Getenv("OHEY_ADMIN_EMAILS")),
 	}
 	if cfg.SupabaseURL == "" {
 		return cfg, errors.New("SUPABASE_URL is required")

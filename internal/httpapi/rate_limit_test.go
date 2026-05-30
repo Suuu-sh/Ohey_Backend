@@ -39,7 +39,7 @@ func TestEnforceRateLimitWritesRetryAfter(t *testing.T) {
 	r := &router{rateLimiter: newActionRateLimiter(func() time.Time { return now })}
 	policy := rateLimitPolicy{Action: "test_action", Limit: 1, Window: time.Minute}
 	req := httptest.NewRequest(http.MethodPost, "/v1/test", nil)
-	req.Header.Set("X-Nomo-User-ID", testUserID)
+	req.Header.Set("X-Ohey-User-ID", testUserID)
 
 	w1 := httptest.NewRecorder()
 	if !r.enforceRateLimit(w1, req, policy) {

@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yota/nomo/backend/internal/config"
-	"github.com/yota/nomo/backend/internal/httpapi"
-	"github.com/yota/nomo/backend/internal/supabase"
+	"github.com/yota/ohey/backend/internal/config"
+	"github.com/yota/ohey/backend/internal/httpapi"
+	"github.com/yota/ohey/backend/internal/supabase"
 )
 
 func main() {

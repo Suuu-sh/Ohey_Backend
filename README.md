@@ -1,10 +1,10 @@
-# Nomo Backend
+# Ohey Backend
 
-Go API for Nomo. It proxies authenticated requests to Supabase/PostgREST using the caller's Supabase JWT so RLS remains enforced by Supabase.
+Go API for Ohey. It proxies authenticated requests to Supabase/PostgREST using the caller's Supabase JWT so RLS remains enforced by Supabase.
 
 ## Architecture
 
-Nomo Backend uses a lightweight, AI-friendly architecture policy for future
+Ohey Backend uses a lightweight, AI-friendly architecture policy for future
 feature work:
 
 - [AI駆動開発向け Backend 設計ガイド](docs/architecture/ai-driven-feature-slice.md)
@@ -15,7 +15,7 @@ feature work:
 
 ```sh
 cp .env.example .env
-# set SUPABASE_ANON_KEY from /Users/yota/Projects/Secrets/Nomo/supabase_dev-nomo.md
+# set SUPABASE_ANON_KEY from /Users/yota/Projects/Secrets/Nomo/supabase_dev-ohey.md
 export $(grep -v '^#' .env | xargs)
 go run ./cmd/api
 ```
@@ -29,7 +29,7 @@ curl http://localhost:8080/healthz
 Authenticated requests must include:
 
 - `Authorization: Bearer <supabase access token>`
-- `X-Nomo-User-ID: <auth.users.id>`
+- `X-Ohey-User-ID: <auth.users.id>`
 
 ## Endpoints
 

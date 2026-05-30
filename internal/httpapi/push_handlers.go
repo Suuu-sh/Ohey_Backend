@@ -39,7 +39,7 @@ func (r *router) registerPushToken(w http.ResponseWriter, req *http.Request, aut
 	q["on_conflict"] = []string{"token"}
 	payload := map[string]any{
 		"token":        token,
-		"user_id":      req.Header.Get("X-Nomo-User-ID"),
+		"user_id":      req.Header.Get("X-Ohey-User-ID"),
 		"platform":     platform,
 		"updated_at":   now,
 		"last_seen_at": now,
@@ -72,7 +72,7 @@ func (r *router) unregisterPushToken(w http.ResponseWriter, req *http.Request, a
 
 	q := url.Values{}
 	q.Set("token", "eq."+token)
-	q.Set("user_id", "eq."+req.Header.Get("X-Nomo-User-ID"))
+	q.Set("user_id", "eq."+req.Header.Get("X-Ohey-User-ID"))
 	var rows []map[string]any
 	if r.deps.AdminSupabase != nil && r.deps.Config.SupabaseServiceRoleKey != "" {
 		if err := r.deps.AdminSupabase.Delete(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "push_tokens", q, &rows); err != nil {
