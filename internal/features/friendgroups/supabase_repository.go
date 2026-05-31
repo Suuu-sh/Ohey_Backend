@@ -141,6 +141,7 @@ func (r *SupabaseRepository) replaceMembers(ctx context.Context, authToken, grou
 }
 
 func groupFromRow(row map[string]any) FriendGroup {
+	rowID, _ := row["id"].(string)
 	clientID, _ := row["client_id"].(string)
 	name, _ := row["name"].(string)
 	sortOrder := intFromAny(row["sort_order"])
@@ -166,7 +167,7 @@ func groupFromRow(row map[string]any) FriendGroup {
 	for _, member := range members {
 		friendIDs = append(friendIDs, member.id)
 	}
-	return FriendGroup{ID: clientID, Name: strings.TrimSpace(name), FriendIDs: friendIDs, FriendIds: friendIDs, SortOrder: sortOrder}
+	return FriendGroup{RowID: rowID, ID: clientID, Name: strings.TrimSpace(name), FriendIDs: friendIDs, FriendIds: friendIDs, SortOrder: sortOrder}
 }
 
 func intFromAny(value any) int {

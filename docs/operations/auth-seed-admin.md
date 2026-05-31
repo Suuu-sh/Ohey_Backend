@@ -37,4 +37,4 @@ Last updated: 2026-05-28
 - No rich seed in production.
 - TestFlight tester/admin accounts are normal Supabase Auth users.
 - If production data is reset by baseline, recreate only the minimum test/admin accounts needed for TestFlight.
-- Keep production credentials in `/Users/yota/Projects/Secrets/Nomo` and Render/Supabase secrets only.
+- Keep production credentials in `/Users/yota/Projects/Secrets/Ohey` and Render/Supabase secrets only.

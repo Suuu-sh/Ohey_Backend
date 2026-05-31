@@ -10,7 +10,7 @@ Run this before TestFlight / production release. For Ohey dev checks, use iOS Si
 Run static migration contract before relying on an environment:
 
 ```bash
-cd /Users/yota/Projects/Products/Nomo/Mobile
+cd /Users/yota/Projects/Products/Ohey/Mobile
 python3 scripts/verify_supabase_rls_contract.py
 ```
 

@@ -55,6 +55,11 @@ var (
 		Limit:  30,
 		Window: time.Hour,
 	}
+	rateLimitAuthSignup = rateLimitPolicy{
+		Action: "auth_signup",
+		Limit:  8,
+		Window: time.Hour,
+	}
 	rateLimitBlockUser = rateLimitPolicy{
 		Action: "user_block_create",
 		Limit:  30,
@@ -113,6 +118,10 @@ func (l *actionRateLimiter) Allow(userID string, policy rateLimitPolicy) (bool, 
 	return true, 0
 }
 
+func (l *actionRateLimiter) AllowKey(key string, policy rateLimitPolicy) (bool, time.Duration) {
+	return l.Allow(key, policy)
+}
+
 func (l *actionRateLimiter) cleanup(now time.Time) {
 	for key, bucket := range l.buckets {
 		if !bucket.ResetAt.IsZero() && !now.Before(bucket.ResetAt.Add(time.Minute)) {
@@ -127,6 +136,11 @@ func (r *router) enforceRateLimit(w http.ResponseWriter, req *http.Request, poli
 	if allowed {
 		return true
 	}
+	writeRateLimitExceeded(w, policy, retryAfter)
+	return false
+}
+
+func writeRateLimitExceeded(w http.ResponseWriter, policy rateLimitPolicy, retryAfter time.Duration) {
 	seconds := int(retryAfter.Round(time.Second).Seconds())
 	if seconds < 1 {
 		seconds = 1
@@ -137,5 +151,4 @@ func (r *router) enforceRateLimit(w http.ResponseWriter, req *http.Request, poli
 		"rate_limit_action": policy.Action,
 		"retry_after":       fmt.Sprintf("%ds", seconds),
 	})
-	return false
 }

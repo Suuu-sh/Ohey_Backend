@@ -15,7 +15,7 @@ feature work:
 
 ```sh
 cp .env.example .env
-# set SUPABASE_ANON_KEY from /Users/yota/Projects/Secrets/Nomo/supabase_dev-ohey.md
+# set SUPABASE_ANON_KEY from /Users/yota/Projects/Secrets/Ohey/supabase_dev-ohey.md
 export $(grep -v '^#' .env | xargs)
 go run ./cmd/api
 ```

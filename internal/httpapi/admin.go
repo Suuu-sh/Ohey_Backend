@@ -587,19 +587,14 @@ func (r *router) admin(next func(http.ResponseWriter, *http.Request, AuthUser)) 
 			writeError(w, http.StatusServiceUnavailable, "admin backend is not configured")
 			return
 		}
-		auth := req.Header.Get("Authorization")
-		if !strings.HasPrefix(auth, "Bearer ") {
+		token, ok := bearerTokenFromRequest(req)
+		if !ok {
 			writeError(w, http.StatusUnauthorized, "missing Bearer token")
 			return
 		}
-		token := strings.TrimSpace(strings.TrimPrefix(auth, "Bearer "))
-		if token == "" {
-			writeError(w, http.StatusUnauthorized, "missing Bearer token")
-			return
-		}
-		var authUser AuthUser
-		if err := r.deps.Supabase.GetAuthUser(req.Context(), token, &authUser); err != nil {
-			writeSupabaseError(w, err)
+		authUser, err := r.verifyAuthToken(req.Context(), token)
+		if err != nil {
+			writeAuthVerificationError(w, err)
 			return
 		}
 		authUserID, errMessage := cleanUUID(authUser.ID, "auth user id")

@@ -24,19 +24,26 @@ type Dependencies struct {
 }
 
 type router struct {
-	deps        Dependencies
-	mux         *http.ServeMux
-	rateLimiter *actionRateLimiter
+	deps         Dependencies
+	mux          *http.ServeMux
+	rateLimiter  *actionRateLimiter
+	authVerifier *authVerifier
 }
 
 func NewRouter(deps Dependencies) http.Handler {
-	r := &router{deps: deps, mux: http.NewServeMux(), rateLimiter: newActionRateLimiter(timeNow)}
+	r := &router{
+		deps:         deps,
+		mux:          http.NewServeMux(),
+		rateLimiter:  newActionRateLimiter(timeNow),
+		authVerifier: newAuthVerifier(deps.Supabase, deps.Config.SupabaseURL, timeNow),
+	}
 	r.routes()
 	return r.withCORS(r.mux)
 }
 
 func (r *router) routes() {
 	r.mux.HandleFunc("GET /healthz", r.health)
+	r.mux.HandleFunc("POST /v1/auth/signup", r.signupWithPassword)
 	r.mux.HandleFunc("GET /v1/me/profile", r.auth(r.getProfile))
 	r.mux.HandleFunc("PUT /v1/me/profile", r.auth(r.upsertProfile))
 	r.mux.HandleFunc("PATCH /v1/me/profile", r.auth(r.updateProfile))
@@ -52,6 +59,14 @@ func (r *router) routes() {
 	r.mux.HandleFunc("POST /v1/friend-requests", r.auth(r.createFriendRequest))
 	r.mux.HandleFunc("PATCH /v1/friend-requests/{id}", r.auth(r.updateFriendRequest))
 	r.mux.HandleFunc("GET /v1/home/feed", r.auth(r.listHomeFeed))
+	r.mux.HandleFunc("GET /v1/wish-items", r.auth(r.listWishItems))
+	r.mux.HandleFunc("GET /v1/wish-items/profile/{id}", r.auth(r.listProfileWishItems))
+	r.mux.HandleFunc("POST /v1/wish-items", r.auth(r.createWishItem))
+	r.mux.HandleFunc("GET /v1/yurubos", r.auth(r.listYurubos))
+	r.mux.HandleFunc("POST /v1/yurubos", r.auth(r.createYurubo))
+	r.mux.HandleFunc("PATCH /v1/yurubos/{id}", r.auth(r.updateYurubo))
+	r.mux.HandleFunc("PUT /v1/yurubos/{id}/reaction", r.auth(r.reactYurubo))
+	r.mux.HandleFunc("DELETE /v1/yurubos/{id}/reaction", r.auth(r.unreactYurubo))
 	r.mux.HandleFunc("GET /v1/memories", r.auth(r.listMemories))
 	r.mux.HandleFunc("POST /v1/memories", r.auth(r.createMemory))
 	r.mux.HandleFunc("DELETE /v1/memories/{id}", r.auth(r.deleteMemory))
@@ -283,13 +298,8 @@ func (r *router) listMonthlyDailyStatuses(w http.ResponseWriter, req *http.Reque
 
 func (r *router) auth(next func(http.ResponseWriter, *http.Request, string)) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		auth := req.Header.Get("Authorization")
-		if !strings.HasPrefix(auth, "Bearer ") {
-			writeError(w, http.StatusUnauthorized, "missing Bearer token")
-			return
-		}
-		token := strings.TrimSpace(strings.TrimPrefix(auth, "Bearer "))
-		if token == "" {
+		token, ok := bearerTokenFromRequest(req)
+		if !ok {
 			writeError(w, http.StatusUnauthorized, "missing Bearer token")
 			return
 		}
@@ -299,9 +309,9 @@ func (r *router) auth(next func(http.ResponseWriter, *http.Request, string)) htt
 			writeError(w, http.StatusBadRequest, errMessage)
 			return
 		}
-		var authUser AuthUser
-		if err := r.deps.Supabase.GetAuthUser(req.Context(), token, &authUser); err != nil {
-			writeSupabaseError(w, err)
+		authUser, err := r.verifyAuthToken(req.Context(), token)
+		if err != nil {
+			writeAuthVerificationError(w, err)
 			return
 		}
 		authUserID, errMessage := cleanUUID(authUser.ID, "auth user id")

@@ -1,15 +1,22 @@
 package httpapi
 
 import (
+	"crypto"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"log/slog"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/yota/ohey/backend/internal/config"
 	"github.com/yota/ohey/backend/internal/supabase"
@@ -80,6 +87,18 @@ func (f *fakeSupabase) lastRequest(path string) (recordedRequest, bool) {
 	return recordedRequest{}, false
 }
 
+func (f *fakeSupabase) countRequests(path string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	count := 0
+	for _, request := range f.requests {
+		if request.Path == path {
+			count++
+		}
+	}
+	return count
+}
+
 func testRouter(fake *fakeSupabase, adminEmails ...string) http.Handler {
 	return NewRouter(Dependencies{
 		Config: config.Config{
@@ -106,6 +125,144 @@ func writeFakeJSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(value)
+}
+
+func signedSupabaseJWT(t *testing.T, privateKey *rsa.PrivateKey, issuer, kid, subject, email string, expiresAt time.Time) string {
+	t.Helper()
+	header := map[string]any{"typ": "JWT", "alg": "RS256", "kid": kid}
+	claims := map[string]any{
+		"iss":   issuer,
+		"sub":   subject,
+		"aud":   "authenticated",
+		"role":  "authenticated",
+		"email": email,
+		"exp":   expiresAt.Unix(),
+		"iat":   time.Now().Add(-time.Minute).Unix(),
+	}
+	headerPart := encodeJWTPart(t, header)
+	claimsPart := encodeJWTPart(t, claims)
+	signingInput := headerPart + "." + claimsPart
+	digest := sha256.Sum256([]byte(signingInput))
+	signature, err := rsa.SignPKCS1v15(rand.Reader, privateKey, crypto.SHA256, digest[:])
+	if err != nil {
+		t.Fatalf("sign jwt: %v", err)
+	}
+	return signingInput + "." + base64.RawURLEncoding.EncodeToString(signature)
+}
+
+func encodeJWTPart(t *testing.T, value any) string {
+	t.Helper()
+	data, err := json.Marshal(value)
+	if err != nil {
+		t.Fatalf("marshal jwt part: %v", err)
+	}
+	return base64.RawURLEncoding.EncodeToString(data)
+}
+
+func rsaPublicJWK(key *rsa.PublicKey, kid string) map[string]any {
+	return map[string]any{
+		"kty":     "RSA",
+		"kid":     kid,
+		"alg":     "RS256",
+		"key_ops": []string{"verify"},
+		"n":       base64.RawURLEncoding.EncodeToString(key.N.Bytes()),
+		"e":       base64.RawURLEncoding.EncodeToString(big.NewInt(int64(key.E)).Bytes()),
+	}
+}
+
+func TestAuthUsesJWKSVerifiedSubjectWithoutAuthUserRoundTrip(t *testing.T) {
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	const kid = "test-key"
+	fake := newFakeSupabase(t, func(w http.ResponseWriter, req *http.Request) {
+		switch req.URL.Path {
+		case "/auth/v1/.well-known/jwks.json":
+			writeFakeJSON(w, http.StatusOK, map[string]any{"keys": []map[string]any{rsaPublicJWK(&privateKey.PublicKey, kid)}})
+		case "/rest/v1/profiles":
+			writeFakeJSON(w, http.StatusOK, []map[string]any{{
+				"id":            testUserID,
+				"user_id":       "valid_user",
+				"display_name":  "Valid User",
+				"gender":        "unspecified",
+				"character_key": "avatar",
+				"is_plus":       false,
+			}})
+		default:
+			writeFakeJSON(w, http.StatusOK, []map[string]any{})
+		}
+	})
+	token := signedSupabaseJWT(t, privateKey, fake.server.URL+"/auth/v1", kid, testUserID, "user@example.com", time.Now().Add(time.Hour))
+	req := authedRequest(http.MethodGet, "/v1/me/profile", "")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+
+	testRouter(fake).ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+	}
+	if got := fake.countRequests("/auth/v1/user"); got != 0 {
+		t.Fatalf("auth user round trips = %d, want 0", got)
+	}
+	if got := fake.countRequests("/auth/v1/.well-known/jwks.json"); got != 1 {
+		t.Fatalf("jwks requests = %d, want 1", got)
+	}
+}
+
+func TestAuthCachesAuthServerUserForOpaqueToken(t *testing.T) {
+	fake := newFakeSupabase(t, func(w http.ResponseWriter, req *http.Request) {
+		if req.URL.Path == "/rest/v1/profiles" {
+			writeFakeJSON(w, http.StatusOK, []map[string]any{{
+				"id":            testUserID,
+				"user_id":       "valid_user",
+				"display_name":  "Valid User",
+				"gender":        "unspecified",
+				"character_key": "avatar",
+				"is_plus":       false,
+			}})
+			return
+		}
+		writeFakeJSON(w, http.StatusOK, []map[string]any{})
+	})
+	router := testRouter(fake)
+
+	for range 2 {
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, authedRequest(http.MethodGet, "/v1/me/profile", ""))
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+		}
+	}
+
+	if got := fake.countRequests("/auth/v1/user"); got != 1 {
+		t.Fatalf("auth user round trips = %d, want 1", got)
+	}
+}
+
+func TestAuthRejectsExpiredJWKSJWTWithoutAuthUserFallback(t *testing.T) {
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	fake := newFakeSupabase(t, nil)
+	token := signedSupabaseJWT(t, privateKey, fake.server.URL+"/auth/v1", "test-key", testUserID, "user@example.com", time.Now().Add(-time.Hour))
+	req := authedRequest(http.MethodGet, "/v1/me/profile", "")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+
+	testRouter(fake).ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+	}
+	if got := fake.countRequests("/auth/v1/user"); got != 0 {
+		t.Fatalf("auth user fallback requests = %d, want 0", got)
+	}
+	if got := fake.countRequests("/auth/v1/.well-known/jwks.json"); got != 0 {
+		t.Fatalf("jwks requests = %d, want 0", got)
+	}
 }
 
 func TestAuthRejectsUserIDMismatch(t *testing.T) {
