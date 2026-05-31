@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - development
+    paths:
+      - 'cmd/**'
+      - 'internal/**'
+      - 'docs/**'
+      - 'Dockerfile'
+      - 'go.mod'
+      - 'render.yaml'
+      - '.github/workflows/ci.yml'
+  pull_request:
+    branches:
+      - development
+    paths:
+      - 'cmd/**'
+      - 'internal/**'
+      - 'docs/**'
+      - 'Dockerfile'
+      - 'go.mod'
+      - 'render.yaml'
+      - '.github/workflows/ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ohey-backend-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  go_test:
+    name: Go test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Run shared Go test action
+        uses: Suuu-sh/Shared/actions/go-test@main
+        with:
+          working-directory: .
+          go-version: '1.23'
+          test-command: go test ./...
+          upload-coverage: 'false'
+
+  go_vet:
+    name: Go vet
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Run go vet via shared Go action
+        uses: Suuu-sh/Shared/actions/go-test@main
+        with:
+          working-directory: .
+          go-version: '1.23'
+          test-command: go vet ./...
+          upload-coverage: 'false'
