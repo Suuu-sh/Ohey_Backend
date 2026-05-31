@@ -24,13 +24,19 @@ type Dependencies struct {
 }
 
 type router struct {
-	deps        Dependencies
-	mux         *http.ServeMux
-	rateLimiter *actionRateLimiter
+	deps         Dependencies
+	mux          *http.ServeMux
+	rateLimiter  *actionRateLimiter
+	authVerifier *authVerifier
 }
 
 func NewRouter(deps Dependencies) http.Handler {
-	r := &router{deps: deps, mux: http.NewServeMux(), rateLimiter: newActionRateLimiter(timeNow)}
+	r := &router{
+		deps:         deps,
+		mux:          http.NewServeMux(),
+		rateLimiter:  newActionRateLimiter(timeNow),
+		authVerifier: newAuthVerifier(deps.Supabase, deps.Config.SupabaseURL, timeNow),
+	}
 	r.routes()
 	return r.withCORS(r.mux)
 }
@@ -284,13 +290,8 @@ func (r *router) listMonthlyDailyStatuses(w http.ResponseWriter, req *http.Reque
 
 func (r *router) auth(next func(http.ResponseWriter, *http.Request, string)) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		auth := req.Header.Get("Authorization")
-		if !strings.HasPrefix(auth, "Bearer ") {
-			writeError(w, http.StatusUnauthorized, "missing Bearer token")
-			return
-		}
-		token := strings.TrimSpace(strings.TrimPrefix(auth, "Bearer "))
-		if token == "" {
+		token, ok := bearerTokenFromRequest(req)
+		if !ok {
 			writeError(w, http.StatusUnauthorized, "missing Bearer token")
 			return
 		}
@@ -300,9 +301,9 @@ func (r *router) auth(next func(http.ResponseWriter, *http.Request, string)) htt
 			writeError(w, http.StatusBadRequest, errMessage)
 			return
 		}
-		var authUser AuthUser
-		if err := r.deps.Supabase.GetAuthUser(req.Context(), token, &authUser); err != nil {
-			writeSupabaseError(w, err)
+		authUser, err := r.verifyAuthToken(req.Context(), token)
+		if err != nil {
+			writeAuthVerificationError(w, err)
 			return
 		}
 		authUserID, errMessage := cleanUUID(authUser.ID, "auth user id")

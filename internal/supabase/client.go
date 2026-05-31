@@ -101,6 +101,34 @@ func (c *Client) GetAuthUser(ctx context.Context, accessToken string, out any) e
 	return c.doURL(ctx, http.MethodGet, endpoint, accessToken, nil, out, nil)
 }
 
+func (c *Client) GetAuthJWKS(ctx context.Context, out any) error {
+	endpoint := fmt.Sprintf("%s/auth/v1/.well-known/jwks.json", c.baseURL)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("apikey", c.apiKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return APIError{StatusCode: resp.StatusCode, Body: string(data)}
+	}
+	if out == nil || len(data) == 0 {
+		return nil
+	}
+	return json.Unmarshal(data, out)
+}
+
 func (c *Client) AdminCreateUser(ctx context.Context, body any, out any) error {
 	endpoint := fmt.Sprintf("%s/auth/v1/admin/users", c.baseURL)
 	return c.doURL(ctx, http.MethodPost, endpoint, c.apiKey, body, out, nil)
