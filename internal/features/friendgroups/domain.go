@@ -98,6 +98,7 @@ type SaveInputBody struct {
 }
 
 type FriendGroup struct {
+	RowID     string   `json:"row_id,omitempty"`
 	ID        string   `json:"id"`
 	Name      string   `json:"name"`
 	FriendIDs []string `json:"friend_ids"`

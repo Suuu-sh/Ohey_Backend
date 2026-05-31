@@ -60,6 +60,7 @@ func (r *router) routes() {
 	r.mux.HandleFunc("PATCH /v1/friend-requests/{id}", r.auth(r.updateFriendRequest))
 	r.mux.HandleFunc("GET /v1/home/feed", r.auth(r.listHomeFeed))
 	r.mux.HandleFunc("GET /v1/yurubos", r.auth(r.listYurubos))
+	r.mux.HandleFunc("POST /v1/yurubos", r.auth(r.createYurubo))
 	r.mux.HandleFunc("PUT /v1/yurubos/{id}/reaction", r.auth(r.reactYurubo))
 	r.mux.HandleFunc("DELETE /v1/yurubos/{id}/reaction", r.auth(r.unreactYurubo))
 	r.mux.HandleFunc("GET /v1/memories", r.auth(r.listMemories))

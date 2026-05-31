@@ -9,10 +9,84 @@ import (
 	"github.com/yota/ohey/backend/internal/supabase"
 )
 
-const yuruboSelectColumns = "id,owner_user_id,title,body,category,place_text,place_lat,place_lng,time_label,starts_at,ends_at,status,visibility,expires_at,created_at,updated_at,owner:profiles!yurubos_owner_user_id_fkey(id,user_id,display_name,gender,character_key,avatar_url,is_plus),yurubo_reactions(user_id,reaction_type)"
+const yuruboSelectColumns = "id,owner_user_id,title,body,category,place_text,place_lat,place_lng,time_label,starts_at,ends_at,status,visibility,expires_at,created_at,updated_at,owner:profiles!yurubos_owner_user_id_fkey(id,user_id,display_name,gender,character_key,avatar_url,is_plus),yurubo_reactions(user_id,reaction_type),yurubo_visibility_groups(friend_groups(id,client_id,name))"
 
 type yuruboReactionRequest struct {
 	ReactionType string `json:"reaction_type"`
+}
+
+type yuruboCreateRequest struct {
+	Title      string `json:"title"`
+	Body       string `json:"body"`
+	Category   string `json:"category"`
+	PlaceText  string `json:"place_text"`
+	TimeLabel  string `json:"time_label"`
+	Visibility string `json:"visibility"`
+	GroupID    string `json:"group_id"`
+}
+
+func (r *router) createYurubo(w http.ResponseWriter, req *http.Request, authToken string) {
+	var body yuruboCreateRequest
+	if !decodeJSONBody(w, req, &body) {
+		return
+	}
+	title := strings.TrimSpace(body.Title)
+	if title == "" {
+		writeError(w, http.StatusBadRequest, "title is required")
+		return
+	}
+	if len([]rune(title)) > 80 {
+		writeError(w, http.StatusBadRequest, "title is too long")
+		return
+	}
+	visibility := strings.TrimSpace(body.Visibility)
+	if visibility == "" {
+		visibility = "friends"
+	}
+	if visibility != "friends" && visibility != "group" {
+		writeError(w, http.StatusBadRequest, "invalid visibility")
+		return
+	}
+	var groupID string
+	if visibility == "group" {
+		var msg string
+		groupID, msg = cleanUUID(body.GroupID, "group id")
+		if msg != "" {
+			writeError(w, http.StatusBadRequest, msg)
+			return
+		}
+	}
+	category := strings.TrimSpace(body.Category)
+	if category == "" {
+		category = "other"
+	}
+	payload := map[string]any{
+		"owner_user_id": req.Header.Get("X-Ohey-User-ID"),
+		"title":         title,
+		"body":          strings.TrimSpace(body.Body),
+		"category":      category,
+		"place_text":    strings.TrimSpace(body.PlaceText),
+		"time_label":    strings.TrimSpace(body.TimeLabel),
+		"visibility":    visibility,
+	}
+	var rows []map[string]any
+	if err := r.deps.Supabase.Post(req.Context(), authToken, "yurubos", nil, payload, &rows); err != nil {
+		writeError(w, http.StatusBadGateway, sanitizeSupabaseError(err))
+		return
+	}
+	if len(rows) == 0 {
+		writeError(w, http.StatusBadGateway, "yurubo insert returned no rows")
+		return
+	}
+	yuruboID, _ := rows[0]["id"].(string)
+	if visibility == "group" {
+		var ignored []map[string]any
+		if err := r.deps.Supabase.Post(req.Context(), authToken, "yurubo_visibility_groups", nil, map[string]any{"yurubo_id": yuruboID, "group_id": groupID}, &ignored); err != nil {
+			writeError(w, http.StatusBadGateway, sanitizeSupabaseError(err))
+			return
+		}
+	}
+	writeJSON(w, http.StatusCreated, rows[0])
 }
 
 func (r *router) listYurubos(w http.ResponseWriter, req *http.Request, authToken string) {
@@ -62,6 +136,7 @@ func (r *router) listYurubos(w http.ResponseWriter, req *http.Request, authToken
 			}
 		}
 		row["reacted_by_me"] = liked
+		row["visibility_label"] = yuruboVisibilityLabel(row)
 		out = append(out, row)
 	}
 	writeJSON(w, http.StatusOK, out)
@@ -111,6 +186,28 @@ func (r *router) unreactYurubo(w http.ResponseWriter, req *http.Request, authTok
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"reacted_by_me": false})
+}
+
+func yuruboVisibilityLabel(row map[string]any) string {
+	visibility, _ := row["visibility"].(string)
+	if visibility != "group" {
+		return "全フレンズ"
+	}
+	rawGroups, _ := row["yurubo_visibility_groups"].([]any)
+	for _, raw := range rawGroups {
+		link, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		group, ok := link["friend_groups"].(map[string]any)
+		if !ok {
+			continue
+		}
+		if name, _ := group["name"].(string); strings.TrimSpace(name) != "" {
+			return strings.TrimSpace(name)
+		}
+	}
+	return "グループ"
 }
 
 func sanitizeSupabaseError(err error) string {
