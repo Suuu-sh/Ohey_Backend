@@ -9,7 +9,7 @@ import (
 	"github.com/yota/ohey/backend/internal/supabase"
 )
 
-const yuruboSelectColumns = "id,owner_user_id,title,body,category,place_text,place_lat,place_lng,time_label,starts_at,ends_at,status,visibility,expires_at,created_at,updated_at,owner:profiles!yurubos_owner_user_id_fkey(id,user_id,display_name,gender,character_key,avatar_url,is_plus),yurubo_reactions(user_id,reaction_type),yurubo_visibility_groups(friend_groups(id,client_id,name))"
+const yuruboSelectColumns = "id,owner_user_id,title,body,category,place_text,place_lat,place_lng,time_label,starts_at,ends_at,status,visibility,expires_at,created_at,updated_at,owner:profiles!yurubos_owner_user_id_fkey(id,user_id,display_name,gender,character_key,avatar_url,is_plus)"
 
 type yuruboReactionRequest struct {
 	ReactionType string `json:"reaction_type"`
@@ -120,24 +120,27 @@ func (r *router) listYurubos(w http.ResponseWriter, req *http.Request, authToken
 		writeError(w, http.StatusBadGateway, sanitizeSupabaseError(err))
 		return
 	}
+	ids := make([]string, 0, len(rows))
 	out := make([]map[string]any, 0, len(rows))
 	for _, row := range rows {
 		id, _ := row["id"].(string)
 		if id == "" || hiddenSet[id] {
 			continue
 		}
-		reactions, _ := row["yurubo_reactions"].([]any)
-		row["reaction_count"] = len(reactions)
-		liked := false
-		for _, raw := range reactions {
-			if m, ok := raw.(map[string]any); ok && m["user_id"] == userID {
-				liked = true
-				break
-			}
-		}
-		row["reacted_by_me"] = liked
-		row["visibility_label"] = yuruboVisibilityLabel(row)
+		ids = append(ids, id)
 		out = append(out, row)
+	}
+	reactionCounts, reactedByMe := r.yuruboReactionSummaries(req, authToken, ids, userID)
+	visibilityLabels := r.yuruboVisibilityLabels(req, authToken, out)
+	for _, row := range out {
+		id, _ := row["id"].(string)
+		row["reaction_count"] = reactionCounts[id]
+		row["reacted_by_me"] = reactedByMe[id]
+		if label := visibilityLabels[id]; label != "" {
+			row["visibility_label"] = label
+		} else {
+			row["visibility_label"] = "全フレンズ"
+		}
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -186,6 +189,69 @@ func (r *router) unreactYurubo(w http.ResponseWriter, req *http.Request, authTok
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"reacted_by_me": false})
+}
+
+func (r *router) yuruboReactionSummaries(req *http.Request, authToken string, ids []string, userID string) (map[string]int, map[string]bool) {
+	counts := map[string]int{}
+	reactedByMe := map[string]bool{}
+	if len(ids) == 0 {
+		return counts, reactedByMe
+	}
+	q := url.Values{}
+	q.Set("select", "yurubo_id,user_id")
+	q.Set("yurubo_id", "in.("+strings.Join(ids, ",")+")")
+	var rows []map[string]any
+	if err := r.deps.Supabase.Get(req.Context(), authToken, "yurubo_reactions", q, &rows); err != nil {
+		return counts, reactedByMe
+	}
+	for _, row := range rows {
+		id, _ := row["yurubo_id"].(string)
+		if id == "" {
+			continue
+		}
+		counts[id]++
+		if actor, _ := row["user_id"].(string); actor == userID {
+			reactedByMe[id] = true
+		}
+	}
+	return counts, reactedByMe
+}
+
+func (r *router) yuruboVisibilityLabels(req *http.Request, authToken string, rows []map[string]any) map[string]string {
+	labels := map[string]string{}
+	groupIDs := []string{}
+	for _, row := range rows {
+		id, _ := row["id"].(string)
+		visibility, _ := row["visibility"].(string)
+		if visibility != "group" {
+			labels[id] = "全フレンズ"
+			continue
+		}
+		groupIDs = append(groupIDs, id)
+	}
+	if len(groupIDs) == 0 {
+		return labels
+	}
+	q := url.Values{}
+	q.Set("select", "yurubo_id,friend_groups(name)")
+	q.Set("yurubo_id", "in.("+strings.Join(groupIDs, ",")+")")
+	var links []map[string]any
+	if err := r.deps.Supabase.Get(req.Context(), authToken, "yurubo_visibility_groups", q, &links); err != nil {
+		for _, id := range groupIDs {
+			labels[id] = "グループ"
+		}
+		return labels
+	}
+	for _, link := range links {
+		id, _ := link["yurubo_id"].(string)
+		group, _ := link["friend_groups"].(map[string]any)
+		name, _ := group["name"].(string)
+		if strings.TrimSpace(name) == "" {
+			name = "グループ"
+		}
+		labels[id] = strings.TrimSpace(name)
+	}
+	return labels
 }
 
 func yuruboVisibilityLabel(row map[string]any) string {
