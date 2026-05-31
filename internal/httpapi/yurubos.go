@@ -159,6 +159,27 @@ func (r *router) updateYurubo(w http.ResponseWriter, req *http.Request, authToke
 	writeJSON(w, http.StatusOK, rows[0])
 }
 
+func (r *router) deleteYurubo(w http.ResponseWriter, req *http.Request, authToken string) {
+	id, msg := cleanUUID(req.PathValue("id"), "yurubo id")
+	if msg != "" {
+		writeError(w, http.StatusBadRequest, msg)
+		return
+	}
+	q := url.Values{}
+	q.Set("id", "eq."+id)
+	q.Set("owner_user_id", "eq."+req.Header.Get("X-Ohey-User-ID"))
+	var rows []map[string]any
+	if err := r.deps.Supabase.Delete(req.Context(), authToken, "yurubos", q, &rows); err != nil {
+		writeError(w, http.StatusBadGateway, sanitizeSupabaseError(err))
+		return
+	}
+	if len(rows) == 0 {
+		writeError(w, http.StatusNotFound, "yurubo not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, rows[0])
+}
+
 func (r *router) listYurubos(w http.ResponseWriter, req *http.Request, authToken string) {
 	userID := req.Header.Get("X-Ohey-User-ID")
 	q := url.Values{}
