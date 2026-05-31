@@ -26,6 +26,13 @@ type yuruboCreateRequest struct {
 	WishItemID string `json:"wish_item_id"`
 }
 
+type yuruboUpdateRequest struct {
+	Title     string `json:"title"`
+	Body      string `json:"body"`
+	PlaceText string `json:"place_text"`
+	TimeLabel string `json:"time_label"`
+}
+
 func (r *router) createYurubo(w http.ResponseWriter, req *http.Request, authToken string) {
 	var body yuruboCreateRequest
 	if !decodeJSONBody(w, req, &body) {
@@ -110,6 +117,46 @@ func (r *router) createYurubo(w http.ResponseWriter, req *http.Request, authToke
 		}
 	}
 	writeJSON(w, http.StatusCreated, rows[0])
+}
+
+func (r *router) updateYurubo(w http.ResponseWriter, req *http.Request, authToken string) {
+	id, msg := cleanUUID(req.PathValue("id"), "yurubo id")
+	if msg != "" {
+		writeError(w, http.StatusBadRequest, msg)
+		return
+	}
+	var body yuruboUpdateRequest
+	if !decodeJSONBody(w, req, &body) {
+		return
+	}
+	title := strings.TrimSpace(body.Title)
+	if title == "" {
+		writeError(w, http.StatusBadRequest, "title is required")
+		return
+	}
+	if len([]rune(title)) > 80 {
+		writeError(w, http.StatusBadRequest, "title is too long")
+		return
+	}
+	q := url.Values{}
+	q.Set("id", "eq."+id)
+	q.Set("owner_user_id", "eq."+req.Header.Get("X-Ohey-User-ID"))
+	payload := map[string]any{
+		"title":      title,
+		"body":       strings.TrimSpace(body.Body),
+		"place_text": strings.TrimSpace(body.PlaceText),
+		"time_label": strings.TrimSpace(body.TimeLabel),
+	}
+	var rows []map[string]any
+	if err := r.deps.Supabase.Patch(req.Context(), authToken, "yurubos", q, payload, &rows); err != nil {
+		writeError(w, http.StatusBadGateway, sanitizeSupabaseError(err))
+		return
+	}
+	if len(rows) == 0 {
+		writeError(w, http.StatusNotFound, "yurubo not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, rows[0])
 }
 
 func (r *router) listYurubos(w http.ResponseWriter, req *http.Request, authToken string) {
