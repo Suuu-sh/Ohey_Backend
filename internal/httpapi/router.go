@@ -49,6 +49,7 @@ func (r *router) routes() {
 	r.mux.HandleFunc("PATCH /v1/me/profile", r.auth(r.updateProfile))
 	r.mux.HandleFunc("GET /v1/profiles/by-user-id/{user_id}", r.auth(r.getProfileByUserID))
 	r.mux.HandleFunc("GET /v1/friends", r.auth(r.listFriends))
+	r.mux.HandleFunc("GET /v1/friends/{id}/daily-statuses/month", r.auth(r.listFriendMonthlyDailyStatuses))
 	r.mux.HandleFunc("POST /v1/friends", r.auth(r.createFriendship))
 	r.mux.HandleFunc("DELETE /v1/friends/{id}", r.auth(r.deleteFriendship))
 	r.mux.HandleFunc("PUT /v1/friends/{id}/favorite", r.auth(r.updateFriendFavorite))
@@ -251,6 +252,20 @@ func (r *router) deleteMemory(w http.ResponseWriter, req *http.Request, authToke
 		return
 	}
 	writeJSON(w, http.StatusOK, row)
+}
+
+func (r *router) listFriendMonthlyDailyStatuses(w http.ResponseWriter, req *http.Request, authToken string) {
+	rows, err := r.dailyStatusUsecase().ListFriendMonthlyStatuses(req.Context(), dailystatuses.FriendMonthInput{
+		AuthToken: authToken,
+		UserID:    req.Header.Get("X-Ohey-User-ID"),
+		FriendID:  req.PathValue("id"),
+		Month:     req.URL.Query().Get("month"),
+	})
+	if err != nil {
+		writeDailyStatusError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, rows)
 }
 
 func (r *router) getDailyStatus(w http.ResponseWriter, req *http.Request, authToken string) {

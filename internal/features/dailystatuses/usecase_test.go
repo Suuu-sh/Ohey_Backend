@@ -29,6 +29,10 @@ func (f *fakeRepository) ListMonthlyStatuses(_ context.Context, _ string, _ stri
 	return []map[string]any{{"status_date": startDate}}, nil
 }
 
+func (f *fakeRepository) FriendshipExists(context.Context, string, string, string) (bool, error) {
+	return true, nil
+}
+
 func (f *fakeRepository) UpsertDailyStatus(_ context.Context, _ string, _ DailyStatus) ([]map[string]any, error) {
 	return nil, nil
 }
@@ -80,6 +84,10 @@ func (f *upsertFakeRepository) GetDailyStatus(context.Context, string, string, s
 
 func (f *upsertFakeRepository) ListMonthlyStatuses(context.Context, string, string, string, string) ([]map[string]any, error) {
 	return nil, nil
+}
+
+func (f *upsertFakeRepository) FriendshipExists(context.Context, string, string, string) (bool, error) {
+	return true, nil
 }
 
 func (f *upsertFakeRepository) UpsertDailyStatus(_ context.Context, _ string, status DailyStatus) ([]map[string]any, error) {

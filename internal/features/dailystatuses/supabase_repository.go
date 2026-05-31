@@ -41,6 +41,18 @@ func (r *SupabaseRepository) ListMonthlyStatuses(ctx context.Context, authToken,
 	return rows, nil
 }
 
+func (r *SupabaseRepository) FriendshipExists(ctx context.Context, authToken, userID, friendID string) (bool, error) {
+	q := url.Values{}
+	q.Set("select", "id")
+	q.Set("or", "(and(user_a_id.eq."+userID+",user_b_id.eq."+friendID+"),and(user_a_id.eq."+friendID+",user_b_id.eq."+userID+"))")
+	q.Set("limit", "1")
+	var rows []map[string]any
+	if err := r.client.Get(ctx, authToken, "friendships", q, &rows); err != nil {
+		return false, err
+	}
+	return len(rows) > 0, nil
+}
+
 func (r *SupabaseRepository) UpsertDailyStatus(ctx context.Context, authToken string, status DailyStatus) ([]map[string]any, error) {
 	q := url.Values{}
 	q.Set("on_conflict", "user_id,status_date")
