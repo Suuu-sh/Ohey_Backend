@@ -305,9 +305,19 @@ func (r *router) updateYuruboReaction(w http.ResponseWriter, req *http.Request, 
 	q := url.Values{}
 	q.Set("yurubo_id", "eq."+id)
 	q.Set("user_id", "eq."+participantID)
+	client := r.deps.Supabase
+	updateToken := authToken
+	if r.deps.AdminSupabase != nil && r.deps.Config.SupabaseServiceRoleKey != "" {
+		client = r.deps.AdminSupabase
+		updateToken = r.deps.Config.SupabaseServiceRoleKey
+	}
 	var rows []map[string]any
-	if err := r.deps.Supabase.Patch(req.Context(), authToken, "yurubo_reactions", q, map[string]any{"reaction_type": "available"}, &rows); err != nil {
+	if err := client.Patch(req.Context(), updateToken, "yurubo_reactions", q, map[string]any{"reaction_type": "available"}, &rows); err != nil {
 		writeError(w, http.StatusBadGateway, sanitizeSupabaseError(err))
+		return
+	}
+	if len(rows) == 0 {
+		writeError(w, http.StatusNotFound, "pending participation request not found")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"approved": true})
