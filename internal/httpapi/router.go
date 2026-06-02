@@ -70,6 +70,7 @@ func (r *router) routes() {
 	r.mux.HandleFunc("DELETE /v1/yurubos/{id}", r.auth(r.deleteYurubo))
 	r.mux.HandleFunc("PUT /v1/yurubos/{id}/reaction", r.auth(r.reactYurubo))
 	r.mux.HandleFunc("DELETE /v1/yurubos/{id}/reaction", r.auth(r.unreactYurubo))
+	r.mux.HandleFunc("PATCH /v1/yurubos/{id}/reactions/{user_id}", r.auth(r.updateYuruboReaction))
 	r.mux.HandleFunc("GET /v1/memories", r.auth(r.listMemories))
 	r.mux.HandleFunc("POST /v1/memories", r.auth(r.createMemory))
 	r.mux.HandleFunc("DELETE /v1/memories/{id}", r.auth(r.deleteMemory))

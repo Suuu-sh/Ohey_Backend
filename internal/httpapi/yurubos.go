@@ -241,12 +241,13 @@ func (r *router) listYurubos(w http.ResponseWriter, req *http.Request, authToken
 		ids = append(ids, id)
 		out = append(out, row)
 	}
-	reactionCounts, reactedByMe, participants := r.yuruboReactionSummaries(req, authToken, ids, userID)
+	reactionCounts, reactedByMe, myReactionTypes, participants := r.yuruboReactionSummaries(req, authToken, ids, userID)
 	visibilityLabels := r.yuruboVisibilityLabels(req, authToken, out)
 	for _, row := range out {
 		id, _ := row["id"].(string)
 		row["reaction_count"] = reactionCounts[id]
 		row["reacted_by_me"] = reactedByMe[id]
+		row["my_reaction_type"] = myReactionTypes[id]
 		row["participants"] = participants[id]
 		if label := visibilityLabels[id]; label != "" {
 			row["visibility_label"] = label
@@ -286,6 +287,45 @@ func (r *router) reactYurubo(w http.ResponseWriter, req *http.Request, authToken
 	writeJSON(w, http.StatusOK, map[string]any{"reacted_by_me": true})
 }
 
+func (r *router) updateYuruboReaction(w http.ResponseWriter, req *http.Request, authToken string) {
+	id, msg := cleanUUID(req.PathValue("id"), "yurubo id")
+	if msg != "" {
+		writeError(w, http.StatusBadRequest, msg)
+		return
+	}
+	participantID, msg := cleanUUID(req.PathValue("user_id"), "user id")
+	if msg != "" {
+		writeError(w, http.StatusBadRequest, msg)
+		return
+	}
+	if ownerID := r.yuruboOwnerID(req, authToken, id); ownerID == "" || ownerID != req.Header.Get("X-Ohey-User-ID") {
+		writeError(w, http.StatusForbidden, "only yurubo owner can approve participants")
+		return
+	}
+	q := url.Values{}
+	q.Set("yurubo_id", "eq."+id)
+	q.Set("user_id", "eq."+participantID)
+	var rows []map[string]any
+	if err := r.deps.Supabase.Patch(req.Context(), authToken, "yurubo_reactions", q, map[string]any{"reaction_type": "available"}, &rows); err != nil {
+		writeError(w, http.StatusBadGateway, sanitizeSupabaseError(err))
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"approved": true})
+}
+
+func (r *router) yuruboOwnerID(req *http.Request, authToken string, yuruboID string) string {
+	q := url.Values{}
+	q.Set("select", "owner_user_id")
+	q.Set("id", "eq."+yuruboID)
+	q.Set("limit", "1")
+	var rows []map[string]any
+	if err := r.deps.Supabase.Get(req.Context(), authToken, "yurubos", q, &rows); err != nil || len(rows) == 0 {
+		return ""
+	}
+	ownerID, _ := rows[0]["owner_user_id"].(string)
+	return ownerID
+}
+
 func (r *router) unreactYurubo(w http.ResponseWriter, req *http.Request, authToken string) {
 	id, msg := cleanUUID(req.PathValue("id"), "yurubo id")
 	if msg != "" {
@@ -303,19 +343,20 @@ func (r *router) unreactYurubo(w http.ResponseWriter, req *http.Request, authTok
 	writeJSON(w, http.StatusOK, map[string]any{"reacted_by_me": false})
 }
 
-func (r *router) yuruboReactionSummaries(req *http.Request, authToken string, ids []string, userID string) (map[string]int, map[string]bool, map[string][]map[string]any) {
+func (r *router) yuruboReactionSummaries(req *http.Request, authToken string, ids []string, userID string) (map[string]int, map[string]bool, map[string]string, map[string][]map[string]any) {
 	counts := map[string]int{}
 	reactedByMe := map[string]bool{}
+	myReactionTypes := map[string]string{}
 	participants := map[string][]map[string]any{}
 	if len(ids) == 0 {
-		return counts, reactedByMe, participants
+		return counts, reactedByMe, myReactionTypes, participants
 	}
 	q := url.Values{}
-	q.Set("select", "yurubo_id,user_id")
+	q.Set("select", "yurubo_id,user_id,reaction_type")
 	q.Set("yurubo_id", "in.("+strings.Join(ids, ",")+")")
 	var rows []map[string]any
 	if err := r.deps.Supabase.Get(req.Context(), authToken, "yurubo_reactions", q, &rows); err != nil {
-		return counts, reactedByMe, participants
+		return counts, reactedByMe, myReactionTypes, participants
 	}
 	userIDs := []string{}
 	seenUsers := map[string]bool{}
@@ -324,10 +365,14 @@ func (r *router) yuruboReactionSummaries(req *http.Request, authToken string, id
 		if id == "" {
 			continue
 		}
-		counts[id]++
+		reactionType, _ := row["reaction_type"].(string)
+		if reactionType == "available" {
+			counts[id]++
+		}
 		actor, _ := row["user_id"].(string)
 		if actor == userID {
 			reactedByMe[id] = true
+			myReactionTypes[id] = reactionType
 		}
 		if actor != "" && !seenUsers[actor] {
 			seenUsers[actor] = true
@@ -335,19 +380,32 @@ func (r *router) yuruboReactionSummaries(req *http.Request, authToken string, id
 		}
 	}
 	profilesByID := r.yuruboParticipantProfiles(req, authToken, userIDs)
+	owners := map[string]string{}
 	for _, row := range rows {
 		id, _ := row["yurubo_id"].(string)
 		actor, _ := row["user_id"].(string)
 		if id == "" || actor == "" {
 			continue
 		}
+		if owners[id] == "" {
+			owners[id] = r.yuruboOwnerID(req, authToken, id)
+		}
+		reactionType, _ := row["reaction_type"].(string)
+		if reactionType != "available" && owners[id] != userID && actor != userID {
+			continue
+		}
 		profile := profilesByID[actor]
 		if profile == nil {
 			profile = map[string]any{"id": actor}
 		}
-		participants[id] = append(participants[id], profile)
+		profileCopy := map[string]any{}
+		for key, value := range profile {
+			profileCopy[key] = value
+		}
+		profileCopy["reaction_type"] = reactionType
+		participants[id] = append(participants[id], profileCopy)
 	}
-	return counts, reactedByMe, participants
+	return counts, reactedByMe, myReactionTypes, participants
 }
 
 func (r *router) yuruboParticipantProfiles(req *http.Request, authToken string, userIDs []string) map[string]map[string]any {
