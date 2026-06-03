@@ -13,6 +13,10 @@ feature work:
 
 ## Local run
 
+Local backend runs are for backend-only diagnostics. Mobile dev / iOS Simulator
+verification should use the dev Render backend (`https://dev-ohey-backend.onrender.com`),
+not `localhost:8080`.
+
 ```sh
 cp .env.example .env
 # set SUPABASE_ANON_KEY from /Users/yota/Projects/Secrets/Ohey/supabase_dev-ohey.md
@@ -84,8 +88,8 @@ dev and production before using `/v1/admin/*`:
 
 - `SUPABASE_SERVICE_ROLE_KEY`
 
-Admin access is intentionally hard-limited to the Supabase Auth user whose
-email is `yisshiki39@gmail.com`.
+Admin access is intentionally hard-limited to Supabase Auth users whose
+emails are listed in `OHEY_ADMIN_EMAILS` for the target Render/backend environment.
 
 Available endpoints:
 
