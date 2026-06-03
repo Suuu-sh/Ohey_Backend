@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yota/ohey/backend/internal/contracts"
 	"github.com/yota/ohey/backend/internal/features/dailystatuses"
 	"github.com/yota/ohey/backend/internal/features/friendgroups"
 	"github.com/yota/ohey/backend/internal/features/friends"
@@ -705,7 +706,7 @@ func (p memoryEventPublisher) Publish(ctx context.Context, authToken string, eve
 	case memories.EventMemoryTagged:
 		p.router.enqueueAndProcessNotificationOutboxEvent(ctx, authToken, notificationOutboxEvent{
 			EventKind:     string(event.Kind),
-			AggregateType: "memory",
+			AggregateType: contracts.FeedTypeMemory,
 			AggregateID:   event.MemoryID,
 			ActorUserID:   event.ActorUserID,
 			Payload:       payload,
@@ -713,7 +714,7 @@ func (p memoryEventPublisher) Publish(ctx context.Context, authToken string, eve
 	case memories.EventMemoryLiked:
 		p.router.enqueueAndProcessNotificationOutboxEvent(ctx, authToken, notificationOutboxEvent{
 			EventKind:     string(event.Kind),
-			AggregateType: "memory",
+			AggregateType: contracts.FeedTypeMemory,
 			AggregateID:   event.MemoryID,
 			ActorUserID:   event.ActorUserID,
 			Payload:       payload,
@@ -721,7 +722,7 @@ func (p memoryEventPublisher) Publish(ctx context.Context, authToken string, eve
 	case memories.EventMemoryReported:
 		p.router.enqueueAndProcessNotificationOutboxEvent(ctx, authToken, notificationOutboxEvent{
 			EventKind:     string(event.Kind),
-			AggregateType: "memory",
+			AggregateType: contracts.FeedTypeMemory,
 			AggregateID:   event.MemoryID,
 			ActorUserID:   event.ActorUserID,
 			Payload:       payload,
@@ -861,11 +862,11 @@ func dateOnlyParam(req *http.Request, name string) string {
 
 func isValidDailyStatus(status string) bool {
 	switch status {
-	case "unselected",
-		"available",
-		"maybe_available",
-		"depends_on_time",
-		"has_plans":
+	case contracts.DailyStatusUnselected,
+		contracts.DailyStatusAvailable,
+		contracts.DailyStatusMaybeAvailable,
+		contracts.DailyStatusDependsOnTime,
+		contracts.DailyStatusHasPlans:
 		return true
 	default:
 		return false

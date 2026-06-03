@@ -5,6 +5,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/yota/ohey/backend/internal/contracts"
 )
 
 type ErrorKind string
@@ -100,12 +102,12 @@ func MemoryDayWindow(input DayWindowInput, happenedAt time.Time) (time.Time, tim
 type ReportReason string
 
 const (
-	ReportReasonSpam          ReportReason = "spam"
-	ReportReasonHarassment    ReportReason = "harassment"
-	ReportReasonInappropriate ReportReason = "inappropriate"
-	ReportReasonViolence      ReportReason = "violence"
-	ReportReasonMinorSafety   ReportReason = "minor_safety"
-	ReportReasonOther         ReportReason = "other"
+	ReportReasonSpam          ReportReason = contracts.ReportReasonSpam
+	ReportReasonHarassment    ReportReason = contracts.ReportReasonHarassment
+	ReportReasonInappropriate ReportReason = contracts.ReportReasonInappropriate
+	ReportReasonViolence      ReportReason = contracts.ReportReasonViolence
+	ReportReasonMinorSafety   ReportReason = contracts.ReportReasonMinorSafety
+	ReportReasonOther         ReportReason = contracts.ReportReasonOther
 )
 
 func CleanReportReason(value string) (ReportReason, error) {
@@ -124,10 +126,10 @@ func CleanReportReason(value string) (ReportReason, error) {
 type ModerationStatus string
 
 const (
-	ModerationStatusPending   ModerationStatus = "pending"
-	ModerationStatusReviewing ModerationStatus = "reviewing"
-	ModerationStatusResolved  ModerationStatus = "resolved"
-	ModerationStatusDismissed ModerationStatus = "dismissed"
+	ModerationStatusPending   ModerationStatus = contracts.StatusPending
+	ModerationStatusReviewing ModerationStatus = contracts.ModerationStatusReviewing
+	ModerationStatusResolved  ModerationStatus = contracts.ModerationStatusResolved
+	ModerationStatusDismissed ModerationStatus = contracts.ModerationStatusDismissed
 )
 
 func CleanModerationStatus(value string) (ModerationStatus, error) {
@@ -188,9 +190,9 @@ type ReportResult struct {
 type DomainEventKind string
 
 const (
-	EventMemoryTagged   DomainEventKind = "memory.tagged"
-	EventMemoryLiked    DomainEventKind = "memory.liked"
-	EventMemoryReported DomainEventKind = "memory.reported"
+	EventMemoryTagged   DomainEventKind = contracts.DomainEventMemoryTagged
+	EventMemoryLiked    DomainEventKind = contracts.DomainEventMemoryLiked
+	EventMemoryReported DomainEventKind = contracts.DomainEventMemoryReported
 )
 
 type DomainEvent struct {

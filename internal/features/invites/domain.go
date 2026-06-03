@@ -6,14 +6,16 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/yota/ohey/backend/internal/contracts"
 )
 
 type InviteStatus string
 
 const (
-	InviteStatusPending  InviteStatus = "pending"
-	InviteStatusAccepted InviteStatus = "accepted"
-	InviteStatusRejected InviteStatus = "rejected"
+	InviteStatusPending  InviteStatus = contracts.StatusPending
+	InviteStatusAccepted InviteStatus = contracts.StatusAccepted
+	InviteStatusRejected InviteStatus = contracts.StatusRejected
 )
 
 type ErrorKind string
@@ -99,7 +101,7 @@ func NormalizeResponseStatus(value string) (InviteStatus, error) {
 
 func BlockedDailyStatusMessage(status string) string {
 	switch strings.TrimSpace(status) {
-	case "has_plans":
+	case contracts.DailyStatusHasPlans:
 		return "相手に予定があるため今日は誘えません。"
 	default:
 		return ""
@@ -116,8 +118,8 @@ func ExistingInviteConflictMessage(status InviteStatus) string {
 type DomainEventKind string
 
 const (
-	EventInviteCreated  DomainEventKind = "invite.created"
-	EventInviteAccepted DomainEventKind = "invite.accepted"
+	EventInviteCreated  DomainEventKind = contracts.DomainEventInviteCreated
+	EventInviteAccepted DomainEventKind = contracts.DomainEventInviteAccepted
 )
 
 type Invite struct {

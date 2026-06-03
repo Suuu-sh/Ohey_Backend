@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yota/ohey/backend/internal/contracts"
 	"github.com/yota/ohey/backend/internal/features/notifications"
 )
 
@@ -77,7 +78,7 @@ func ProcessNotificationOutboxOnce(ctx context.Context, deps Dependencies, limit
 }
 
 func (r *router) enqueueAndProcessNotificationOutboxEvent(ctx context.Context, authToken string, event notificationOutboxEvent) {
-	outboxID := r.recordNotificationOutboxEvent(ctx, event, "pending")
+	outboxID := r.recordNotificationOutboxEvent(ctx, event, contracts.StatusPending)
 	if outboxID == "" {
 		_ = r.dispatchNotificationOutboxEvent(ctx, authToken, event)
 		return
@@ -100,7 +101,7 @@ func (r *router) recordNotificationOutboxEvent(ctx context.Context, event notifi
 	}
 	status = strings.TrimSpace(status)
 	if status == "" {
-		status = "pending"
+		status = contracts.StatusPending
 	}
 	body := map[string]any{
 		"event_kind":     event.EventKind,
@@ -108,7 +109,7 @@ func (r *router) recordNotificationOutboxEvent(ctx context.Context, event notifi
 		"payload":        payload,
 		"status":         status,
 	}
-	if status == "processed" {
+	if status == contracts.OutboxStatusProcessed {
 		body["attempts"] = 1
 		body["processed_at"] = time.Now().UTC().Format(time.RFC3339)
 	}
@@ -139,19 +140,19 @@ func (r *router) dispatchNotificationOutboxEvent(ctx context.Context, authToken 
 		Logger:     r.deps.Logger,
 	})
 	switch event.EventKind {
-	case "friend_request.created":
+	case contracts.DomainEventFriendRequestCreated:
 		return usecase.NotifyFriendRequestReceived(ctx, authToken, event.Payload)
-	case "friend_request.accepted":
+	case contracts.DomainEventFriendRequestAccepted:
 		return usecase.NotifyFriendRequestAccepted(ctx, authToken, event.Payload)
-	case "invite.created":
+	case contracts.DomainEventInviteCreated:
 		return usecase.NotifyInviteReceived(ctx, authToken, event.Payload)
-	case "invite.accepted":
+	case contracts.DomainEventInviteAccepted:
 		return usecase.NotifyInviteAccepted(ctx, authToken, event.Payload)
-	case "memory.tagged":
+	case contracts.DomainEventMemoryTagged:
 		return usecase.NotifyMemoryTagged(ctx, authToken, stringValue(event.Payload, "memory_id"), stringValue(event.Payload, "owner_user_id"), stringSliceValue(event.Payload, "friend_ids"))
-	case "memory.liked":
+	case contracts.DomainEventMemoryLiked:
 		return usecase.NotifyMemoryLiked(ctx, authToken, stringValue(event.Payload, "memory_id"), stringValue(event.Payload, "actor_user_id"))
-	case "memory.reported", "system_notification.created":
+	case contracts.DomainEventMemoryReported, contracts.DomainEventSystemNotificationCreated:
 		return nil
 	default:
 		return fmt.Errorf("unsupported notification outbox event kind: %s", event.EventKind)
@@ -160,7 +161,7 @@ func (r *router) dispatchNotificationOutboxEvent(ctx context.Context, authToken 
 
 func (r *router) markNotificationOutboxProcessed(ctx context.Context, outboxID string) {
 	r.patchNotificationOutbox(ctx, outboxID, map[string]any{
-		"status":       "processed",
+		"status":       contracts.OutboxStatusProcessed,
 		"processed_at": time.Now().UTC().Format(time.RFC3339),
 		"last_error":   nil,
 	})
@@ -175,7 +176,7 @@ func (r *router) markNotificationOutboxFailed(ctx context.Context, outboxID stri
 	}
 	nextAttemptAt := time.Now().UTC().Add(time.Duration(1<<min(attempts, 6)) * time.Minute)
 	r.patchNotificationOutbox(ctx, outboxID, map[string]any{
-		"status":          "failed",
+		"status":          contracts.OutboxStatusFailed,
 		"attempts":        attempts,
 		"last_error":      shortText(err.Error(), 500),
 		"next_attempt_at": nextAttemptAt.Format(time.RFC3339),
@@ -199,7 +200,7 @@ func (r *router) adminListNotificationOutbox(w http.ResponseWriter, req *http.Re
 	q.Set("select", "id,event_kind,aggregate_type,aggregate_id,actor_user_id,recipient_user_id,status,attempts,last_error,next_attempt_at,processed_at,created_at,payload")
 	q.Set("order", "created_at.desc")
 	q.Set("limit", "100")
-	if status := strings.TrimSpace(req.URL.Query().Get("status")); status != "" && status != "all" {
+	if status := strings.TrimSpace(req.URL.Query().Get("status")); status != "" && status != contracts.QueryStatusAll {
 		q.Set("status", "eq."+status)
 	}
 	var rows []map[string]any
@@ -253,7 +254,7 @@ func (r *router) processNotificationOutbox(ctx context.Context, authToken string
 		}
 		result.ProcessedCount++
 		r.patchNotificationOutbox(ctx, id, map[string]any{
-			"status":       "processed",
+			"status":       contracts.OutboxStatusProcessed,
 			"attempts":     attempts,
 			"processed_at": time.Now().UTC().Format(time.RFC3339),
 			"last_error":   nil,
@@ -357,7 +358,7 @@ func (r *router) adminCreateNotification(w http.ResponseWriter, req *http.Reques
 		return
 	}
 	r.recordNotificationOutboxEvent(req.Context(), notificationOutboxEvent{
-		EventKind:     "system_notification.created",
+		EventKind:     contracts.DomainEventSystemNotificationCreated,
 		AggregateType: "system_notification",
 		Payload: map[string]any{
 			"title":              input.Title,
@@ -368,7 +369,7 @@ func (r *router) adminCreateNotification(w http.ResponseWriter, req *http.Reques
 			"recipient_count":    result.RecipientCount,
 			"created_count":      result.CreatedCount,
 		},
-	}, "processed")
+	}, contracts.OutboxStatusProcessed)
 	writeJSON(w, http.StatusCreated, result)
 }
 

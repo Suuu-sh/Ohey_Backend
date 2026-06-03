@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/yota/ohey/backend/internal/contracts"
 )
 
 type ErrorKind string
@@ -84,19 +86,19 @@ func BuildFeedItem(row map[string]any, currentUserID string) (FeedItem, bool) {
 	if !displayable || id == "" {
 		return FeedItem{}, false
 	}
-	postKind := "friend"
+	postKind := contracts.FeedPostKindFriend
 	switch {
 	case isOfficial:
-		postKind = "official"
+		postKind = contracts.FeedPostKindOfficial
 	case ownedByMe:
-		postKind = "mine"
+		postKind = contracts.FeedPostKindMine
 	}
 	owner := mapValue(row, "owner")
 	authorName := feedAuthorName(owner, isOfficial)
 	sortAt := stringValue(row, "happened_at")
 	item := FeedItem{
 		ID:          id,
-		Type:        "memory",
+		Type:        contracts.FeedTypeMemory,
 		PostKind:    postKind,
 		Displayable: true,
 		AuthorName:  authorName,
@@ -115,7 +117,7 @@ func BuildFeedItem(row map[string]any, currentUserID string) (FeedItem, bool) {
 		RankScore:   RankScore(row, currentUserID),
 		AccentSeed:  accentSeed(id),
 		Tilt:        tiltForID(id),
-		Prop:        "memory",
+		Prop:        contracts.FeedPropMemory,
 		Sparkles: []FeedOffset{
 			{X: 12, Y: 18},
 			{X: 54, Y: 2},

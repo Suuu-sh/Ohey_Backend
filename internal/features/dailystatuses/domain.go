@@ -5,6 +5,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/yota/ohey/backend/internal/contracts"
 )
 
 type ErrorKind string
@@ -44,11 +46,11 @@ func CleanUUID(value, field string) (string, error) {
 type Status string
 
 const (
-	StatusUnselected     Status = "unselected"
-	StatusAvailable      Status = "available"
-	StatusMaybeAvailable Status = "maybe_available"
-	StatusDependsOnTime  Status = "depends_on_time"
-	StatusHasPlans       Status = "has_plans"
+	StatusUnselected     Status = contracts.DailyStatusUnselected
+	StatusAvailable      Status = contracts.DailyStatusAvailable
+	StatusMaybeAvailable Status = contracts.DailyStatusMaybeAvailable
+	StatusDependsOnTime  Status = contracts.DailyStatusDependsOnTime
+	StatusHasPlans       Status = contracts.DailyStatusHasPlans
 )
 
 func CleanStatus(value string) (Status, error) {

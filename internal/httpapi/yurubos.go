@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yota/ohey/backend/internal/contracts"
 	"github.com/yota/ohey/backend/internal/supabase"
 )
 
@@ -53,14 +54,14 @@ func (r *router) createYurubo(w http.ResponseWriter, req *http.Request, authToke
 	}
 	visibility := strings.TrimSpace(body.Visibility)
 	if visibility == "" {
-		visibility = "friends"
+		visibility = contracts.VisibilityFriends
 	}
-	if visibility != "friends" && visibility != "group" {
+	if visibility != contracts.VisibilityFriends && visibility != contracts.VisibilityGroup {
 		writeError(w, http.StatusBadRequest, "invalid visibility")
 		return
 	}
 	var groupID string
-	if visibility == "group" {
+	if visibility == contracts.VisibilityGroup {
 		var msg string
 		groupID, msg = cleanUUID(body.GroupID, "group id")
 		if msg != "" {
@@ -70,7 +71,7 @@ func (r *router) createYurubo(w http.ResponseWriter, req *http.Request, authToke
 	}
 	category := strings.TrimSpace(body.Category)
 	if category == "" {
-		category = "other"
+		category = contracts.CategoryOther
 	}
 	payload := map[string]any{
 		"owner_user_id": req.Header.Get("X-Ohey-User-ID"),
@@ -119,7 +120,7 @@ func (r *router) createYurubo(w http.ResponseWriter, req *http.Request, authToke
 		return
 	}
 	yuruboID, _ := rows[0]["id"].(string)
-	if visibility == "group" {
+	if visibility == contracts.VisibilityGroup {
 		var ignored []map[string]any
 		if err := r.deps.Supabase.Post(req.Context(), authToken, "yurubo_visibility_groups", nil, map[string]any{"yurubo_id": yuruboID, "group_id": groupID}, &ignored); err != nil {
 			writeError(w, http.StatusBadGateway, sanitizeSupabaseError(err))
@@ -225,7 +226,7 @@ func (r *router) listYurubos(w http.ResponseWriter, req *http.Request, authToken
 	q.Set("select", yuruboSelectColumns)
 	q.Set("order", "created_at.desc")
 	q.Set("limit", strconv.Itoa(limit))
-	q.Set("status", "eq.open")
+	q.Set("status", "eq."+contracts.StatusOpen)
 	var rows []map[string]any
 	if err := r.deps.Supabase.Get(req.Context(), authToken, "yurubos", q, &rows); err != nil {
 		writeError(w, http.StatusBadGateway, sanitizeSupabaseError(err))
@@ -270,9 +271,9 @@ func (r *router) reactYurubo(w http.ResponseWriter, req *http.Request, authToken
 	}
 	reaction := strings.TrimSpace(body.ReactionType)
 	if reaction == "" {
-		reaction = "interested"
+		reaction = contracts.ReactionTypeInterested
 	}
-	if reaction != "interested" && reaction != "available" && reaction != "another_day" {
+	if reaction != contracts.ReactionTypeInterested && reaction != contracts.ReactionTypeAvailable && reaction != contracts.ReactionTypeAnotherDay {
 		writeError(w, http.StatusBadRequest, "invalid reaction_type")
 		return
 	}
@@ -312,7 +313,7 @@ func (r *router) updateYuruboReaction(w http.ResponseWriter, req *http.Request, 
 		updateToken = r.deps.Config.SupabaseServiceRoleKey
 	}
 	var rows []map[string]any
-	if err := client.Patch(req.Context(), updateToken, "yurubo_reactions", q, map[string]any{"reaction_type": "available"}, &rows); err != nil {
+	if err := client.Patch(req.Context(), updateToken, "yurubo_reactions", q, map[string]any{"reaction_type": contracts.ReactionTypeAvailable}, &rows); err != nil {
 		writeError(w, http.StatusBadGateway, sanitizeSupabaseError(err))
 		return
 	}
@@ -376,7 +377,7 @@ func (r *router) yuruboReactionSummaries(req *http.Request, authToken string, id
 			continue
 		}
 		reactionType, _ := row["reaction_type"].(string)
-		if reactionType == "available" {
+		if reactionType == contracts.ReactionTypeAvailable {
 			counts[id]++
 		}
 		actor, _ := row["user_id"].(string)
@@ -401,7 +402,7 @@ func (r *router) yuruboReactionSummaries(req *http.Request, authToken string, id
 			owners[id] = r.yuruboOwnerID(req, authToken, id)
 		}
 		reactionType, _ := row["reaction_type"].(string)
-		if reactionType != "available" && owners[id] != userID && actor != userID {
+		if reactionType != contracts.ReactionTypeAvailable && owners[id] != userID && actor != userID {
 			continue
 		}
 		profile := profilesByID[actor]
@@ -445,7 +446,7 @@ func (r *router) yuruboVisibilityLabels(req *http.Request, authToken string, row
 	for _, row := range rows {
 		id, _ := row["id"].(string)
 		visibility, _ := row["visibility"].(string)
-		if visibility != "group" {
+		if visibility != contracts.VisibilityGroup {
 			labels[id] = "全フレンズ"
 			continue
 		}
@@ -478,7 +479,7 @@ func (r *router) yuruboVisibilityLabels(req *http.Request, authToken string, row
 
 func yuruboVisibilityLabel(row map[string]any) string {
 	visibility, _ := row["visibility"].(string)
-	if visibility != "group" {
+	if visibility != contracts.VisibilityGroup {
 		return "全フレンズ"
 	}
 	rawGroups, _ := row["yurubo_visibility_groups"].([]any)

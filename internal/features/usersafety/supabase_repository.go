@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yota/ohey/backend/internal/contracts"
 	"github.com/yota/ohey/backend/internal/supabase"
 )
 
@@ -87,7 +88,7 @@ func (r *SupabaseRepository) ReportUser(ctx context.Context, authToken string, r
 		"reporter_user_id": report.ReporterUserID,
 		"reported_user_id": report.ReportedUserID,
 		"reason":           report.Reason,
-		"status":           "pending",
+		"status":           contracts.StatusPending,
 		"updated_at":       time.Now().UTC().Format(time.RFC3339),
 	}
 	q := url.Values{}
@@ -197,16 +198,16 @@ func (r *SupabaseRepository) closeFriendRequests(ctx context.Context, relation U
 	outgoing := url.Values{}
 	outgoing.Set("from_user_id", "eq."+relation.ActorUserID)
 	outgoing.Set("to_user_id", "eq."+relation.TargetUserID)
-	outgoing.Set("status", "eq.pending")
+	outgoing.Set("status", "eq."+contracts.StatusPending)
 	var ignored []map[string]any
-	if err := r.adminClient.Patch(ctx, r.serviceRoleKey, "friend_requests", outgoing, map[string]any{"status": "cancelled", "responded_at": respondedAt}, &ignored); err != nil {
+	if err := r.adminClient.Patch(ctx, r.serviceRoleKey, "friend_requests", outgoing, map[string]any{"status": contracts.StatusCancelled, "responded_at": respondedAt}, &ignored); err != nil {
 		return err
 	}
 	incoming := url.Values{}
 	incoming.Set("from_user_id", "eq."+relation.TargetUserID)
 	incoming.Set("to_user_id", "eq."+relation.ActorUserID)
-	incoming.Set("status", "eq.pending")
-	return r.adminClient.Patch(ctx, r.serviceRoleKey, "friend_requests", incoming, map[string]any{"status": "rejected", "responded_at": respondedAt}, &ignored)
+	incoming.Set("status", "eq."+contracts.StatusPending)
+	return r.adminClient.Patch(ctx, r.serviceRoleKey, "friend_requests", incoming, map[string]any{"status": contracts.StatusRejected, "responded_at": respondedAt}, &ignored)
 }
 
 func (r *SupabaseRepository) closeInvites(ctx context.Context, relation UserRelation) error {
@@ -214,16 +215,16 @@ func (r *SupabaseRepository) closeInvites(ctx context.Context, relation UserRela
 	outgoing := url.Values{}
 	outgoing.Set("inviter_user_id", "eq."+relation.ActorUserID)
 	outgoing.Set("invitee_user_id", "eq."+relation.TargetUserID)
-	outgoing.Set("status", "eq.pending")
+	outgoing.Set("status", "eq."+contracts.StatusPending)
 	var ignored []map[string]any
-	if err := r.adminClient.Patch(ctx, r.serviceRoleKey, "invites", outgoing, map[string]any{"status": "cancelled", "responded_at": respondedAt}, &ignored); err != nil {
+	if err := r.adminClient.Patch(ctx, r.serviceRoleKey, "invites", outgoing, map[string]any{"status": contracts.StatusCancelled, "responded_at": respondedAt}, &ignored); err != nil {
 		return err
 	}
 	incoming := url.Values{}
 	incoming.Set("inviter_user_id", "eq."+relation.TargetUserID)
 	incoming.Set("invitee_user_id", "eq."+relation.ActorUserID)
-	incoming.Set("status", "eq.pending")
-	return r.adminClient.Patch(ctx, r.serviceRoleKey, "invites", incoming, map[string]any{"status": "rejected", "responded_at": respondedAt}, &ignored)
+	incoming.Set("status", "eq."+contracts.StatusPending)
+	return r.adminClient.Patch(ctx, r.serviceRoleKey, "invites", incoming, map[string]any{"status": contracts.StatusRejected, "responded_at": respondedAt}, &ignored)
 }
 
 func firstMap(rows []map[string]any, fallback map[string]any) map[string]any {

@@ -5,6 +5,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/yota/ohey/backend/internal/contracts"
 )
 
 type ErrorKind string
@@ -48,9 +50,9 @@ func CleanUUID(value, field string) (string, error) {
 type RequestStatus string
 
 const (
-	RequestStatusAccepted  RequestStatus = "accepted"
-	RequestStatusRejected  RequestStatus = "rejected"
-	RequestStatusCancelled RequestStatus = "cancelled"
+	RequestStatusAccepted  RequestStatus = contracts.StatusAccepted
+	RequestStatusRejected  RequestStatus = contracts.StatusRejected
+	RequestStatusCancelled RequestStatus = contracts.StatusCancelled
 )
 
 func NormalizeRequestStatus(value string) (RequestStatus, error) {
@@ -66,9 +68,9 @@ func NormalizeRequestStatus(value string) (RequestStatus, error) {
 type RequestDirection string
 
 const (
-	RequestDirectionAll      RequestDirection = "all"
-	RequestDirectionIncoming RequestDirection = "incoming"
-	RequestDirectionOutgoing RequestDirection = "outgoing"
+	RequestDirectionAll      RequestDirection = contracts.RequestDirectionAll
+	RequestDirectionIncoming RequestDirection = contracts.RequestDirectionIncoming
+	RequestDirectionOutgoing RequestDirection = contracts.RequestDirectionOutgoing
 )
 
 func NormalizeRequestDirection(value string) (RequestDirection, error) {
@@ -115,8 +117,8 @@ func FriendRequestFromRow(row map[string]any) FriendRequest {
 type DomainEventKind string
 
 const (
-	EventFriendRequestCreated  DomainEventKind = "friend_request.created"
-	EventFriendRequestAccepted DomainEventKind = "friend_request.accepted"
+	EventFriendRequestCreated  DomainEventKind = contracts.DomainEventFriendRequestCreated
+	EventFriendRequestAccepted DomainEventKind = contracts.DomainEventFriendRequestAccepted
 )
 
 type DomainEvent struct {

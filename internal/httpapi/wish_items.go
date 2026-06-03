@@ -5,6 +5,8 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+
+	"github.com/yota/ohey/backend/internal/contracts"
 )
 
 const wishItemSelectColumns = "id,owner_user_id,title,note,category,place_text,place_url,visibility,status,created_at,updated_at"
@@ -29,7 +31,7 @@ func (r *router) listWishItems(w http.ResponseWriter, req *http.Request, authTok
 	q := url.Values{}
 	q.Set("select", wishItemSelectColumns)
 	q.Set("owner_user_id", "eq."+userID)
-	q.Set("status", "eq.active")
+	q.Set("status", "eq."+contracts.StatusActive)
 	q.Set("order", "created_at.desc")
 	q.Set("limit", strconv.Itoa(limit))
 	var rows []map[string]any
@@ -55,8 +57,8 @@ func (r *router) listProfileWishItems(w http.ResponseWriter, req *http.Request, 
 	q := url.Values{}
 	q.Set("select", wishItemSelectColumns)
 	q.Set("owner_user_id", "eq."+profileID)
-	q.Set("visibility", "eq.friends")
-	q.Set("status", "eq.active")
+	q.Set("visibility", "eq."+contracts.VisibilityFriends)
+	q.Set("status", "eq."+contracts.StatusActive)
 	q.Set("order", "created_at.desc")
 	q.Set("limit", strconv.Itoa(limit))
 	var rows []map[string]any
@@ -83,13 +85,13 @@ func (r *router) createWishItem(w http.ResponseWriter, req *http.Request, authTo
 	}
 	category := strings.TrimSpace(body.Category)
 	if category == "" {
-		category = "other"
+		category = contracts.CategoryOther
 	}
 	visibility := strings.TrimSpace(body.Visibility)
 	if visibility == "" {
-		visibility = "private"
+		visibility = contracts.VisibilityPrivate
 	}
-	if visibility != "private" && visibility != "friends" {
+	if visibility != contracts.VisibilityPrivate && visibility != contracts.VisibilityFriends {
 		writeError(w, http.StatusBadRequest, "invalid visibility")
 		return
 	}

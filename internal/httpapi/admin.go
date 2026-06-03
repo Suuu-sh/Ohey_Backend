@@ -12,6 +12,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/yota/ohey/backend/internal/contracts"
 	"github.com/yota/ohey/backend/internal/features/memories"
 	"github.com/yota/ohey/backend/internal/features/profiles"
 )
@@ -61,7 +62,7 @@ func (r *router) adminListUsers(w http.ResponseWriter, req *http.Request, _ Auth
 		id, _ := row["id"].(string)
 		status := statusByUserID[id]
 		if strings.TrimSpace(status) == "" {
-			status = "unselected"
+			status = contracts.DailyStatusUnselected
 		}
 		row["status"] = status
 	}
@@ -102,7 +103,7 @@ func (r *router) adminCreateUser(w http.ResponseWriter, req *http.Request, _ Aut
 		return
 	}
 	if input.Status == "" {
-		input.Status = "unselected"
+		input.Status = contracts.DailyStatusUnselected
 	}
 	if !isValidDailyStatus(input.Status) {
 		writeError(w, http.StatusBadRequest, "status is invalid")
@@ -303,7 +304,7 @@ func (r *router) adminListMemoryReports(w http.ResponseWriter, req *http.Request
 	status := strings.TrimSpace(req.URL.Query().Get("status"))
 	rows, err := r.adminMemoryReports(req, true, status)
 	if err != nil {
-		if status != "" && status != "all" {
+		if status != "" && status != contracts.QueryStatusAll {
 			writeSupabaseError(w, err)
 			return
 		}
@@ -315,7 +316,7 @@ func (r *router) adminListMemoryReports(w http.ResponseWriter, req *http.Request
 	}
 	for _, row := range rows {
 		if _, ok := row["status"].(string); !ok {
-			row["status"] = "pending"
+			row["status"] = contracts.StatusPending
 		}
 		if _, ok := row["hidden"].(bool); !ok {
 			row["hidden"] = true
@@ -333,7 +334,7 @@ func (r *router) adminMemoryReports(req *http.Request, includeModerationColumns 
 	q.Set("select", selectColumns)
 	q.Set("order", "created_at.desc")
 	q.Set("limit", "100")
-	if includeModerationColumns && status != "" && status != "all" {
+	if includeModerationColumns && status != "" && status != contracts.QueryStatusAll {
 		q.Set("status", "eq."+status)
 	}
 	var rows []map[string]any

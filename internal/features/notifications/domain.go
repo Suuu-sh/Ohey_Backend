@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/yota/ohey/backend/internal/contracts"
 )
 
 type ErrorKind string
@@ -68,14 +70,14 @@ func CleanUUIDs(values []string, field string) ([]string, error) {
 type Kind string
 
 const (
-	KindMemoryLike               Kind = "memory_like"
-	KindFriendRequestReceived    Kind = "friend_request_received"
-	KindFriendRequestAccepted    Kind = "friend_request_accepted"
-	KindInviteReceived           Kind = "invite_received"
-	KindInviteAccepted           Kind = "invite_accepted"
-	KindTodayReservationReminder Kind = "today_reservation_reminder"
-	KindMemoryTagged             Kind = "memory_tagged"
-	KindSystem                   Kind = "system"
+	KindMemoryLike               Kind = contracts.NotificationKindMemoryLike
+	KindFriendRequestReceived    Kind = contracts.NotificationKindFriendRequestReceived
+	KindFriendRequestAccepted    Kind = contracts.NotificationKindFriendRequestAccepted
+	KindInviteReceived           Kind = contracts.NotificationKindInviteReceived
+	KindInviteAccepted           Kind = contracts.NotificationKindInviteAccepted
+	KindTodayReservationReminder Kind = contracts.NotificationKindTodayReservationReminder
+	KindMemoryTagged             Kind = contracts.NotificationKindMemoryTagged
+	KindSystem                   Kind = contracts.NotificationKindSystem
 )
 
 type Notification struct {

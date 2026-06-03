@@ -4,6 +4,8 @@ import (
 	"context"
 	"strings"
 	"time"
+
+	"github.com/yota/ohey/backend/internal/contracts"
 )
 
 type Dependencies struct {
@@ -145,13 +147,13 @@ func (u *Usecase) GetFriendRequestStatus(ctx context.Context, input FriendInput)
 		return FriendRequestStatus{}, err
 	}
 	if friendID == userID {
-		return FriendRequestStatus{AlreadyFriend: false, RequestState: "self"}, nil
+		return FriendRequestStatus{AlreadyFriend: false, RequestState: contracts.RelationshipStateSelf}, nil
 	}
 	alreadyFriend, err := u.repository.FriendshipExists(ctx, input.AuthToken, userID, friendID)
 	if err != nil {
 		return FriendRequestStatus{}, err
 	}
-	requestState := "none"
+	requestState := contracts.RelationshipStateNone
 	requestID := ""
 	if !alreadyFriend {
 		request, err := u.repository.PendingFriendRequestBetween(ctx, input.AuthToken, userID, friendID)
@@ -161,9 +163,9 @@ func (u *Usecase) GetFriendRequestStatus(ctx context.Context, input FriendInput)
 		if request != nil {
 			requestID, _ = request["id"].(string)
 			if request["from_user_id"] == userID {
-				requestState = "outgoing"
+				requestState = contracts.RelationshipStateOutgoing
 			} else {
-				requestState = "incoming"
+				requestState = contracts.RelationshipStateIncoming
 			}
 		}
 	}

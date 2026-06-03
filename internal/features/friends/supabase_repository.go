@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yota/ohey/backend/internal/contracts"
 	"github.com/yota/ohey/backend/internal/supabase"
 )
 
@@ -277,7 +278,7 @@ func (r *SupabaseRepository) ListPendingFriendRequests(ctx context.Context, auth
 func (r *SupabaseRepository) PendingFriendRequestBetween(ctx context.Context, authToken, userID, friendID string) (map[string]any, error) {
 	q := url.Values{}
 	q.Set("select", "id,from_user_id,to_user_id")
-	q.Set("status", "eq.pending")
+	q.Set("status", "eq."+contracts.StatusPending)
 	q.Set("or", "(and(from_user_id.eq."+userID+",to_user_id.eq."+friendID+"),and(from_user_id.eq."+friendID+",to_user_id.eq."+userID+"))")
 	q.Set("limit", "1")
 	var rows []map[string]any
@@ -288,7 +289,7 @@ func (r *SupabaseRepository) PendingFriendRequestBetween(ctx context.Context, au
 }
 
 func (r *SupabaseRepository) CreateFriendRequest(ctx context.Context, authToken, fromUserID, toUserID string) (map[string]any, error) {
-	payload := map[string]any{"from_user_id": fromUserID, "to_user_id": toUserID, "status": "pending"}
+	payload := map[string]any{"from_user_id": fromUserID, "to_user_id": toUserID, "status": contracts.StatusPending}
 	var rows []map[string]any
 	if err := r.client.Post(ctx, authToken, "friend_requests", nil, payload, &rows); err != nil {
 		return nil, err
@@ -302,7 +303,7 @@ func (r *SupabaseRepository) CreateFriendRequest(ctx context.Context, authToken,
 func (r *SupabaseRepository) UpdatePendingFriendRequestStatus(ctx context.Context, authToken, requestID, userID string, status RequestStatus, respondedAt time.Time) (map[string]any, error) {
 	q := url.Values{}
 	q.Set("id", "eq."+requestID)
-	q.Set("status", "eq.pending")
+	q.Set("status", "eq."+contracts.StatusPending)
 	if status == RequestStatusCancelled {
 		q.Set("from_user_id", "eq."+userID)
 	} else {
