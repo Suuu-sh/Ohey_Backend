@@ -258,7 +258,7 @@ func (r *SupabaseRepository) BlockExistsBetweenUsers(ctx context.Context, authTo
 func (r *SupabaseRepository) ListPendingFriendRequests(ctx context.Context, authToken, userID string, direction RequestDirection) ([]map[string]any, error) {
 	q := url.Values{}
 	q.Set("select", friendRequestSelectColumns)
-	q.Set("status", "eq.pending")
+	q.Set("status", supabase.PostgRESTEq(contracts.StatusPending))
 	switch direction {
 	case RequestDirectionIncoming:
 		q.Set("to_user_id", "eq."+userID)

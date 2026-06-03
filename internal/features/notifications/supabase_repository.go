@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yota/ohey/backend/internal/contracts"
 	"github.com/yota/ohey/backend/internal/supabase"
 )
 
@@ -109,7 +110,7 @@ func (r *SupabaseRepository) TodayAcceptedInvites(ctx context.Context, authToken
 	q := url.Values{}
 	q.Set("select", "id,inviter_user_id,invitee_user_id,scheduled_date,activity_label,status")
 	q.Set("scheduled_date", "eq."+date)
-	q.Set("status", "eq.accepted")
+	q.Set("status", supabase.PostgRESTEq(contracts.StatusAccepted))
 	q.Set("or", "(inviter_user_id.eq."+userID+",invitee_user_id.eq."+userID+")")
 	var rows []map[string]any
 	if err := r.client.Get(ctx, authToken, "invites", q, &rows); err != nil {

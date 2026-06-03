@@ -11,6 +11,7 @@ import (
 
 	"github.com/yota/ohey/backend/internal/contracts"
 	"github.com/yota/ohey/backend/internal/features/notifications"
+	"github.com/yota/ohey/backend/internal/supabase"
 )
 
 func (r *router) notificationUsecase(_ *http.Request) *notifications.Usecase {
@@ -269,7 +270,7 @@ func (r *router) notificationOutboxDueRows(ctx context.Context, limit int) ([]ma
 	}
 	q := url.Values{}
 	q.Set("select", "id,event_kind,aggregate_type,aggregate_id,actor_user_id,recipient_user_id,status,attempts,payload,next_attempt_at")
-	q.Set("status", "in.(pending,failed)")
+	q.Set("status", supabase.PostgRESTIn(contracts.StatusPending, contracts.OutboxStatusFailed))
 	q.Set("order", "created_at.asc")
 	q.Set("limit", strconv.Itoa(limit))
 	var rows []map[string]any
