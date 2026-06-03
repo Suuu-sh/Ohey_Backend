@@ -202,7 +202,7 @@ func (r *router) adminListNotificationOutbox(w http.ResponseWriter, req *http.Re
 	q.Set("order", "created_at.desc")
 	q.Set("limit", "100")
 	if status := strings.TrimSpace(req.URL.Query().Get("status")); status != "" && status != contracts.QueryStatusAll {
-		q.Set("status", "eq."+status)
+		q.Set("status", supabase.PostgRESTEq(status))
 	}
 	var rows []map[string]any
 	if err := r.deps.AdminSupabase.Get(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "notification_outbox", q, &rows); err != nil {

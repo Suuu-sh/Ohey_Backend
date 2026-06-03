@@ -859,16 +859,3 @@ func dateOnlyParam(req *http.Request, name string) string {
 	}
 	return value
 }
-
-func isValidDailyStatus(status string) bool {
-	switch status {
-	case contracts.DailyStatusUnselected,
-		contracts.DailyStatusAvailable,
-		contracts.DailyStatusMaybeAvailable,
-		contracts.DailyStatusDependsOnTime,
-		contracts.DailyStatusHasPlans:
-		return true
-	default:
-		return false
-	}
-}

@@ -23,7 +23,7 @@ func (r *SupabaseRepository) ListWishItems(ctx context.Context, authToken, owner
 	q := url.Values{}
 	q.Set("select", wishItemSelectColumns)
 	q.Set("owner_user_id", "eq."+ownerUserID)
-	q.Set("status", "eq."+contracts.StatusActive)
+	q.Set("status", supabase.PostgRESTEq(contracts.StatusActive))
 	q.Set("order", "created_at.desc")
 	q.Set("limit", strconv.Itoa(limit))
 	var rows []map[string]any
@@ -37,8 +37,8 @@ func (r *SupabaseRepository) ListProfileWishItems(ctx context.Context, authToken
 	q := url.Values{}
 	q.Set("select", wishItemSelectColumns)
 	q.Set("owner_user_id", "eq."+profileID)
-	q.Set("visibility", "eq."+contracts.VisibilityFriends)
-	q.Set("status", "eq."+contracts.StatusActive)
+	q.Set("visibility", supabase.PostgRESTEq(contracts.VisibilityFriends))
+	q.Set("status", supabase.PostgRESTEq(contracts.StatusActive))
 	q.Set("order", "created_at.desc")
 	q.Set("limit", strconv.Itoa(limit))
 	var rows []map[string]any

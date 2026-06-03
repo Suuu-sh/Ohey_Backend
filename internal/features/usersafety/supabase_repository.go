@@ -198,7 +198,7 @@ func (r *SupabaseRepository) closeFriendRequests(ctx context.Context, relation U
 	outgoing := url.Values{}
 	outgoing.Set("from_user_id", "eq."+relation.ActorUserID)
 	outgoing.Set("to_user_id", "eq."+relation.TargetUserID)
-	outgoing.Set("status", "eq."+contracts.StatusPending)
+	outgoing.Set("status", supabase.PostgRESTEq(contracts.StatusPending))
 	var ignored []map[string]any
 	if err := r.adminClient.Patch(ctx, r.serviceRoleKey, "friend_requests", outgoing, map[string]any{"status": contracts.StatusCancelled, "responded_at": respondedAt}, &ignored); err != nil {
 		return err
@@ -206,7 +206,7 @@ func (r *SupabaseRepository) closeFriendRequests(ctx context.Context, relation U
 	incoming := url.Values{}
 	incoming.Set("from_user_id", "eq."+relation.TargetUserID)
 	incoming.Set("to_user_id", "eq."+relation.ActorUserID)
-	incoming.Set("status", "eq."+contracts.StatusPending)
+	incoming.Set("status", supabase.PostgRESTEq(contracts.StatusPending))
 	return r.adminClient.Patch(ctx, r.serviceRoleKey, "friend_requests", incoming, map[string]any{"status": contracts.StatusRejected, "responded_at": respondedAt}, &ignored)
 }
 
@@ -215,7 +215,7 @@ func (r *SupabaseRepository) closeInvites(ctx context.Context, relation UserRela
 	outgoing := url.Values{}
 	outgoing.Set("inviter_user_id", "eq."+relation.ActorUserID)
 	outgoing.Set("invitee_user_id", "eq."+relation.TargetUserID)
-	outgoing.Set("status", "eq."+contracts.StatusPending)
+	outgoing.Set("status", supabase.PostgRESTEq(contracts.StatusPending))
 	var ignored []map[string]any
 	if err := r.adminClient.Patch(ctx, r.serviceRoleKey, "invites", outgoing, map[string]any{"status": contracts.StatusCancelled, "responded_at": respondedAt}, &ignored); err != nil {
 		return err
@@ -223,7 +223,7 @@ func (r *SupabaseRepository) closeInvites(ctx context.Context, relation UserRela
 	incoming := url.Values{}
 	incoming.Set("inviter_user_id", "eq."+relation.TargetUserID)
 	incoming.Set("invitee_user_id", "eq."+relation.ActorUserID)
-	incoming.Set("status", "eq."+contracts.StatusPending)
+	incoming.Set("status", supabase.PostgRESTEq(contracts.StatusPending))
 	return r.adminClient.Patch(ctx, r.serviceRoleKey, "invites", incoming, map[string]any{"status": contracts.StatusRejected, "responded_at": respondedAt}, &ignored)
 }
 

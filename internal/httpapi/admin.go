@@ -13,8 +13,10 @@ import (
 	"unicode"
 
 	"github.com/yota/ohey/backend/internal/contracts"
+	"github.com/yota/ohey/backend/internal/features/dailystatuses"
 	"github.com/yota/ohey/backend/internal/features/memories"
 	"github.com/yota/ohey/backend/internal/features/profiles"
+	"github.com/yota/ohey/backend/internal/supabase"
 )
 
 const officialProfileUserID = "ohey_official"
@@ -105,10 +107,12 @@ func (r *router) adminCreateUser(w http.ResponseWriter, req *http.Request, _ Aut
 	if input.Status == "" {
 		input.Status = contracts.DailyStatusUnselected
 	}
-	if !isValidDailyStatus(input.Status) {
+	cleanStatus, err := dailystatuses.CleanStatus(input.Status)
+	if err != nil {
 		writeError(w, http.StatusBadRequest, "status is invalid")
 		return
 	}
+	input.Status = string(cleanStatus)
 
 	authPayload := map[string]any{
 		"email":         input.Email,
@@ -225,10 +229,12 @@ func (r *router) adminUpdateUser(w http.ResponseWriter, req *http.Request, _ Aut
 			writeError(w, http.StatusBadRequest, "status is required")
 			return
 		}
-		if !isValidDailyStatus(status) {
+		cleanStatus, err := dailystatuses.CleanStatus(status)
+		if err != nil {
 			writeError(w, http.StatusBadRequest, "status is invalid")
 			return
 		}
+		status = string(cleanStatus)
 		statusDateInput := ""
 		if input.StatusDate != nil {
 			statusDateInput = *input.StatusDate
@@ -335,7 +341,7 @@ func (r *router) adminMemoryReports(req *http.Request, includeModerationColumns 
 	q.Set("order", "created_at.desc")
 	q.Set("limit", "100")
 	if includeModerationColumns && status != "" && status != contracts.QueryStatusAll {
-		q.Set("status", "eq."+status)
+		q.Set("status", supabase.PostgRESTEq(status))
 	}
 	var rows []map[string]any
 	if err := r.deps.AdminSupabase.Get(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "memory_reports", q, &rows); err != nil {

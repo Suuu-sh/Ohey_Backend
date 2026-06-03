@@ -278,7 +278,7 @@ func (r *SupabaseRepository) ListPendingFriendRequests(ctx context.Context, auth
 func (r *SupabaseRepository) PendingFriendRequestBetween(ctx context.Context, authToken, userID, friendID string) (map[string]any, error) {
 	q := url.Values{}
 	q.Set("select", "id,from_user_id,to_user_id")
-	q.Set("status", "eq."+contracts.StatusPending)
+	q.Set("status", supabase.PostgRESTEq(contracts.StatusPending))
 	q.Set("or", "(and(from_user_id.eq."+userID+",to_user_id.eq."+friendID+"),and(from_user_id.eq."+friendID+",to_user_id.eq."+userID+"))")
 	q.Set("limit", "1")
 	var rows []map[string]any
@@ -303,7 +303,7 @@ func (r *SupabaseRepository) CreateFriendRequest(ctx context.Context, authToken,
 func (r *SupabaseRepository) UpdatePendingFriendRequestStatus(ctx context.Context, authToken, requestID, userID string, status RequestStatus, respondedAt time.Time) (map[string]any, error) {
 	q := url.Values{}
 	q.Set("id", "eq."+requestID)
-	q.Set("status", "eq."+contracts.StatusPending)
+	q.Set("status", supabase.PostgRESTEq(contracts.StatusPending))
 	if status == RequestStatusCancelled {
 		q.Set("from_user_id", "eq."+userID)
 	} else {

@@ -129,7 +129,7 @@ func (r *SupabaseRepository) ListOpenYurubos(ctx context.Context, authToken stri
 	q.Set("select", yuruboSelectColumns)
 	q.Set("order", "created_at.desc")
 	q.Set("limit", strconv.Itoa(limit))
-	q.Set("status", "eq."+contracts.StatusOpen)
+	q.Set("status", supabase.PostgRESTEq(contracts.StatusOpen))
 	var rows []map[string]any
 	if err := r.client.Get(ctx, authToken, "yurubos", q, &rows); err != nil {
 		return nil, err
