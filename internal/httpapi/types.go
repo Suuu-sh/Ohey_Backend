@@ -85,6 +85,30 @@ type AdminUpdateUserRequest struct {
 	IsPlus      *bool   `json:"is_plus"`
 }
 
+type AdminCreateYuruboRequest struct {
+	OwnerUserID string `json:"owner_user_id"`
+	Title       string `json:"title"`
+	Body        string `json:"body"`
+	Category    string `json:"category"`
+	PlaceText   string `json:"place_text"`
+	TimeLabel   string `json:"time_label"`
+	StartsAt    string `json:"starts_at"`
+	Status      string `json:"status"`
+	Visibility  string `json:"visibility"`
+}
+
+type AdminUpdateYuruboRequest struct {
+	OwnerUserID *string `json:"owner_user_id"`
+	Title       *string `json:"title"`
+	Body        *string `json:"body"`
+	Category    *string `json:"category"`
+	PlaceText   *string `json:"place_text"`
+	TimeLabel   *string `json:"time_label"`
+	StartsAt    *string `json:"starts_at"`
+	Status      *string `json:"status"`
+	Visibility  *string `json:"visibility"`
+}
+
 type AdminCreateMemoryRequest struct {
 	OwnerUserID string    `json:"owner_user_id"`
 	HappenedAt  time.Time `json:"happened_at"`

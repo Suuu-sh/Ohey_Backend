@@ -56,6 +56,8 @@ const (
 	APIPathAdminMe                        = "/v1/admin/me"
 	APIPathAdminUsers                     = "/v1/admin/users"
 	APIPathAdminUser                      = "/v1/admin/users/{id}"
+	APIPathAdminYurubos                   = "/v1/admin/yurubos"
+	APIPathAdminYurubo                    = "/v1/admin/yurubos/{id}"
 	APIPathAdminMemories                  = "/v1/admin/memories"
 	APIPathAdminMemory                    = "/v1/admin/memories/{id}"
 	APIPathAdminMemoryReports             = "/v1/admin/memory-reports"

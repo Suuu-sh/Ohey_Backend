@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -16,6 +17,7 @@ import (
 	"github.com/yota/ohey/backend/internal/features/dailystatuses"
 	"github.com/yota/ohey/backend/internal/features/memories"
 	"github.com/yota/ohey/backend/internal/features/profiles"
+	"github.com/yota/ohey/backend/internal/features/yurubos"
 	"github.com/yota/ohey/backend/internal/supabase"
 )
 
@@ -291,6 +293,177 @@ func (r *router) adminDeleteUser(w http.ResponseWriter, req *http.Request, admin
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"id": targetID})
+}
+
+func (r *router) adminListYurubos(w http.ResponseWriter, req *http.Request, _ AuthUser) {
+	status, errMessage := cleanAdminYuruboStatus(req.URL.Query().Get("status"), true)
+	if errMessage != "" {
+		writeError(w, http.StatusBadRequest, errMessage)
+		return
+	}
+	limit := yurubos.CleanLimit(req.URL.Query().Get("limit"), 80)
+	q := url.Values{}
+	q.Set("select", "id,wish_item_id,owner_user_id,title,body,category,place_text,place_lat,place_lng,time_label,starts_at,ends_at,status,visibility,expires_at,created_at,updated_at,owner:profiles!yurubos_owner_user_id_fkey(id,user_id,display_name,avatar_url,is_plus)")
+	q.Set("order", "created_at.desc")
+	q.Set("limit", strconv.Itoa(limit))
+	if status != contracts.QueryStatusAll {
+		q.Set("status", supabase.PostgRESTEq(status))
+	}
+	var rows []map[string]any
+	if err := r.deps.AdminSupabase.Get(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "yurubos", q, &rows); err != nil {
+		writeSupabaseError(w, err)
+		return
+	}
+	r.addAdminYuruboReactionCounts(req.Context(), rows)
+	writeJSON(w, http.StatusOK, rows)
+}
+
+func (r *router) adminCreateYurubo(w http.ResponseWriter, req *http.Request, _ AuthUser) {
+	var input AdminCreateYuruboRequest
+	if !decodeJSONBody(w, req, &input) {
+		return
+	}
+	ownerID, errMessage := cleanUUID(input.OwnerUserID, "owner_user_id")
+	if errMessage != "" {
+		writeError(w, http.StatusBadRequest, errMessage)
+		return
+	}
+	title, err := yurubos.CleanTitle(input.Title)
+	if err != nil {
+		writeYurubosError(w, err)
+		return
+	}
+	status, errMessage := cleanAdminYuruboStatus(input.Status, false)
+	if errMessage != "" {
+		writeError(w, http.StatusBadRequest, errMessage)
+		return
+	}
+	visibility, errMessage := cleanAdminYuruboVisibility(input.Visibility)
+	if errMessage != "" {
+		writeError(w, http.StatusBadRequest, errMessage)
+		return
+	}
+	payload := map[string]any{
+		"owner_user_id": ownerID,
+		"title":         title,
+		"body":          strings.TrimSpace(input.Body),
+		"category":      yurubos.CleanCategory(input.Category),
+		"place_text":    strings.TrimSpace(input.PlaceText),
+		"time_label":    strings.TrimSpace(input.TimeLabel),
+		"status":        status,
+		"visibility":    visibility,
+	}
+	if normalized, ok, err := yurubos.NormalizeStartsAt(input.StartsAt); err != nil {
+		writeYurubosError(w, err)
+		return
+	} else if ok {
+		payload["starts_at"] = normalized
+	}
+	var rows []map[string]any
+	if err := r.deps.AdminSupabase.Post(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "yurubos", nil, payload, &rows); err != nil {
+		writeSupabaseError(w, err)
+		return
+	}
+	if len(rows) == 0 {
+		writeError(w, http.StatusBadGateway, "yurubo insert returned no rows")
+		return
+	}
+	writeJSON(w, http.StatusCreated, rows[0])
+}
+
+func (r *router) adminUpdateYurubo(w http.ResponseWriter, req *http.Request, _ AuthUser) {
+	yuruboID, errMessage := cleanUUID(req.PathValue("id"), "yurubo id")
+	if errMessage != "" {
+		writeError(w, http.StatusBadRequest, errMessage)
+		return
+	}
+	var input AdminUpdateYuruboRequest
+	if !decodeJSONBody(w, req, &input) {
+		return
+	}
+	payload := map[string]any{}
+	if input.OwnerUserID != nil {
+		ownerID, errMessage := cleanUUID(*input.OwnerUserID, "owner_user_id")
+		if errMessage != "" {
+			writeError(w, http.StatusBadRequest, errMessage)
+			return
+		}
+		payload["owner_user_id"] = ownerID
+	}
+	if input.Title != nil {
+		title, err := yurubos.CleanTitle(*input.Title)
+		if err != nil {
+			writeYurubosError(w, err)
+			return
+		}
+		payload["title"] = title
+	}
+	if input.Body != nil {
+		payload["body"] = strings.TrimSpace(*input.Body)
+	}
+	if input.Category != nil {
+		payload["category"] = yurubos.CleanCategory(*input.Category)
+	}
+	if input.PlaceText != nil {
+		payload["place_text"] = strings.TrimSpace(*input.PlaceText)
+	}
+	if input.TimeLabel != nil {
+		payload["time_label"] = strings.TrimSpace(*input.TimeLabel)
+	}
+	if input.StartsAt != nil {
+		if normalized, ok, err := yurubos.NormalizeStartsAt(*input.StartsAt); err != nil {
+			writeYurubosError(w, err)
+			return
+		} else if ok {
+			payload["starts_at"] = normalized
+		} else {
+			payload["starts_at"] = nil
+		}
+	}
+	if input.Status != nil {
+		status, errMessage := cleanAdminYuruboStatus(*input.Status, false)
+		if errMessage != "" {
+			writeError(w, http.StatusBadRequest, errMessage)
+			return
+		}
+		payload["status"] = status
+	}
+	if input.Visibility != nil {
+		visibility, errMessage := cleanAdminYuruboVisibility(*input.Visibility)
+		if errMessage != "" {
+			writeError(w, http.StatusBadRequest, errMessage)
+			return
+		}
+		payload["visibility"] = visibility
+	}
+	if len(payload) == 0 {
+		writeJSON(w, http.StatusOK, map[string]string{"id": yuruboID})
+		return
+	}
+	q := url.Values{}
+	q.Set("id", "eq."+yuruboID)
+	var rows []map[string]any
+	if err := r.deps.AdminSupabase.Patch(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "yurubos", q, payload, &rows); err != nil {
+		writeSupabaseError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, rows)
+}
+
+func (r *router) adminDeleteYurubo(w http.ResponseWriter, req *http.Request, _ AuthUser) {
+	yuruboID, errMessage := cleanUUID(req.PathValue("id"), "yurubo id")
+	if errMessage != "" {
+		writeError(w, http.StatusBadRequest, errMessage)
+		return
+	}
+	q := url.Values{}
+	q.Set("id", "eq."+yuruboID)
+	var rows []map[string]any
+	if err := r.deps.AdminSupabase.Delete(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "yurubos", q, &rows); err != nil {
+		writeSupabaseError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, rows)
 }
 
 func (r *router) adminListMemories(w http.ResponseWriter, req *http.Request, _ AuthUser) {
@@ -680,6 +853,72 @@ func (r *router) adminInsertMemoryFriends(req *http.Request, memoryID string, fr
 	}
 	var ignored []map[string]any
 	return r.deps.AdminSupabase.Post(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "memory_tagged_users", nil, links, &ignored)
+}
+
+func (r *router) addAdminYuruboReactionCounts(ctx context.Context, rows []map[string]any) {
+	ids := make([]string, 0, len(rows))
+	for _, row := range rows {
+		if id, _ := row["id"].(string); id != "" {
+			ids = append(ids, id)
+		}
+	}
+	if len(ids) == 0 {
+		return
+	}
+	q := url.Values{}
+	q.Set("select", "yurubo_id,reaction_type")
+	q.Set("yurubo_id", "in.("+strings.Join(ids, ",")+")")
+	var reactions []map[string]any
+	if err := r.deps.AdminSupabase.Get(ctx, r.deps.Config.SupabaseServiceRoleKey, "yurubo_reactions", q, &reactions); err != nil {
+		return
+	}
+	counts := map[string]int{}
+	for _, reaction := range reactions {
+		id, _ := reaction["yurubo_id"].(string)
+		if id == "" {
+			continue
+		}
+		if reactionType, _ := reaction["reaction_type"].(string); reactionType == contracts.ReactionTypeAvailable {
+			counts[id]++
+		}
+	}
+	for _, row := range rows {
+		if id, _ := row["id"].(string); id != "" {
+			row["reaction_count"] = counts[id]
+		}
+	}
+}
+
+func cleanAdminYuruboStatus(value string, allowAll bool) (string, string) {
+	status := strings.TrimSpace(value)
+	if status == "" {
+		if allowAll {
+			return contracts.StatusOpen, ""
+		}
+		return contracts.StatusOpen, ""
+	}
+	if allowAll && status == contracts.QueryStatusAll {
+		return status, ""
+	}
+	switch status {
+	case contracts.StatusOpen, "closed", "expired", contracts.StatusCancelled, "scheduled":
+		return status, ""
+	default:
+		return "", "status is invalid"
+	}
+}
+
+func cleanAdminYuruboVisibility(value string) (string, string) {
+	visibility := strings.TrimSpace(value)
+	if visibility == "" {
+		return contracts.VisibilityFriends, ""
+	}
+	switch visibility {
+	case contracts.VisibilityFriends, contracts.VisibilityPrivate:
+		return visibility, ""
+	default:
+		return "", "visibility must be friends or private"
+	}
 }
 
 func validateAdminProfileInput(userID, displayName string) string {
