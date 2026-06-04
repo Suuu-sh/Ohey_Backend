@@ -99,7 +99,20 @@ type CreateBody struct {
 	Visibility string `json:"visibility"`
 }
 
+type UpdateBody = CreateBody
+
 type WishItem struct {
+	OwnerUserID string
+	Title       string
+	Note        string
+	Category    string
+	PlaceText   string
+	PlaceURL    string
+	Visibility  string
+}
+
+type WishItemUpdate struct {
+	WishItemID  string
 	OwnerUserID string
 	Title       string
 	Note        string
@@ -123,6 +136,35 @@ func NewWishItem(ownerUserID string, body CreateBody) (WishItem, error) {
 		return WishItem{}, err
 	}
 	return WishItem{
+		OwnerUserID: ownerUserID,
+		Title:       title,
+		Note:        strings.TrimSpace(body.Note),
+		Category:    CleanCategory(body.Category),
+		PlaceText:   strings.TrimSpace(body.PlaceText),
+		PlaceURL:    strings.TrimSpace(body.PlaceURL),
+		Visibility:  visibility,
+	}, nil
+}
+
+func NewWishItemUpdate(wishItemID, ownerUserID string, body UpdateBody) (WishItemUpdate, error) {
+	wishItemID, err := CleanUUID(wishItemID, "wish item id")
+	if err != nil {
+		return WishItemUpdate{}, err
+	}
+	ownerUserID, err = CleanUUID(ownerUserID, "owner user id")
+	if err != nil {
+		return WishItemUpdate{}, err
+	}
+	title, err := CleanTitle(body.Title)
+	if err != nil {
+		return WishItemUpdate{}, err
+	}
+	visibility, err := CleanVisibility(body.Visibility)
+	if err != nil {
+		return WishItemUpdate{}, err
+	}
+	return WishItemUpdate{
+		WishItemID:  wishItemID,
 		OwnerUserID: ownerUserID,
 		Title:       title,
 		Note:        strings.TrimSpace(body.Note),

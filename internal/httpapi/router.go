@@ -69,6 +69,8 @@ func (r *router) routes() {
 	r.mux.HandleFunc(route(http.MethodGet, contracts.APIPathWishItems), r.auth(r.listWishItems))
 	r.mux.HandleFunc(route(http.MethodGet, contracts.APIPathProfileWishItems), r.auth(r.listProfileWishItems))
 	r.mux.HandleFunc(route(http.MethodPost, contracts.APIPathWishItems), r.auth(r.createWishItem))
+	r.mux.HandleFunc(route(http.MethodPatch, contracts.APIPathWishItem), r.auth(r.updateWishItem))
+	r.mux.HandleFunc(route(http.MethodDelete, contracts.APIPathWishItem), r.auth(r.deleteWishItem))
 	r.mux.HandleFunc(route(http.MethodGet, contracts.APIPathYurubos), r.auth(r.listYurubos))
 	r.mux.HandleFunc(route(http.MethodPost, contracts.APIPathYurubos), r.auth(r.createYurubo))
 	r.mux.HandleFunc(route(http.MethodPatch, contracts.APIPathYurubo), r.auth(r.updateYurubo))

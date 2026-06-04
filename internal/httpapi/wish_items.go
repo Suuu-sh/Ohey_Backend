@@ -55,6 +55,37 @@ func (r *router) createWishItem(w http.ResponseWriter, req *http.Request, authTo
 	writeJSON(w, http.StatusCreated, row)
 }
 
+func (r *router) updateWishItem(w http.ResponseWriter, req *http.Request, authToken string) {
+	var body wishitems.UpdateBody
+	if !decodeJSONBody(w, req, &body) {
+		return
+	}
+	row, err := r.wishItemsUsecase().UpdateWishItem(req.Context(), wishitems.UpdateInput{
+		AuthToken:   authToken,
+		WishItemID:  req.PathValue("id"),
+		OwnerUserID: req.Header.Get("X-Ohey-User-ID"),
+		Body:        body,
+	})
+	if err != nil {
+		writeWishItemsError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, row)
+}
+
+func (r *router) deleteWishItem(w http.ResponseWriter, req *http.Request, authToken string) {
+	row, err := r.wishItemsUsecase().DeleteWishItem(req.Context(), wishitems.DeleteInput{
+		AuthToken:   authToken,
+		WishItemID:  req.PathValue("id"),
+		OwnerUserID: req.Header.Get("X-Ohey-User-ID"),
+	})
+	if err != nil {
+		writeWishItemsError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, row)
+}
+
 func writeWishItemsError(w http.ResponseWriter, err error) {
 	if kind, ok := wishitems.ErrorKindOf(err); ok {
 		switch kind {

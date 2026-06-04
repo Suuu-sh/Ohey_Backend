@@ -21,6 +21,7 @@ const (
 	APIPathHomeFeed = "/v1/home/feed"
 
 	APIPathWishItems        = "/v1/wish-items"
+	APIPathWishItem         = "/v1/wish-items/{id}"
 	APIPathProfileWishItems = "/v1/wish-items/profile/{id}"
 
 	APIPathYurubos                = "/v1/yurubos"

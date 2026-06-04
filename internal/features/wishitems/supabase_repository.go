@@ -67,3 +67,39 @@ func (r *SupabaseRepository) CreateWishItem(ctx context.Context, authToken strin
 	}
 	return rows[0], nil
 }
+
+func (r *SupabaseRepository) UpdateWishItem(ctx context.Context, authToken string, update WishItemUpdate) (map[string]any, error) {
+	q := url.Values{}
+	q.Set("id", "eq."+update.WishItemID)
+	q.Set("owner_user_id", "eq."+update.OwnerUserID)
+	payload := map[string]any{
+		"title":      update.Title,
+		"note":       update.Note,
+		"category":   update.Category,
+		"place_text": update.PlaceText,
+		"place_url":  update.PlaceURL,
+		"visibility": update.Visibility,
+	}
+	var rows []map[string]any
+	if err := r.client.Patch(ctx, authToken, "wish_items", q, payload, &rows); err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+	return rows[0], nil
+}
+
+func (r *SupabaseRepository) DeleteWishItem(ctx context.Context, authToken, wishItemID, ownerUserID string) (map[string]any, error) {
+	q := url.Values{}
+	q.Set("id", "eq."+wishItemID)
+	q.Set("owner_user_id", "eq."+ownerUserID)
+	var rows []map[string]any
+	if err := r.client.Delete(ctx, authToken, "wish_items", q, &rows); err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+	return rows[0], nil
+}

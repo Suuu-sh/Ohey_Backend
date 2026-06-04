@@ -12,9 +12,12 @@ const testUserID = "11111111-1111-1111-1111-111111111111"
 
 type fakeRepository struct {
 	createdItem WishItem
+	updatedItem WishItemUpdate
 	listLimit   int
 	profileID   string
 	createErr   error
+	updateErr   error
+	deleteErr   error
 }
 
 func (r *fakeRepository) ListWishItems(_ context.Context, _ string, _ string, limit int) ([]map[string]any, error) {
@@ -34,6 +37,21 @@ func (r *fakeRepository) CreateWishItem(_ context.Context, _ string, item WishIt
 		return nil, r.createErr
 	}
 	return map[string]any{"id": "wish-3", "title": item.Title}, nil
+}
+
+func (r *fakeRepository) UpdateWishItem(_ context.Context, _ string, update WishItemUpdate) (map[string]any, error) {
+	r.updatedItem = update
+	if r.updateErr != nil {
+		return nil, r.updateErr
+	}
+	return map[string]any{"id": update.WishItemID, "title": update.Title}, nil
+}
+
+func (r *fakeRepository) DeleteWishItem(_ context.Context, _, wishItemID, _ string) (map[string]any, error) {
+	if r.deleteErr != nil {
+		return nil, r.deleteErr
+	}
+	return map[string]any{"id": wishItemID}, nil
 }
 
 func TestCreateWishItemNormalizesDefaults(t *testing.T) {

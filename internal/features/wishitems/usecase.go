@@ -32,6 +32,19 @@ type CreateInput struct {
 	Body        CreateBody
 }
 
+type UpdateInput struct {
+	AuthToken   string
+	WishItemID  string
+	OwnerUserID string
+	Body        UpdateBody
+}
+
+type DeleteInput struct {
+	AuthToken   string
+	WishItemID  string
+	OwnerUserID string
+}
+
 func (u *Usecase) ListWishItems(ctx context.Context, input ListInput) ([]map[string]any, error) {
 	userID, err := CleanUUID(input.UserID, "user id")
 	if err != nil {
@@ -54,4 +67,38 @@ func (u *Usecase) CreateWishItem(ctx context.Context, input CreateInput) (map[st
 		return nil, err
 	}
 	return u.repository.CreateWishItem(ctx, input.AuthToken, item)
+}
+
+func (u *Usecase) UpdateWishItem(ctx context.Context, input UpdateInput) (map[string]any, error) {
+	update, err := NewWishItemUpdate(input.WishItemID, input.OwnerUserID, input.Body)
+	if err != nil {
+		return nil, err
+	}
+	row, err := u.repository.UpdateWishItem(ctx, input.AuthToken, update)
+	if err != nil {
+		return nil, err
+	}
+	if row == nil {
+		return nil, UserError{Kind: ErrorKindNotFound, Message: "wish item not found"}
+	}
+	return row, nil
+}
+
+func (u *Usecase) DeleteWishItem(ctx context.Context, input DeleteInput) (map[string]any, error) {
+	wishItemID, err := CleanUUID(input.WishItemID, "wish item id")
+	if err != nil {
+		return nil, err
+	}
+	ownerUserID, err := CleanUUID(input.OwnerUserID, "owner user id")
+	if err != nil {
+		return nil, err
+	}
+	row, err := u.repository.DeleteWishItem(ctx, input.AuthToken, wishItemID, ownerUserID)
+	if err != nil {
+		return nil, err
+	}
+	if row == nil {
+		return nil, UserError{Kind: ErrorKindNotFound, Message: "wish item not found"}
+	}
+	return row, nil
 }
