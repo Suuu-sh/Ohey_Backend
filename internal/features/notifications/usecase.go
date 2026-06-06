@@ -230,29 +230,6 @@ func (u *Usecase) NotifyMemoryTagged(ctx context.Context, authToken, memoryID, o
 	return firstErr
 }
 
-func (u *Usecase) NotifyMemoryLiked(ctx context.Context, authToken, memoryID, actorUserID string) error {
-	if memoryID == "" || actorUserID == "" {
-		return nil
-	}
-	recipientUserID, err := u.repository.MemoryOwnerUserID(ctx, authToken, memoryID)
-	if err != nil {
-		u.warn("failed to fetch memory for like notification", KindMemoryLike, err)
-		return err
-	}
-	if recipientUserID == "" || recipientUserID == actorUserID {
-		return nil
-	}
-	actorName := u.actorName(ctx, authToken, actorUserID, KindMemoryLike)
-	return u.tryCreateAndPush(ctx, authToken, Notification{
-		RecipientUserID: recipientUserID,
-		ActorUserID:     actorUserID,
-		MemoryID:        memoryID,
-		Kind:            KindMemoryLike,
-		Title:           "思い出にいいねされました",
-		Message:         actorName + "さんがあなたの思い出にいいねしました。",
-	})
-}
-
 func (u *Usecase) NotifyYuruboCreated(ctx context.Context, authToken string, yuruboRow map[string]any, groupIDs []string) error {
 	yuruboID, _ := yuruboRow["id"].(string)
 	ownerUserID, _ := yuruboRow["owner_user_id"].(string)

@@ -207,14 +207,13 @@ func TestCreateMemoryCreatesMemoRecordAndDeduplicatesFriends(t *testing.T) {
 	}
 }
 
-func TestLikeMemoryNotifiesOnlyWhenLikeCreated(t *testing.T) {
+func TestLikeMemoryDoesNotPublishNotificationEvent(t *testing.T) {
 	for _, tc := range []struct {
-		name         string
-		created      bool
-		wantNotified int
+		name    string
+		created bool
 	}{
-		{name: "created", created: true, wantNotified: 1},
-		{name: "duplicate", created: false, wantNotified: 0},
+		{name: "created", created: true},
+		{name: "duplicate", created: false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := &fakeRepository{likeCreated: tc.created, likeState: LikeState{LikeCount: 2, LikedByMe: true}}
@@ -228,11 +227,8 @@ func TestLikeMemoryNotifiesOnlyWhenLikeCreated(t *testing.T) {
 			if state.LikeCount != 2 || !state.LikedByMe {
 				t.Fatalf("state = %#v", state)
 			}
-			if len(publisher.events) != tc.wantNotified {
-				t.Fatalf("events = %#v, want %d", publisher.events, tc.wantNotified)
-			}
-			if tc.wantNotified == 1 && publisher.events[0].Kind != EventMemoryLiked {
-				t.Fatalf("event = %#v, want memory liked", publisher.events[0])
+			if len(publisher.events) != 0 {
+				t.Fatalf("events = %#v, want no notification event", publisher.events)
 			}
 		})
 	}

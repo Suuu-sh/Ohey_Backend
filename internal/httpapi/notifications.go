@@ -52,12 +52,6 @@ func (r *router) createMemoryTaggedNotifications(req *http.Request, authToken, m
 	}
 }
 
-func (r *router) createMemoryLikeNotification(req *http.Request, authToken, memoryID, actorUserID string) {
-	if err := r.notificationUsecase(req).NotifyMemoryLiked(req.Context(), authToken, memoryID, actorUserID); err != nil && r.deps.Logger != nil {
-		r.deps.Logger.Warn("failed to dispatch memory liked notification", "error", err)
-	}
-}
-
 type notificationOutboxEvent struct {
 	EventKind       string
 	AggregateType   string
@@ -151,8 +145,6 @@ func (r *router) dispatchNotificationOutboxEvent(ctx context.Context, authToken 
 		return usecase.NotifyInviteAccepted(ctx, authToken, event.Payload)
 	case contracts.DomainEventMemoryTagged:
 		return usecase.NotifyMemoryTagged(ctx, authToken, stringValue(event.Payload, "memory_id"), stringValue(event.Payload, "owner_user_id"), stringSliceValue(event.Payload, "friend_ids"))
-	case contracts.DomainEventMemoryLiked:
-		return usecase.NotifyMemoryLiked(ctx, authToken, stringValue(event.Payload, "memory_id"), stringValue(event.Payload, "actor_user_id"))
 	case contracts.DomainEventYuruboCreated:
 		return usecase.NotifyYuruboCreated(ctx, authToken, event.Payload, stringSliceValue(event.Payload, "group_ids"))
 	case contracts.DomainEventMemoryReported, contracts.DomainEventSystemNotificationCreated:

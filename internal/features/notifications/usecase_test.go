@@ -145,45 +145,19 @@ func TestNotifyMemoryTaggedDeduplicatesRecipientsAndSkipsOwner(t *testing.T) {
 	}
 }
 
-func TestNotifyMemoryLikedSkipsSelfAndPushesOnCreated(t *testing.T) {
-	for _, tc := range []struct {
-		name              string
-		ownerID           string
-		created           bool
-		wantNotifications int
-		wantPushes        int
-	}{
-		{name: "self", ownerID: testUserID, created: true, wantNotifications: 0, wantPushes: 0},
-		{name: "duplicate", ownerID: otherUserID, created: false, wantNotifications: 1, wantPushes: 0},
-		{name: "created", ownerID: otherUserID, created: true, wantNotifications: 1, wantPushes: 1},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			repo := &fakeRepository{memoryOwnerID: tc.ownerID, createReturn: []bool{tc.created}, pushTokens: []string{"token"}}
-			push := &fakePushSender{}
-			usecase := NewUsecase(Dependencies{Repository: repo, PushSender: push})
-
-			usecase.NotifyMemoryLiked(context.Background(), testAuthToken, testMemoryID, testUserID)
-
-			if len(repo.created) != tc.wantNotifications {
-				t.Fatalf("created = %d, want %d", len(repo.created), tc.wantNotifications)
-			}
-			if len(push.sent) != tc.wantPushes {
-				t.Fatalf("pushes = %d, want %d", len(push.sent), tc.wantPushes)
-			}
-		})
-	}
-}
-
 func TestInvalidPushTokenIsDeletedAfterSendFailure(t *testing.T) {
 	repo := &fakeRepository{
-		memoryOwnerID: otherUserID,
-		createReturn:  []bool{true},
-		pushTokens:    []string{"bad-token"},
+		createReturn: []bool{true},
+		pushTokens:   []string{"bad-token"},
 	}
 	push := &fakePushSender{err: fakeInvalidPushTokenError{}}
 	usecase := NewUsecase(Dependencies{Repository: repo, PushSender: push})
 
-	usecase.NotifyMemoryLiked(context.Background(), testAuthToken, testMemoryID, testUserID)
+	usecase.NotifyFriendRequestReceived(context.Background(), testAuthToken, map[string]any{
+		"id":           testRequestID,
+		"from_user_id": otherUserID,
+		"to_user_id":   testUserID,
+	})
 
 	if len(repo.deletedTokens) != 1 || repo.deletedTokens[0] != "bad-token" {
 		t.Fatalf("deletedTokens = %#v, want bad-token", repo.deletedTokens)

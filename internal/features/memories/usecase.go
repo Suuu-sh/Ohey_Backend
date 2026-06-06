@@ -188,14 +188,8 @@ func (u *Usecase) LikeMemory(ctx context.Context, input LikeInput) (LikeState, e
 	if err != nil {
 		return LikeState{}, err
 	}
-	created, err := u.repository.CreateLike(ctx, input.AuthToken, memoryID, userID)
-	if err != nil {
+	if _, err := u.repository.CreateLike(ctx, input.AuthToken, memoryID, userID); err != nil {
 		return LikeState{}, err
-	}
-	if created && u.publisher != nil {
-		if event, ok := NewMemoryLikedEvent(memoryID, userID); ok {
-			u.publisher.Publish(ctx, input.AuthToken, event)
-		}
 	}
 	return u.repository.LikeState(ctx, input.AuthToken, memoryID, userID)
 }

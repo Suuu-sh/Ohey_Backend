@@ -70,7 +70,6 @@ func CleanUUIDs(values []string, field string) ([]string, error) {
 type Kind string
 
 const (
-	KindMemoryLike               Kind = contracts.NotificationKindMemoryLike
 	KindFriendRequestReceived    Kind = contracts.NotificationKindFriendRequestReceived
 	KindFriendRequestAccepted    Kind = contracts.NotificationKindFriendRequestAccepted
 	KindInviteReceived           Kind = contracts.NotificationKindInviteReceived

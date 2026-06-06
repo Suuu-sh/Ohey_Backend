@@ -709,14 +709,6 @@ func (p memoryEventPublisher) Publish(ctx context.Context, authToken string, eve
 			ActorUserID:   event.ActorUserID,
 			Payload:       payload,
 		})
-	case memories.EventMemoryLiked:
-		p.router.enqueueAndProcessNotificationOutboxEvent(ctx, authToken, notificationOutboxEvent{
-			EventKind:     string(event.Kind),
-			AggregateType: contracts.FeedTypeMemory,
-			AggregateID:   event.MemoryID,
-			ActorUserID:   event.ActorUserID,
-			Payload:       payload,
-		})
 	case memories.EventMemoryReported:
 		p.router.enqueueAndProcessNotificationOutboxEvent(ctx, authToken, notificationOutboxEvent{
 			EventKind:     string(event.Kind),

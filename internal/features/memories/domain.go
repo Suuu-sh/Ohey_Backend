@@ -191,7 +191,6 @@ type DomainEventKind string
 
 const (
 	EventMemoryTagged   DomainEventKind = contracts.DomainEventMemoryTagged
-	EventMemoryLiked    DomainEventKind = contracts.DomainEventMemoryLiked
 	EventMemoryReported DomainEventKind = contracts.DomainEventMemoryReported
 )
 
@@ -210,13 +209,6 @@ func NewMemoryTaggedEvent(memoryID, ownerUserID string, friendIDs []string) (Dom
 		return DomainEvent{}, false
 	}
 	return DomainEvent{Kind: EventMemoryTagged, MemoryID: memoryID, OwnerUserID: ownerUserID, ActorUserID: ownerUserID, FriendIDs: append([]string(nil), friendIDs...)}, true
-}
-
-func NewMemoryLikedEvent(memoryID, actorUserID string) (DomainEvent, bool) {
-	if memoryID == "" || actorUserID == "" {
-		return DomainEvent{}, false
-	}
-	return DomainEvent{Kind: EventMemoryLiked, MemoryID: memoryID, ActorUserID: actorUserID}, true
 }
 
 func NewMemoryReportedEvent(memoryID, ownerUserID, reporterUserID string, reason ReportReason) (DomainEvent, bool) {

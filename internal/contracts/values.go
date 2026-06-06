@@ -61,7 +61,6 @@ const (
 )
 
 const (
-	NotificationKindMemoryLike               = "memory_like"
 	NotificationKindFriendRequestReceived    = "friend_request_received"
 	NotificationKindFriendRequestAccepted    = "friend_request_accepted"
 	NotificationKindInviteReceived           = "invite_received"
@@ -91,7 +90,6 @@ const (
 	DomainEventFriendRequestCreated      = "friend_request.created"
 	DomainEventFriendRequestAccepted     = "friend_request.accepted"
 	DomainEventMemoryTagged              = "memory.tagged"
-	DomainEventMemoryLiked               = "memory.liked"
 	DomainEventMemoryReported            = "memory.reported"
 	DomainEventYuruboCreated             = "yurubo.created"
 	DomainEventSystemNotificationCreated = "system_notification.created"
