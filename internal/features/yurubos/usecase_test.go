@@ -29,6 +29,7 @@ type fakeRepository struct {
 	reactions      []map[string]any
 	profiles       map[string]map[string]any
 	ownerIDs       map[string]string
+	ownerIDCalls   int
 	labels         map[string]string
 	upserted       Reaction
 	approved       bool
@@ -83,6 +84,7 @@ func (r *fakeRepository) ParticipantProfiles(_ context.Context, _ string, _ []st
 }
 
 func (r *fakeRepository) OwnerID(_ context.Context, _ string, yuruboID string) (string, error) {
+	r.ownerIDCalls++
 	return r.ownerIDs[yuruboID], nil
 }
 
@@ -170,7 +172,7 @@ func TestListYurubosAttachesReactionAndVisibilitySummaries(t *testing.T) {
 	repo := &fakeRepository{
 		hidden: map[string]bool{hiddenID: true},
 		openRows: []map[string]any{
-			{"id": yuruboID, "visibility": contracts.VisibilityGroup},
+			{"id": yuruboID, "owner_user_id": ownerID, "visibility": contracts.VisibilityGroup},
 			{"id": hiddenID, "visibility": contracts.VisibilityFriends},
 		},
 		reactions: []map[string]any{
@@ -203,6 +205,9 @@ func TestListYurubosAttachesReactionAndVisibilitySummaries(t *testing.T) {
 	}
 	if participants[0]["reaction_type"] != contracts.ReactionTypeAvailable || participants[1]["reaction_type"] != contracts.ReactionTypeInterested {
 		t.Fatalf("participants = %#v", participants)
+	}
+	if repo.ownerIDCalls != 0 {
+		t.Fatalf("OwnerID calls = %d, want 0", repo.ownerIDCalls)
 	}
 }
 

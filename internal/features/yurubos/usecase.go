@@ -142,16 +142,20 @@ func (u *Usecase) ListYurubos(ctx context.Context, input ListInput) ([]map[strin
 		return nil, err
 	}
 	ids := make([]string, 0, len(rows))
+	ownerIDs := make(map[string]string, len(rows))
 	out := make([]map[string]any, 0, len(rows))
 	for _, row := range rows {
 		id, _ := row["id"].(string)
 		if id == "" || hiddenSet[id] {
 			continue
 		}
+		if ownerID, _ := row["owner_user_id"].(string); ownerID != "" {
+			ownerIDs[id] = ownerID
+		}
 		ids = append(ids, id)
 		out = append(out, row)
 	}
-	reactionCounts, reactedByMe, myReactionTypes, participants := u.reactionSummaries(ctx, input.AuthToken, ids, userID)
+	reactionCounts, reactedByMe, myReactionTypes, participants := u.reactionSummaries(ctx, input.AuthToken, ids, userID, ownerIDs)
 	visibilityLabels, err := u.repository.VisibilityLabels(ctx, input.AuthToken, out)
 	if err != nil {
 		visibilityLabels = map[string]string{}
@@ -240,7 +244,7 @@ func cleanReactionInput(input ReactionInput) (Reaction, error) {
 	return Reaction{YuruboID: yuruboID, UserID: userID, ReactionType: reactionType}, nil
 }
 
-func (u *Usecase) reactionSummaries(ctx context.Context, authToken string, ids []string, userID string) (map[string]int, map[string]bool, map[string]string, map[string][]map[string]any) {
+func (u *Usecase) reactionSummaries(ctx context.Context, authToken string, ids []string, userID string, ownerIDs map[string]string) (map[string]int, map[string]bool, map[string]string, map[string][]map[string]any) {
 	counts := map[string]int{}
 	reactedByMe := map[string]bool{}
 	myReactionTypes := map[string]string{}
@@ -277,21 +281,14 @@ func (u *Usecase) reactionSummaries(ctx context.Context, authToken string, ids [
 	if err != nil {
 		profilesByID = map[string]map[string]any{}
 	}
-	owners := map[string]string{}
 	for _, row := range rows {
 		id, _ := row["yurubo_id"].(string)
 		actor, _ := row["user_id"].(string)
 		if id == "" || actor == "" {
 			continue
 		}
-		if owners[id] == "" {
-			ownerID, err := u.repository.OwnerID(ctx, authToken, id)
-			if err == nil {
-				owners[id] = ownerID
-			}
-		}
 		reactionType, _ := row["reaction_type"].(string)
-		if reactionType != contracts.ReactionTypeAvailable && owners[id] != userID && actor != userID {
+		if reactionType != contracts.ReactionTypeAvailable && ownerIDs[id] != userID && actor != userID {
 			continue
 		}
 		profile := profilesByID[actor]
