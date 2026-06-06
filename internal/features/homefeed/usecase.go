@@ -44,6 +44,8 @@ func (u *Usecase) ListHomeFeed(ctx context.Context, input ListInput) ([]map[stri
 	if err != nil {
 		return nil, err
 	}
+	fetchLimit := feedFetchLimit(limit)
+	before := cursorBefore(cursor)
 	visibleUserIDs, err := u.repository.VisibleFeedUserIDs(ctx, input.AuthToken, userID)
 	if err != nil {
 		return nil, err
@@ -57,11 +59,11 @@ func (u *Usecase) ListHomeFeed(ctx context.Context, input ListInput) ([]map[stri
 		return nil, err
 	}
 	visibleUserIDs = ExcludeHiddenUserIDs(visibleUserIDs, hiddenUserIDs)
-	rows, err := u.repository.ListMemories(ctx, input.AuthToken, visibleUserIDs)
+	rows, err := u.repository.ListMemories(ctx, input.AuthToken, visibleUserIDs, fetchLimit, before)
 	if err != nil {
 		return nil, err
 	}
-	officialRows, err := u.repository.ListOfficialMemories(ctx, input.AuthToken)
+	officialRows, err := u.repository.ListOfficialMemories(ctx, input.AuthToken, fetchLimit, before)
 	if err != nil {
 		return nil, err
 	}
@@ -93,6 +95,31 @@ func (u *Usecase) ListHomeFeed(ctx context.Context, input ListInput) ([]map[stri
 		items = items[:limit]
 	}
 	return items, nil
+}
+
+func feedFetchLimit(limit int) int {
+	fetchLimit := limit * 5
+	if fetchLimit < 100 {
+		fetchLimit = 100
+	}
+	if fetchLimit > 300 {
+		fetchLimit = 300
+	}
+	return fetchLimit
+}
+
+func cursorBefore(cursor string) time.Time {
+	parsed, ok := ParseCursor(cursor)
+	if !ok {
+		return time.Time{}
+	}
+	if !parsed.SortAt.IsZero() {
+		return parsed.SortAt
+	}
+	if parsed.RankScore > 0 {
+		return time.Unix(parsed.RankScore, 0).UTC()
+	}
+	return time.Time{}
 }
 
 func applyCursor(items []map[string]any, cursor string) []map[string]any {

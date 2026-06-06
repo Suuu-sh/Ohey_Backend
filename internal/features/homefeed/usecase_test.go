@@ -3,6 +3,7 @@ package homefeed
 import (
 	"context"
 	"testing"
+	"time"
 )
 
 const (
@@ -17,6 +18,10 @@ type fakeRepository struct {
 	hiddenUserIDs    map[string]bool
 	memories         []map[string]any
 	officialMemories []map[string]any
+	memoryLimit      int
+	officialLimit    int
+	memoryBefore     time.Time
+	officialBefore   time.Time
 }
 
 func (f *fakeRepository) VisibleFeedUserIDs(context.Context, string, string) ([]string, error) {
@@ -40,11 +45,15 @@ func (f *fakeRepository) HiddenUserIDs(context.Context, string, string) (map[str
 	return map[string]bool{}, nil
 }
 
-func (f *fakeRepository) ListMemories(context.Context, string, []string) ([]map[string]any, error) {
+func (f *fakeRepository) ListMemories(_ context.Context, _ string, _ []string, limit int, before time.Time) ([]map[string]any, error) {
+	f.memoryLimit = limit
+	f.memoryBefore = before
 	return f.memories, nil
 }
 
-func (f *fakeRepository) ListOfficialMemories(context.Context, string) ([]map[string]any, error) {
+func (f *fakeRepository) ListOfficialMemories(_ context.Context, _ string, limit int, before time.Time) ([]map[string]any, error) {
+	f.officialLimit = limit
+	f.officialBefore = before
 	return f.officialMemories, nil
 }
 
@@ -92,6 +101,28 @@ func TestListHomeFeedShapesDisplayableItemsAndHidesReports(t *testing.T) {
 	}
 	if feed.LikeCount != 1 || !feed.LikedByMe || !feed.CanDelete || feed.CanReport {
 		t.Fatalf("feed actions = %#v", feed)
+	}
+}
+
+func TestListHomeFeedPassesBoundedFetchLimitAndCursorToRepository(t *testing.T) {
+	repo := &fakeRepository{}
+	usecase := NewUsecase(Dependencies{Repository: repo})
+
+	_, err := usecase.ListHomeFeed(context.Background(), ListInput{
+		AuthToken: testAuthToken,
+		UserID:    testUserID,
+		Limit:     "20",
+		Cursor:    "1800000000:last-id",
+	})
+	if err != nil {
+		t.Fatalf("ListHomeFeed returned error: %v", err)
+	}
+	if repo.memoryLimit != 100 || repo.officialLimit != 100 {
+		t.Fatalf("fetch limits = %d/%d, want 100/100", repo.memoryLimit, repo.officialLimit)
+	}
+	wantBefore := time.Unix(1800000000, 0).UTC()
+	if !repo.memoryBefore.Equal(wantBefore) || !repo.officialBefore.Equal(wantBefore) {
+		t.Fatalf("before = %v/%v, want %v", repo.memoryBefore, repo.officialBefore, wantBefore)
 	}
 }
 

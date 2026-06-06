@@ -5,7 +5,9 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/yota/ohey/backend/internal/supabase"
 )
@@ -127,7 +129,7 @@ func isOptionalSafetyTableMissing(err error) bool {
 	return false
 }
 
-func (r *SupabaseRepository) ListMemories(ctx context.Context, authToken string, ownerUserIDs []string) ([]map[string]any, error) {
+func (r *SupabaseRepository) ListMemories(ctx context.Context, authToken string, ownerUserIDs []string, limit int, before time.Time) ([]map[string]any, error) {
 	if len(ownerUserIDs) == 0 {
 		return []map[string]any{}, nil
 	}
@@ -135,6 +137,12 @@ func (r *SupabaseRepository) ListMemories(ctx context.Context, authToken string,
 	q.Set("select", homeFeedMemorySelectColumns)
 	q.Set("owner_user_id", "in.("+strings.Join(ownerUserIDs, ",")+")")
 	q.Set("order", "happened_at.desc")
+	if limit > 0 {
+		q.Set("limit", strconv.Itoa(limit))
+	}
+	if !before.IsZero() {
+		q.Set("happened_at", "lt."+before.UTC().Format(time.RFC3339))
+	}
 	var rows []map[string]any
 	if err := r.client.Get(ctx, authToken, "memories", q, &rows); err != nil {
 		return nil, err
@@ -142,11 +150,17 @@ func (r *SupabaseRepository) ListMemories(ctx context.Context, authToken string,
 	return rows, nil
 }
 
-func (r *SupabaseRepository) ListOfficialMemories(ctx context.Context, authToken string) ([]map[string]any, error) {
+func (r *SupabaseRepository) ListOfficialMemories(ctx context.Context, authToken string, limit int, before time.Time) ([]map[string]any, error) {
 	q := url.Values{}
 	q.Set("select", homeFeedMemorySelectColumns)
 	q.Set("is_official", "eq.true")
 	q.Set("order", "happened_at.desc")
+	if limit > 0 {
+		q.Set("limit", strconv.Itoa(limit))
+	}
+	if !before.IsZero() {
+		q.Set("happened_at", "lt."+before.UTC().Format(time.RFC3339))
+	}
 	var rows []map[string]any
 	if err := r.client.Get(ctx, authToken, "memories", q, &rows); err != nil {
 		return nil, err
