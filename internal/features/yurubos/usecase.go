@@ -8,14 +8,16 @@ import (
 
 type Dependencies struct {
 	Repository Repository
+	Publisher  EventPublisher
 }
 
 type Usecase struct {
 	repository Repository
+	publisher  EventPublisher
 }
 
 func NewUsecase(deps Dependencies) *Usecase {
-	return &Usecase{repository: deps.Repository}
+	return &Usecase{repository: deps.Repository, publisher: deps.Publisher}
 }
 
 type ListInput struct {
@@ -75,6 +77,7 @@ func (u *Usecase) CreateYurubo(ctx context.Context, input CreateInput) (map[stri
 	if err != nil {
 		return nil, err
 	}
+	groupIDs := []string{}
 	if item.Visibility == contracts.VisibilityGroup {
 		yuruboID, _ := row["id"].(string)
 		if yuruboID == "" {
@@ -83,6 +86,10 @@ func (u *Usecase) CreateYurubo(ctx context.Context, input CreateInput) (map[stri
 		if err := u.repository.LinkVisibilityGroup(ctx, input.AuthToken, yuruboID, groupID); err != nil {
 			return nil, err
 		}
+		groupIDs = append(groupIDs, groupID)
+	}
+	if u.publisher != nil {
+		u.publisher.Publish(ctx, input.AuthToken, DomainEvent{Kind: EventYuruboCreated, Yurubo: item, Row: row, GroupIDs: groupIDs})
 	}
 	return row, nil
 }

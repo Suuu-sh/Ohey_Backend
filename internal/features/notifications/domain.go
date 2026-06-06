@@ -77,6 +77,7 @@ const (
 	KindInviteAccepted           Kind = contracts.NotificationKindInviteAccepted
 	KindTodayReservationReminder Kind = contracts.NotificationKindTodayReservationReminder
 	KindMemoryTagged             Kind = contracts.NotificationKindMemoryTagged
+	KindYuruboCreated            Kind = contracts.NotificationKindYuruboCreated
 	KindSystem                   Kind = contracts.NotificationKindSystem
 )
 

@@ -145,6 +145,56 @@ func (r *SupabaseRepository) AllProfileIDs(ctx context.Context) ([]string, error
 	return ids, nil
 }
 
+func (r *SupabaseRepository) VisibleYuruboRecipientIDs(ctx context.Context, authToken, ownerUserID, visibility string, groupIDs []string) ([]string, error) {
+	seen := map[string]bool{}
+	ids := []string{}
+	add := func(id string) {
+		id = strings.TrimSpace(id)
+		if id == "" || id == ownerUserID || seen[id] {
+			return
+		}
+		seen[id] = true
+		ids = append(ids, id)
+	}
+	client := r.client
+	token := authToken
+	if r.adminClient != nil && r.serviceRoleKey != "" {
+		client = r.adminClient
+		token = r.serviceRoleKey
+	}
+	if visibility == contracts.VisibilityGroup && len(groupIDs) > 0 {
+		q := url.Values{}
+		q.Set("select", "friend_user_id")
+		q.Set("group_id", "in.("+strings.Join(groupIDs, ",")+")")
+		var rows []map[string]any
+		if err := client.Get(ctx, token, "friend_group_members", q, &rows); err != nil {
+			return nil, err
+		}
+		for _, row := range rows {
+			id, _ := row["friend_user_id"].(string)
+			add(id)
+		}
+		return ids, nil
+	}
+	q := url.Values{}
+	q.Set("select", "user_a_id,user_b_id")
+	q.Set("or", "(user_a_id.eq."+ownerUserID+",user_b_id.eq."+ownerUserID+")")
+	var rows []map[string]any
+	if err := client.Get(ctx, token, "friendships", q, &rows); err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		userA, _ := row["user_a_id"].(string)
+		userB, _ := row["user_b_id"].(string)
+		if userA == ownerUserID {
+			add(userB)
+		} else if userB == ownerUserID {
+			add(userA)
+		}
+	}
+	return ids, nil
+}
+
 func (r *SupabaseRepository) PushTokens(ctx context.Context, recipientUserID string) ([]string, error) {
 	if r.adminClient == nil || r.serviceRoleKey == "" {
 		return nil, nil

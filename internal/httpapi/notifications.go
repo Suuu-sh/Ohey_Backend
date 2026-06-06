@@ -153,6 +153,8 @@ func (r *router) dispatchNotificationOutboxEvent(ctx context.Context, authToken 
 		return usecase.NotifyMemoryTagged(ctx, authToken, stringValue(event.Payload, "memory_id"), stringValue(event.Payload, "owner_user_id"), stringSliceValue(event.Payload, "friend_ids"))
 	case contracts.DomainEventMemoryLiked:
 		return usecase.NotifyMemoryLiked(ctx, authToken, stringValue(event.Payload, "memory_id"), stringValue(event.Payload, "actor_user_id"))
+	case contracts.DomainEventYuruboCreated:
+		return usecase.NotifyYuruboCreated(ctx, authToken, event.Payload, stringSliceValue(event.Payload, "group_ids"))
 	case contracts.DomainEventMemoryReported, contracts.DomainEventSystemNotificationCreated:
 		return nil
 	default:

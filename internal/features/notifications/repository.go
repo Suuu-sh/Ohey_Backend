@@ -13,6 +13,7 @@ type Repository interface {
 	MemoryOwnerUserID(ctx context.Context, authToken, memoryID string) (string, error)
 	TodayAcceptedInvites(ctx context.Context, authToken, userID, date string) ([]Invite, error)
 	AllProfileIDs(ctx context.Context) ([]string, error)
+	VisibleYuruboRecipientIDs(ctx context.Context, authToken, ownerUserID, visibility string, groupIDs []string) ([]string, error)
 	PushTokens(ctx context.Context, recipientUserID string) ([]string, error)
 	DeletePushToken(ctx context.Context, token string) error
 }

@@ -68,6 +68,7 @@ const (
 	NotificationKindInviteAccepted           = "invite_accepted"
 	NotificationKindTodayReservationReminder = "today_reservation_reminder"
 	NotificationKindMemoryTagged             = "memory_tagged"
+	NotificationKindYuruboCreated            = "yurubo_created"
 	NotificationKindSystem                   = "system"
 )
 
@@ -92,5 +93,6 @@ const (
 	DomainEventMemoryTagged              = "memory.tagged"
 	DomainEventMemoryLiked               = "memory.liked"
 	DomainEventMemoryReported            = "memory.reported"
+	DomainEventYuruboCreated             = "yurubo.created"
 	DomainEventSystemNotificationCreated = "system_notification.created"
 )

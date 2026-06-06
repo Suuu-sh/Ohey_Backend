@@ -253,6 +253,41 @@ func (u *Usecase) NotifyMemoryLiked(ctx context.Context, authToken, memoryID, ac
 	})
 }
 
+func (u *Usecase) NotifyYuruboCreated(ctx context.Context, authToken string, yuruboRow map[string]any, groupIDs []string) error {
+	yuruboID, _ := yuruboRow["id"].(string)
+	ownerUserID, _ := yuruboRow["owner_user_id"].(string)
+	visibility, _ := yuruboRow["visibility"].(string)
+	title, _ := yuruboRow["title"].(string)
+	title = ShortText(title, 80)
+	if yuruboID == "" || ownerUserID == "" || visibility == "" || visibility == "private" {
+		return nil
+	}
+	recipientIDs, err := u.repository.VisibleYuruboRecipientIDs(ctx, authToken, ownerUserID, visibility, groupIDs)
+	if err != nil {
+		u.warn("failed to fetch yurubo notification recipients", KindYuruboCreated, err)
+		return err
+	}
+	actorName := u.actorName(ctx, authToken, ownerUserID, KindYuruboCreated)
+	message := actorName + "さんがゆるぼしました。"
+	if title != "" {
+		message = actorName + "さんが「" + title + "」でゆるぼしました。"
+	}
+	var firstErr error
+	for _, recipientID := range recipientIDs {
+		if err := u.tryCreateAndPush(ctx, authToken, Notification{
+			RecipientUserID: recipientID,
+			ActorUserID:     ownerUserID,
+			Kind:            KindYuruboCreated,
+			Title:           "フレンズがゆるぼしました",
+			Message:         message,
+			SystemKey:       "yurubo_created:" + yuruboID,
+		}); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
+}
+
 func (u *Usecase) CreateTodayReservationReminders(ctx context.Context, authToken, userID, date string) error {
 	if userID == "" {
 		return nil

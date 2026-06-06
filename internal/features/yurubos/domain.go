@@ -1,6 +1,7 @@
 package yurubos
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"regexp"
@@ -195,6 +196,21 @@ type ReactionState struct {
 
 type ApprovalState struct {
 	Approved bool `json:"approved"`
+}
+
+type DomainEventKind string
+
+const EventYuruboCreated DomainEventKind = "yurubo.created"
+
+type DomainEvent struct {
+	Kind     DomainEventKind
+	Yurubo   Yurubo
+	Row      map[string]any
+	GroupIDs []string
+}
+
+type EventPublisher interface {
+	Publish(ctx context.Context, authToken string, event DomainEvent)
 }
 
 func NewYurubo(ownerUserID string, body CreateBody) (Yurubo, string, error) {

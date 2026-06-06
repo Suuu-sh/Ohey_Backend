@@ -1,14 +1,17 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
 
+	"github.com/yota/ohey/backend/internal/contracts"
 	"github.com/yota/ohey/backend/internal/features/yurubos"
 )
 
 func (r *router) yurubosUsecase() *yurubos.Usecase {
 	return yurubos.NewUsecase(yurubos.Dependencies{
 		Repository: yurubos.NewSupabaseRepository(r.deps.Supabase, r.deps.AdminSupabase, r.deps.Config.SupabaseServiceRoleKey),
+		Publisher:  yuruboEventPublisher{router: r},
 	})
 }
 
@@ -135,4 +138,30 @@ func writeYurubosError(w http.ResponseWriter, err error) {
 		return
 	}
 	writeError(w, http.StatusBadGateway, "upstream database error")
+}
+
+type yuruboEventPublisher struct {
+	router *router
+}
+
+func (p yuruboEventPublisher) Publish(ctx context.Context, authToken string, event yurubos.DomainEvent) {
+	if p.router == nil || event.Kind != yurubos.EventYuruboCreated {
+		return
+	}
+	payload := event.Row
+	if payload == nil {
+		payload = map[string]any{}
+	}
+	if len(event.GroupIDs) > 0 {
+		payload["group_ids"] = event.GroupIDs
+	}
+	yuruboID, _ := payload["id"].(string)
+	ownerUserID, _ := payload["owner_user_id"].(string)
+	p.router.enqueueAndProcessNotificationOutboxEvent(ctx, authToken, notificationOutboxEvent{
+		EventKind:     contracts.DomainEventYuruboCreated,
+		AggregateType: "yurubo",
+		AggregateID:   yuruboID,
+		ActorUserID:   ownerUserID,
+		Payload:       payload,
+	})
 }

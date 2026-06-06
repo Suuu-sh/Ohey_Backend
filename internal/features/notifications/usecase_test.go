@@ -73,6 +73,10 @@ func (f *fakeRepository) AllProfileIDs(context.Context) ([]string, error) {
 	return f.allProfileIDs, nil
 }
 
+func (f *fakeRepository) VisibleYuruboRecipientIDs(context.Context, string, string, string, []string) ([]string, error) {
+	return f.allProfileIDs, nil
+}
+
 func (f *fakeRepository) PushTokens(_ context.Context, recipientUserID string) ([]string, error) {
 	f.pushTokenQueries = append(f.pushTokenQueries, recipientUserID)
 	return f.pushTokens, nil
