@@ -37,6 +37,7 @@ func (r *SupabaseRepository) WishItemExists(ctx context.Context, authToken, owne
 }
 
 func (r *SupabaseRepository) CreateYurubo(ctx context.Context, authToken string, item Yurubo) (map[string]any, error) {
+	now := time.Now().UTC()
 	payload := map[string]any{
 		"owner_user_id": item.OwnerUserID,
 		"title":         item.Title,
@@ -45,7 +46,7 @@ func (r *SupabaseRepository) CreateYurubo(ctx context.Context, authToken string,
 		"place_text":    item.PlaceText,
 		"time_label":    item.TimeLabel,
 		"visibility":    item.Visibility,
-		"expires_at":    time.Now().UTC().Add(24 * time.Hour).Format(time.RFC3339),
+		"expires_at":    YuruboExpiresAt(item.StartsAt, now).Format(time.RFC3339),
 	}
 	if item.StartsAt != nil {
 		payload["starts_at"] = *item.StartsAt
@@ -61,6 +62,16 @@ func (r *SupabaseRepository) CreateYurubo(ctx context.Context, authToken string,
 		return nil, UserError{Kind: ErrorKindUpstream, Message: "yurubo insert returned no rows"}
 	}
 	return rows[0], nil
+}
+
+func YuruboExpiresAt(startsAt *string, now time.Time) time.Time {
+	if startsAt != nil && strings.TrimSpace(*startsAt) != "" {
+		if parsed, err := time.Parse(time.RFC3339, strings.TrimSpace(*startsAt)); err == nil {
+			date := parsed.UTC()
+			return time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, time.UTC).Add(24 * time.Hour)
+		}
+	}
+	return now.UTC().Add(30 * 24 * time.Hour)
 }
 
 func (r *SupabaseRepository) LinkVisibilityGroup(ctx context.Context, authToken, yuruboID, groupID string) error {
@@ -79,6 +90,7 @@ func (r *SupabaseRepository) UpdateYurubo(ctx context.Context, authToken string,
 		"time_label": update.TimeLabel,
 	}
 	if update.StartsAtSet {
+		payload["expires_at"] = YuruboExpiresAt(update.StartsAt, time.Now().UTC()).Format(time.RFC3339)
 		if update.StartsAt != nil {
 			payload["starts_at"] = *update.StartsAt
 		} else {
