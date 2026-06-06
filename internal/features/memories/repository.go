@@ -14,9 +14,6 @@ type Repository interface {
 	CreateMemory(ctx context.Context, authToken string, memory NewMemory) (map[string]any, error)
 	CreateMemoryFriendLinks(ctx context.Context, authToken, memoryID string, friendIDs []string) error
 	DeleteOwnedMemory(ctx context.Context, authToken, memoryID, ownerUserID string) (map[string]any, error)
-	CreateLike(ctx context.Context, authToken, memoryID, userID string) (bool, error)
-	DeleteLike(ctx context.Context, authToken, memoryID, userID string) error
-	LikeState(ctx context.Context, authToken, memoryID, userID string) (LikeState, error)
 	HiddenMemoryIDs(ctx context.Context, authToken, userID string) (map[string]bool, error)
 	HiddenUserIDs(ctx context.Context, authToken, userID string) (map[string]bool, error)
 	MemoryOwnerUserID(ctx context.Context, authToken, memoryID string) (string, error)

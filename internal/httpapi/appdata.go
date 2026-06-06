@@ -222,32 +222,6 @@ func (r *router) updateFriendRequest(w http.ResponseWriter, req *http.Request, a
 	writeJSON(w, http.StatusOK, row)
 }
 
-func (r *router) likeMemory(w http.ResponseWriter, req *http.Request, authToken string) {
-	state, err := r.memoryUsecase(req).LikeMemory(req.Context(), memories.LikeInput{
-		AuthToken: authToken,
-		MemoryID:  req.PathValue("id"),
-		UserID:    req.Header.Get("X-Ohey-User-ID"),
-	})
-	if err != nil {
-		writeMemoryError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, state)
-}
-
-func (r *router) unlikeMemory(w http.ResponseWriter, req *http.Request, authToken string) {
-	state, err := r.memoryUsecase(req).UnlikeMemory(req.Context(), memories.LikeInput{
-		AuthToken: authToken,
-		MemoryID:  req.PathValue("id"),
-		UserID:    req.Header.Get("X-Ohey-User-ID"),
-	})
-	if err != nil {
-		writeMemoryError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, state)
-}
-
 func (r *router) reportMemory(w http.ResponseWriter, req *http.Request, authToken string) {
 	var input MemoryReportRequest
 	if !decodeJSONBody(w, req, &input) {

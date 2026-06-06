@@ -50,12 +50,6 @@ type DeleteInput struct {
 	OwnerUserID string
 }
 
-type LikeInput struct {
-	AuthToken string
-	MemoryID  string
-	UserID    string
-}
-
 type ReportInput struct {
 	AuthToken      string
 	MemoryID       string
@@ -92,7 +86,6 @@ func (u *Usecase) ListMemories(ctx context.Context, input ListInput) ([]map[stri
 	rows = AppendUniqueRows(rows, officialRows...)
 	rows = HideRowsByID(rows, hiddenIDs)
 	rows = HideRowsByOwner(rows, hiddenUserIDs)
-	AttachLikeState(rows, userID)
 	SortRowsByHappenedAtDesc(rows)
 	return rows, nil
 }
@@ -183,28 +176,6 @@ func (u *Usecase) DeleteMemory(ctx context.Context, input DeleteInput) (map[stri
 	return row, nil
 }
 
-func (u *Usecase) LikeMemory(ctx context.Context, input LikeInput) (LikeState, error) {
-	memoryID, userID, err := cleanLikeInput(input)
-	if err != nil {
-		return LikeState{}, err
-	}
-	if _, err := u.repository.CreateLike(ctx, input.AuthToken, memoryID, userID); err != nil {
-		return LikeState{}, err
-	}
-	return u.repository.LikeState(ctx, input.AuthToken, memoryID, userID)
-}
-
-func (u *Usecase) UnlikeMemory(ctx context.Context, input LikeInput) (LikeState, error) {
-	memoryID, userID, err := cleanLikeInput(input)
-	if err != nil {
-		return LikeState{}, err
-	}
-	if err := u.repository.DeleteLike(ctx, input.AuthToken, memoryID, userID); err != nil {
-		return LikeState{}, err
-	}
-	return u.repository.LikeState(ctx, input.AuthToken, memoryID, userID)
-}
-
 func (u *Usecase) ReportMemory(ctx context.Context, input ReportInput) (ReportResult, error) {
 	memoryID, err := CleanUUID(input.MemoryID, "memory id")
 	if err != nil {
@@ -245,16 +216,4 @@ func (u *Usecase) ReportMemory(ctx context.Context, input ReportInput) (ReportRe
 		}
 	}
 	return ReportResult{Created: true, Body: NewReportBody(report, false)}, nil
-}
-
-func cleanLikeInput(input LikeInput) (string, string, error) {
-	memoryID, err := CleanUUID(input.MemoryID, "memory id")
-	if err != nil {
-		return "", "", err
-	}
-	userID, err := CleanUUID(input.UserID, "user id")
-	if err != nil {
-		return "", "", err
-	}
-	return memoryID, userID, nil
 }

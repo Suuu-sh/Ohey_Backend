@@ -81,8 +81,6 @@ func (r *router) routes() {
 	r.mux.HandleFunc(route(http.MethodGet, contracts.APIPathMemories), r.auth(r.listMemories))
 	r.mux.HandleFunc(route(http.MethodPost, contracts.APIPathMemories), r.auth(r.createMemory))
 	r.mux.HandleFunc(route(http.MethodDelete, contracts.APIPathMemory), r.auth(r.deleteMemory))
-	r.mux.HandleFunc(route(http.MethodPut, contracts.APIPathMemoryLike), r.auth(r.likeMemory))
-	r.mux.HandleFunc(route(http.MethodDelete, contracts.APIPathMemoryLike), r.auth(r.unlikeMemory))
 	r.mux.HandleFunc(route(http.MethodPost, contracts.APIPathMemoryReport), r.auth(r.reportMemory))
 	r.mux.HandleFunc(route(http.MethodPost, contracts.APIPathUserBlocks), r.auth(r.blockUser))
 	r.mux.HandleFunc(route(http.MethodGet, contracts.APIPathUserBlocks), r.auth(r.listBlockedUsers))

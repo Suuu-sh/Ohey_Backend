@@ -58,9 +58,6 @@ type FeedItem struct {
 	Body        string         `json:"body"`
 	Place       string         `json:"place"`
 	LinkURL     string         `json:"link_url"`
-	LikeCount   int            `json:"like_count"`
-	LikedByMe   bool           `json:"liked_by_me"`
-	CanLike     bool           `json:"can_like"`
 	CanReport   bool           `json:"can_report"`
 	CanDelete   bool           `json:"can_delete"`
 	SortAt      string         `json:"sort_at"`
@@ -108,9 +105,6 @@ func BuildFeedItem(row map[string]any, currentUserID string) (FeedItem, bool) {
 		Body:        strings.TrimSpace(stringValue(row, "memo")),
 		Place:       strings.TrimSpace(stringValue(row, "place_name")),
 		LinkURL:     strings.TrimSpace(stringValue(row, "link_url")),
-		LikeCount:   intValue(row, "like_count"),
-		LikedByMe:   boolValue(row, "liked_by_me"),
-		CanLike:     id != "",
 		CanReport:   id != "" && !ownedByMe && !isOfficial,
 		CanDelete:   id != "" && ownedByMe && !isOfficial,
 		SortAt:      sortAt,

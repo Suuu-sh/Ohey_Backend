@@ -24,8 +24,6 @@ type fakeRepository struct {
 	friendships      map[string]bool
 	createdMemory    map[string]any
 	deletedMemory    map[string]any
-	likeCreated      bool
-	likeState        LikeState
 	hiddenIDs        map[string]bool
 	hiddenUserIDs    map[string]bool
 	report           *Report
@@ -85,21 +83,6 @@ func (f *fakeRepository) CreateMemoryFriendLinks(_ context.Context, _ string, _ 
 func (f *fakeRepository) DeleteOwnedMemory(context.Context, string, string, string) (map[string]any, error) {
 	f.calls = append(f.calls, "delete")
 	return f.deletedMemory, nil
-}
-
-func (f *fakeRepository) CreateLike(context.Context, string, string, string) (bool, error) {
-	f.calls = append(f.calls, "create_like")
-	return f.likeCreated, nil
-}
-
-func (f *fakeRepository) DeleteLike(context.Context, string, string, string) error {
-	f.calls = append(f.calls, "delete_like")
-	return nil
-}
-
-func (f *fakeRepository) LikeState(context.Context, string, string, string) (LikeState, error) {
-	f.calls = append(f.calls, "like_state")
-	return f.likeState, nil
 }
 
 func (f *fakeRepository) HiddenMemoryIDs(context.Context, string, string) (map[string]bool, error) {
@@ -207,33 +190,6 @@ func TestCreateMemoryCreatesMemoRecordAndDeduplicatesFriends(t *testing.T) {
 	}
 }
 
-func TestLikeMemoryDoesNotPublishNotificationEvent(t *testing.T) {
-	for _, tc := range []struct {
-		name    string
-		created bool
-	}{
-		{name: "created", created: true},
-		{name: "duplicate", created: false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			repo := &fakeRepository{likeCreated: tc.created, likeState: LikeState{LikeCount: 2, LikedByMe: true}}
-			publisher := &fakePublisher{}
-			usecase := NewUsecase(Dependencies{Repository: repo, Publisher: publisher})
-
-			state, err := usecase.LikeMemory(context.Background(), LikeInput{AuthToken: testAuthToken, MemoryID: testMemoryID, UserID: testUserID})
-			if err != nil {
-				t.Fatalf("LikeMemory returned error: %v", err)
-			}
-			if state.LikeCount != 2 || !state.LikedByMe {
-				t.Fatalf("state = %#v", state)
-			}
-			if len(publisher.events) != 0 {
-				t.Fatalf("events = %#v, want no notification event", publisher.events)
-			}
-		})
-	}
-}
-
 func TestDeleteMemoryReturnsDeletedRow(t *testing.T) {
 	repo := &fakeRepository{deletedMemory: map[string]any{"id": testMemoryID}}
 	usecase := NewUsecase(Dependencies{Repository: repo})
@@ -305,8 +261,8 @@ func TestReportMemoryReturnsDuplicateForExistingReport(t *testing.T) {
 func TestListMemoriesExcludesHiddenReportedRows(t *testing.T) {
 	repo := &fakeRepository{
 		memories: []map[string]any{
-			{"id": "visible", "happened_at": "2026-05-24T12:00:00Z", "memory_likes": []any{}},
-			{"id": "hidden", "happened_at": "2026-05-24T13:00:00Z", "memory_likes": []any{}},
+			{"id": "visible", "happened_at": "2026-05-24T12:00:00Z"},
+			{"id": "hidden", "happened_at": "2026-05-24T13:00:00Z"},
 		},
 		hiddenIDs: map[string]bool{"hidden": true},
 	}

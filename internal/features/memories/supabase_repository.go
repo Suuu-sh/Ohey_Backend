@@ -12,7 +12,7 @@ import (
 	"github.com/yota/ohey/backend/internal/supabase"
 )
 
-const memorySelectColumns = "id,owner_user_id,happened_at,place_name,place_lat,place_lng,memo,link_url,is_official,owner:profiles!memories_owner_user_id_fkey(id,user_id,display_name,character_key,avatar_url,is_plus),memory_likes(user_id),memory_tagged_users(profiles(id,user_id,display_name,character_key,avatar_url,is_plus))"
+const memorySelectColumns = "id,owner_user_id,happened_at,place_name,place_lat,place_lng,memo,link_url,is_official,owner:profiles!memories_owner_user_id_fkey(id,user_id,display_name,character_key,avatar_url,is_plus),memory_tagged_users(profiles(id,user_id,display_name,character_key,avatar_url,is_plus))"
 
 type SupabaseRepository struct {
 	client *supabase.Client
@@ -144,45 +144,6 @@ func (r *SupabaseRepository) DeleteOwnedMemory(ctx context.Context, authToken, m
 		return nil, nil
 	}
 	return rows[0], nil
-}
-
-func (r *SupabaseRepository) CreateLike(ctx context.Context, authToken, memoryID, userID string) (bool, error) {
-	payload := map[string]any{"memory_id": memoryID, "user_id": userID}
-	var ignored []map[string]any
-	if err := r.client.Post(ctx, authToken, "memory_likes", nil, payload, &ignored); err != nil {
-		var apiErr supabase.APIError
-		if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusConflict {
-			return false, nil
-		}
-		return false, err
-	}
-	return true, nil
-}
-
-func (r *SupabaseRepository) DeleteLike(ctx context.Context, authToken, memoryID, userID string) error {
-	q := url.Values{}
-	q.Set("memory_id", "eq."+memoryID)
-	q.Set("user_id", "eq."+userID)
-	var ignored []map[string]any
-	return r.client.Delete(ctx, authToken, "memory_likes", q, &ignored)
-}
-
-func (r *SupabaseRepository) LikeState(ctx context.Context, authToken, memoryID, userID string) (LikeState, error) {
-	q := url.Values{}
-	q.Set("select", "user_id")
-	q.Set("memory_id", "eq."+memoryID)
-	var likes []map[string]any
-	if err := r.client.Get(ctx, authToken, "memory_likes", q, &likes); err != nil {
-		return LikeState{}, err
-	}
-	likedByMe := false
-	for _, like := range likes {
-		if like["user_id"] == userID {
-			likedByMe = true
-			break
-		}
-	}
-	return LikeState{LikeCount: len(likes), LikedByMe: likedByMe}, nil
 }
 
 func (r *SupabaseRepository) HiddenMemoryIDs(ctx context.Context, authToken, userID string) (map[string]bool, error) {
@@ -391,22 +352,6 @@ func AppendUniqueRows(rows []map[string]any, extraRows ...map[string]any) []map[
 		rows = append(rows, row)
 	}
 	return rows
-}
-
-func AttachLikeState(rows []map[string]any, userID string) {
-	for _, row := range rows {
-		rawLikes, _ := row["memory_likes"].([]any)
-		row["like_count"] = len(rawLikes)
-		likedByMe := false
-		for _, rawLike := range rawLikes {
-			like, ok := rawLike.(map[string]any)
-			if ok && like["user_id"] == userID {
-				likedByMe = true
-				break
-			}
-		}
-		row["liked_by_me"] = likedByMe
-	}
 }
 
 func SortRowsByHappenedAtDesc(rows []map[string]any) {

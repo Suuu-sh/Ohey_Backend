@@ -73,7 +73,6 @@ func (u *Usecase) ListHomeFeed(ctx context.Context, input ListInput) ([]map[stri
 		return nil, err
 	}
 	rows = appendUniqueRows(rows, officialRows...)
-	attachLikeState(rows, userID)
 	rows = HideReportedRows(rows, hiddenIDs)
 	rows = HideRowsByOwner(rows, hiddenUserIDs)
 	items := make([]map[string]any, 0, len(rows))
@@ -177,22 +176,6 @@ func appendUniqueRows(rows []map[string]any, extraRows ...map[string]any) []map[
 		rows = append(rows, row)
 	}
 	return rows
-}
-
-func attachLikeState(rows []map[string]any, userID string) {
-	for _, row := range rows {
-		rawLikes, _ := row["memory_likes"].([]any)
-		row["like_count"] = len(rawLikes)
-		likedByMe := false
-		for _, rawLike := range rawLikes {
-			like, ok := rawLike.(map[string]any)
-			if ok && like["user_id"] == userID {
-				likedByMe = true
-				break
-			}
-		}
-		row["liked_by_me"] = likedByMe
-	}
 }
 
 func int64Value(row map[string]any, key string) int64 {

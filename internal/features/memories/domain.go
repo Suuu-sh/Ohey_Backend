@@ -177,11 +177,6 @@ type NewMemory struct {
 	IsOfficial  bool
 }
 
-type LikeState struct {
-	LikeCount int  `json:"like_count"`
-	LikedByMe bool `json:"liked_by_me"`
-}
-
 type ReportResult struct {
 	Created bool
 	Body    map[string]any

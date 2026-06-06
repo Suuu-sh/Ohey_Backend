@@ -31,7 +31,6 @@ const (
 
 	APIPathMemories     = "/v1/memories"
 	APIPathMemory       = "/v1/memories/{id}"
-	APIPathMemoryLike   = "/v1/memories/{id}/like"
 	APIPathMemoryReport = "/v1/memories/{id}/report"
 	APIPathMemoryHides  = "/v1/memory-hides"
 	APIPathMemoryHide   = "/v1/memory-hides/{id}"
