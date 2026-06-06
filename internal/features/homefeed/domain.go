@@ -216,20 +216,12 @@ func CleanCursor(value string) (string, error) {
 }
 
 func RankScore(row map[string]any, currentUserID string) int64 {
-	score := RowTime(row).Unix()
-	if RowTime(row).IsZero() {
-		score = 0
+	_ = currentUserID
+	rowTime := RowTime(row)
+	if rowTime.IsZero() {
+		return 0
 	}
-	ownerUserID := stringValue(row, "owner_user_id")
-	switch {
-	case boolValue(row, "is_official"):
-		score += 300
-	case ownerUserID != "" && ownerUserID == currentUserID:
-		score += 200
-	default:
-		score += 100
-	}
-	return score
+	return rowTime.Unix()
 }
 
 func EncodeCursor(item FeedItem) string {
