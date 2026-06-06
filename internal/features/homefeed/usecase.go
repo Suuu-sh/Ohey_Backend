@@ -44,7 +44,12 @@ func (u *Usecase) ListHomeFeed(ctx context.Context, input ListInput) ([]map[stri
 	if err != nil {
 		return nil, err
 	}
+	// The client asks for a small page (usually 20 items), but filtering below can
+	// remove reported/hidden/muted rows. Fetch a bounded over-read from Supabase so
+	// the DB never returns every memory for large friend graphs.
 	fetchLimit := feedFetchLimit(limit)
+	// Convert the feed cursor back into a timestamp and push it down to PostgREST.
+	// This keeps later pages from re-scanning newer memories that were already seen.
 	before := cursorBefore(cursor)
 	visibleUserIDs, err := u.repository.VisibleFeedUserIDs(ctx, input.AuthToken, userID)
 	if err != nil {
@@ -98,6 +103,8 @@ func (u *Usecase) ListHomeFeed(ctx context.Context, input ListInput) ([]map[stri
 }
 
 func feedFetchLimit(limit int) int {
+	// Over-read by 5x to leave room for safety filters, but cap the DB result set
+	// to protect backend JSON decoding and Supabase transfer as data grows.
 	fetchLimit := limit * 5
 	if fetchLimit < 100 {
 		fetchLimit = 100
@@ -109,6 +116,8 @@ func feedFetchLimit(limit int) int {
 }
 
 func cursorBefore(cursor string) time.Time {
+	// rank_score is now just happened_at.Unix(), so legacy rank_score cursors can
+	// be safely converted to a time boundary for DB-side pagination.
 	parsed, ok := ParseCursor(cursor)
 	if !ok {
 		return time.Time{}

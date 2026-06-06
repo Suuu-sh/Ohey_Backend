@@ -136,6 +136,7 @@ func (r *SupabaseRepository) ListMemories(ctx context.Context, authToken string,
 	q := url.Values{}
 	q.Set("select", homeFeedMemorySelectColumns)
 	q.Set("owner_user_id", "in.("+strings.Join(ownerUserIDs, ",")+")")
+	// Keep the database order aligned with the product rule: newest memories first.
 	q.Set("order", "happened_at.desc")
 	if limit > 0 {
 		q.Set("limit", strconv.Itoa(limit))
@@ -154,6 +155,7 @@ func (r *SupabaseRepository) ListOfficialMemories(ctx context.Context, authToken
 	q := url.Values{}
 	q.Set("select", homeFeedMemorySelectColumns)
 	q.Set("is_official", "eq.true")
+	// Official memories share the same bounded, time-based pagination as friend memories.
 	q.Set("order", "happened_at.desc")
 	if limit > 0 {
 		q.Set("limit", strconv.Itoa(limit))

@@ -142,6 +142,8 @@ func (u *Usecase) ListYurubos(ctx context.Context, input ListInput) ([]map[strin
 		return nil, err
 	}
 	ids := make([]string, 0, len(rows))
+	// ListOpenYurubos already selects owner_user_id. Keep it in memory and pass it
+	// into reactionSummaries to avoid one OwnerID query per yurubo (N+1 DB load).
 	ownerIDs := make(map[string]string, len(rows))
 	out := make([]map[string]any, 0, len(rows))
 	for _, row := range rows {
@@ -245,6 +247,8 @@ func cleanReactionInput(input ReactionInput) (Reaction, error) {
 }
 
 func (u *Usecase) reactionSummaries(ctx context.Context, authToken string, ids []string, userID string, ownerIDs map[string]string) (map[string]int, map[string]bool, map[string]string, map[string][]map[string]any) {
+	// Reactions and participant profiles are fetched in batches. ownerIDs comes
+	// from the yurubo list rows, so this function does not perform per-yurubo lookups.
 	counts := map[string]int{}
 	reactedByMe := map[string]bool{}
 	myReactionTypes := map[string]string{}
@@ -288,6 +292,8 @@ func (u *Usecase) reactionSummaries(ctx context.Context, authToken string, ids [
 			continue
 		}
 		reactionType, _ := row["reaction_type"].(string)
+		// Pending/soft reactions are visible only to the yurubo owner and the actor;
+		// approved participants remain visible to everyone who can see the yurubo.
 		if reactionType != contracts.ReactionTypeAvailable && ownerIDs[id] != userID && actor != userID {
 			continue
 		}

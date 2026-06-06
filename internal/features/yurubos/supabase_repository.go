@@ -65,6 +65,8 @@ func (r *SupabaseRepository) CreateYurubo(ctx context.Context, authToken string,
 }
 
 func YuruboExpiresAt(startsAt *string, now time.Time) time.Time {
+	// Scheduled yurubos disappear after their scheduled day. Unscheduled “anytime”
+	// yurubos stay discoverable longer, but still expire to keep lists bounded.
 	if startsAt != nil && strings.TrimSpace(*startsAt) != "" {
 		if parsed, err := time.Parse(time.RFC3339, strings.TrimSpace(*startsAt)); err == nil {
 			date := parsed.UTC()
@@ -144,6 +146,8 @@ func (r *SupabaseRepository) ListOpenYurubos(ctx context.Context, authToken stri
 	q.Set("order", "created_at.desc")
 	q.Set("limit", strconv.Itoa(limit))
 	q.Set("status", supabase.PostgRESTEq(contracts.StatusOpen))
+	// Expired rows remain in the DB for history/debugging, but are kept out of the
+	// hot listing path so old yurubos do not grow feed cost over time.
 	q.Set("expires_at", "gt."+time.Now().UTC().Format(time.RFC3339))
 	var rows []map[string]any
 	if err := r.client.Get(ctx, authToken, "yurubos", q, &rows); err != nil {
