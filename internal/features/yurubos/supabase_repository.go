@@ -5,12 +5,13 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/yota/ohey/backend/internal/contracts"
 	"github.com/yota/ohey/backend/internal/supabase"
 )
 
-const yuruboSelectColumns = "id,wish_item_id,owner_user_id,title,body,category,place_text,place_lat,place_lng,time_label,starts_at,ends_at,status,visibility,expires_at,created_at,updated_at,owner:profiles!yurubos_owner_user_id_fkey(id,user_id,display_name,gender,character_key,avatar_url,is_plus)"
+const yuruboSelectColumns = "id,wish_item_id,owner_user_id,title,body,category,place_text,place_lat,place_lng,time_label,starts_at,ends_at,status,visibility,expires_at,created_at,updated_at,owner:profiles!yurubos_owner_user_id_fkey(id,user_id,display_name,character_key,avatar_url,is_plus)"
 
 type SupabaseRepository struct {
 	client         *supabase.Client
@@ -44,6 +45,7 @@ func (r *SupabaseRepository) CreateYurubo(ctx context.Context, authToken string,
 		"place_text":    item.PlaceText,
 		"time_label":    item.TimeLabel,
 		"visibility":    item.Visibility,
+		"expires_at":    time.Now().UTC().Add(24 * time.Hour).Format(time.RFC3339),
 	}
 	if item.StartsAt != nil {
 		payload["starts_at"] = *item.StartsAt
@@ -130,6 +132,7 @@ func (r *SupabaseRepository) ListOpenYurubos(ctx context.Context, authToken stri
 	q.Set("order", "created_at.desc")
 	q.Set("limit", strconv.Itoa(limit))
 	q.Set("status", supabase.PostgRESTEq(contracts.StatusOpen))
+	q.Set("expires_at", "gt."+time.Now().UTC().Format(time.RFC3339))
 	var rows []map[string]any
 	if err := r.client.Get(ctx, authToken, "yurubos", q, &rows); err != nil {
 		return nil, err

@@ -7,7 +7,7 @@ import (
 	"github.com/yota/ohey/backend/internal/supabase"
 )
 
-const profileSelectColumns = "id,user_id,display_name,gender,character_key,avatar_url,is_plus"
+const profileSelectColumns = "id,user_id,display_name,character_key,avatar_url,is_plus"
 
 type SupabaseRepository struct {
 	client *supabase.Client

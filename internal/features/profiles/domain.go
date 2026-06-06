@@ -65,31 +65,6 @@ func CleanDisplayName(value string) (string, error) {
 	return trimmed, nil
 }
 
-func NormalizeGender(value string) string {
-	gender := strings.ToLower(strings.TrimSpace(value))
-	if gender == "" {
-		return "unspecified"
-	}
-	return gender
-}
-
-func IsValidGender(value string) bool {
-	switch NormalizeGender(value) {
-	case "unspecified", "male", "female":
-		return true
-	default:
-		return false
-	}
-}
-
-func CleanGender(value string) (string, error) {
-	gender := NormalizeGender(value)
-	if !IsValidGender(gender) {
-		return "", UserError{Kind: ErrorKindInvalidInput, Message: "gender must be male, female, or unspecified"}
-	}
-	return gender, nil
-}
-
 func CleanCharacterKey(value string) string {
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" {
@@ -117,7 +92,6 @@ type Profile struct {
 	ID           string `json:"id"`
 	UserID       string `json:"user_id"`
 	DisplayName  string `json:"display_name"`
-	Gender       string `json:"gender"`
 	CharacterKey string `json:"character_key"`
 	AvatarURL    string `json:"avatar_url,omitempty"`
 	IsPlus       bool   `json:"is_plus"`
@@ -128,7 +102,6 @@ type BootstrapInput struct {
 	AuthUserID   string
 	UserID       string
 	DisplayName  string
-	Gender       string
 	CharacterKey string
 	AvatarURL    string
 	UpdatedAt    time.Time
@@ -147,10 +120,6 @@ func BootstrapPayload(input BootstrapInput) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	gender, err := CleanGender(input.Gender)
-	if err != nil {
-		return nil, err
-	}
 	avatarURL, err := CleanAvatarURL(input.AvatarURL)
 	if err != nil {
 		return nil, err
@@ -159,7 +128,6 @@ func BootstrapPayload(input BootstrapInput) (map[string]any, error) {
 		"id":            authUserID,
 		"user_id":       userID,
 		"display_name":  displayName,
-		"gender":        gender,
 		"character_key": CleanCharacterKey(input.CharacterKey),
 		"avatar_url":    avatarURL,
 		"updated_at":    input.UpdatedAt.UTC().Format(time.RFC3339),
@@ -168,9 +136,6 @@ func BootstrapPayload(input BootstrapInput) (map[string]any, error) {
 
 func PatchPayload(body map[string]any, updatedAt time.Time) (map[string]any, error) {
 	payload := map[string]any{}
-	if _, ok := body["gender"]; ok {
-		return nil, UserError{Kind: ErrorKindInvalidInput, Message: "gender cannot be changed"}
-	}
 	if raw, ok := body["user_id"]; ok {
 		userID, ok := raw.(string)
 		if !ok {

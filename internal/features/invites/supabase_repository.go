@@ -12,7 +12,7 @@ import (
 	"github.com/yota/ohey/backend/internal/supabase"
 )
 
-const inviteSelect = "id,inviter_user_id,invitee_user_id,scheduled_date,activity_label,status,inviter:profiles!invites_inviter_user_id_fkey(id,display_name,user_id,gender,avatar_url),invitee:profiles!invites_invitee_user_id_fkey(id,display_name,user_id,gender,avatar_url)"
+const inviteSelect = "id,inviter_user_id,invitee_user_id,scheduled_date,activity_label,status,inviter:profiles!invites_inviter_user_id_fkey(id,display_name,user_id,avatar_url),invitee:profiles!invites_invitee_user_id_fkey(id,display_name,user_id,avatar_url)"
 
 type SupabaseRepository struct {
 	client *supabase.Client

@@ -21,7 +21,6 @@ import (
 type ProfileSaveRequest struct {
 	UserID       string `json:"user_id"`
 	DisplayName  string `json:"display_name"`
-	Gender       string `json:"gender"`
 	CharacterKey string `json:"character_key"`
 	AvatarURL    string `json:"avatar_url"`
 }
@@ -72,7 +71,6 @@ func (r *router) upsertProfile(w http.ResponseWriter, req *http.Request, authTok
 		Request: profiles.BootstrapRequest{
 			UserID:       input.UserID,
 			DisplayName:  input.DisplayName,
-			Gender:       input.Gender,
 			CharacterKey: input.CharacterKey,
 			AvatarURL:    input.AvatarURL,
 		},

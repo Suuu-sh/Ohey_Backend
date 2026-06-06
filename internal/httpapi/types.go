@@ -6,7 +6,6 @@ type Profile struct {
 	ID           string `json:"id"`
 	UserID       string `json:"user_id"`
 	DisplayName  string `json:"display_name"`
-	Gender       string `json:"gender"`
 	CharacterKey string `json:"character_key"`
 	AvatarURL    string `json:"avatar_url,omitempty"`
 	IsPlus       bool   `json:"is_plus"`
@@ -17,7 +16,6 @@ type Friend struct {
 	ID           string `json:"id"`
 	UserID       string `json:"user_id"`
 	DisplayName  string `json:"display_name"`
-	Gender       string `json:"gender"`
 	CharacterKey string `json:"character_key"`
 	AvatarURL    string `json:"avatar_url,omitempty"`
 	IsPlus       bool   `json:"is_plus"`
@@ -66,7 +64,6 @@ type AdminCreateUserRequest struct {
 	Password    string `json:"password"`
 	UserID      string `json:"user_id"`
 	DisplayName string `json:"display_name"`
-	Gender      string `json:"gender"`
 	AvatarURL   string `json:"avatar_url"`
 	Status      string `json:"status"`
 	StatusDate  string `json:"status_date"`
@@ -78,7 +75,6 @@ type AdminUpdateUserRequest struct {
 	Password    *string `json:"password"`
 	UserID      *string `json:"user_id"`
 	DisplayName *string `json:"display_name"`
-	Gender      *string `json:"gender"`
 	AvatarURL   *string `json:"avatar_url"`
 	Status      *string `json:"status"`
 	StatusDate  *string `json:"status_date"`

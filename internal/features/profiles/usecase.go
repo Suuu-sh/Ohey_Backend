@@ -36,7 +36,6 @@ type GetByUserIDInput struct {
 type BootstrapRequest struct {
 	UserID       string
 	DisplayName  string
-	Gender       string
 	CharacterKey string
 	AvatarURL    string
 }
@@ -88,7 +87,6 @@ func (u *Usecase) BootstrapProfile(ctx context.Context, input BootstrapUsecaseIn
 		AuthUserID:   input.AuthUserID,
 		UserID:       input.Request.UserID,
 		DisplayName:  input.Request.DisplayName,
-		Gender:       input.Request.Gender,
 		CharacterKey: input.Request.CharacterKey,
 		AvatarURL:    input.Request.AvatarURL,
 		UpdatedAt:    u.now(),

@@ -13,8 +13,8 @@ import (
 	"github.com/yota/ohey/backend/internal/supabase"
 )
 
-const friendshipSelectColumns = "user_a_id,user_b_id,is_favorite,user_a:profiles!friendships_user_a_id_fkey(id,user_id,display_name,gender,character_key,avatar_url,is_plus),user_b:profiles!friendships_user_b_id_fkey(id,user_id,display_name,gender,character_key,avatar_url,is_plus)"
-const friendRequestSelectColumns = "id,from_user_id,to_user_id,status,created_at,responded_at,from_user:profiles!friend_requests_from_user_id_fkey(id,user_id,display_name,gender,character_key,avatar_url,is_plus),to_user:profiles!friend_requests_to_user_id_fkey(id,user_id,display_name,gender,character_key,avatar_url,is_plus)"
+const friendshipSelectColumns = "user_a_id,user_b_id,is_favorite,user_a:profiles!friendships_user_a_id_fkey(id,user_id,display_name,character_key,avatar_url,is_plus),user_b:profiles!friendships_user_b_id_fkey(id,user_id,display_name,character_key,avatar_url,is_plus)"
+const friendRequestSelectColumns = "id,from_user_id,to_user_id,status,created_at,responded_at,from_user:profiles!friend_requests_from_user_id_fkey(id,user_id,display_name,character_key,avatar_url,is_plus),to_user:profiles!friend_requests_to_user_id_fkey(id,user_id,display_name,character_key,avatar_url,is_plus)"
 
 type SupabaseRepository struct {
 	client         *supabase.Client

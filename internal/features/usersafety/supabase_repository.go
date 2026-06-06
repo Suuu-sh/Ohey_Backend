@@ -140,7 +140,7 @@ func (r *SupabaseRepository) attachTargetProfiles(ctx context.Context, authToken
 	sortedIDs := append([]string(nil), ids...)
 	sort.Strings(sortedIDs)
 	q := url.Values{}
-	q.Set("select", "id,user_id,display_name,gender,character_key,avatar_url,is_plus")
+	q.Set("select", "id,user_id,display_name,character_key,avatar_url,is_plus")
 	q.Set("id", "in.("+strings.Join(sortedIDs, ",")+")")
 	var profiles []map[string]any
 	if err := r.client.Get(ctx, authToken, "profiles", q, &profiles); err != nil {

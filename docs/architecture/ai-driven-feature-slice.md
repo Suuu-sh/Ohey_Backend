@@ -626,14 +626,12 @@ internal/features/invites/
 | `id` | authenticated user id。UUID 必須。request body から受け取らない |
 | `user_id` | 3〜24文字。英数字と `_` のみ。前後空白は trim |
 | `display_name` | 1〜40文字。前後空白は trim |
-| `gender` | bootstrap 時のみ設定可能。空は `unspecified`。許可値は `unspecified` / `male` / `female` |
 | `character_key` | bootstrap では空なら `avatar`。更新時は文字列として trim |
 | `avatar_url` | `string` または `null`。前後空白は trim。最大 4096 byte |
 | `updated_at` | backend の現在時刻で必ず更新 |
 
 更新制約:
 
-- `gender` の変更は拒否する。
 - 更新できる field は `user_id`, `display_name`, `character_key`, `avatar_url` に限定する。
 - unknown field は repository payload に入れない。
 - validation error は feature error として返し、handler で HTTP status に変換する。
@@ -649,7 +647,6 @@ internal/features/invites/
 
 - CRUD 寄りの処理としてはファイル数が増える。
 - `internal/httpapi` の adapter と `internal/features/profiles` が一時的に混在する。
-- `gender` など更新不可 field を変更したくなった場合、product decision と migration が必要になる。
 
 今後 profile field を増やす場合は、以下を同じ変更で更新する。
 

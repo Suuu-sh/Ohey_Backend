@@ -47,7 +47,6 @@ func TestBootstrapProfileNormalizesAndDefaults(t *testing.T) {
 		Request: BootstrapRequest{
 			UserID:      " ohey_user ",
 			DisplayName: "  Ohey User  ",
-			Gender:      "",
 			AvatarURL:   " https://example.test/avatar.png ",
 		},
 	})
@@ -57,7 +56,7 @@ func TestBootstrapProfileNormalizesAndDefaults(t *testing.T) {
 	if row["id"] != testUserID || row["user_id"] != "ohey_user" || row["display_name"] != "Ohey User" {
 		t.Fatalf("row = %#v", row)
 	}
-	if row["gender"] != "unspecified" || row["character_key"] != "avatar" || row["avatar_url"] != "https://example.test/avatar.png" {
+	if row["character_key"] != "avatar" || row["avatar_url"] != "https://example.test/avatar.png" {
 		t.Fatalf("normalized row = %#v", row)
 	}
 	if row["updated_at"] != "2026-05-24T12:30:00Z" {
@@ -74,17 +73,6 @@ func TestBootstrapProfileRejectsInvalidUserID(t *testing.T) {
 		Request:    BootstrapRequest{UserID: "bad user id", DisplayName: "Name"},
 	})
 	assertUserError(t, err, ErrorKindInvalidInput, "user_id must be 3-24 letters, numbers, or underscores")
-}
-
-func TestUpdateProfileAllowsOnlyMutableFieldsAndRejectsGender(t *testing.T) {
-	usecase := NewUsecase(Dependencies{Repository: &fakeRepository{}, Now: fixedNow})
-
-	_, err := usecase.UpdateProfile(context.Background(), UpdateInput{
-		AuthToken:  testAuthToken,
-		AuthUserID: testUserID,
-		Body:       map[string]any{"gender": "female"},
-	})
-	assertUserError(t, err, ErrorKindInvalidInput, "gender cannot be changed")
 }
 
 func TestUpdateProfileBuildsSanitizedPatchPayload(t *testing.T) {

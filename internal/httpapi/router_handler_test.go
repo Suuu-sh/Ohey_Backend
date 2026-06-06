@@ -197,7 +197,6 @@ func TestAuthUsesJWKSVerifiedSubjectWithoutAuthUserRoundTrip(t *testing.T) {
 				"id":            testUserID,
 				"user_id":       "valid_user",
 				"display_name":  "Valid User",
-				"gender":        "unspecified",
 				"character_key": "avatar",
 				"is_plus":       false,
 			}})
@@ -230,7 +229,6 @@ func TestAuthCachesAuthServerUserForOpaqueToken(t *testing.T) {
 				"id":            testUserID,
 				"user_id":       "valid_user",
 				"display_name":  "Valid User",
-				"gender":        "unspecified",
 				"character_key": "avatar",
 				"is_plus":       false,
 			}})
@@ -1044,7 +1042,7 @@ func TestUpsertProfileNormalizesAndScopesToAuthUser(t *testing.T) {
 	})
 	w := httptest.NewRecorder()
 
-	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPut, contracts.APIPathMeProfile, `{"user_id":" valid_user ","display_name":" Name ","gender":"","character_key":"","avatar_url":" avatar.png "}`))
+	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPut, contracts.APIPathMeProfile, `{"user_id":" valid_user ","display_name":" Name ","character_key":"","avatar_url":" avatar.png "}`))
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
@@ -1060,7 +1058,6 @@ func TestUpsertProfileNormalizesAndScopesToAuthUser(t *testing.T) {
 		`"id":"` + testUserID + `"`,
 		`"user_id":"valid_user"`,
 		`"display_name":"Name"`,
-		`"gender":"unspecified"`,
 		`"character_key":"avatar"`,
 		`"avatar_url":"avatar.png"`,
 	} {
@@ -1311,7 +1308,6 @@ func TestUpdateProfileRejectsImmutableAndOversizedFields(t *testing.T) {
 		body string
 		want string
 	}{
-		{name: "gender", body: `{"gender":"male"}`, want: "gender cannot be changed"},
 		{name: "display name length", body: `{"display_name":"` + strings.Repeat("名", 41) + `"}`, want: "display_name must be 1-40 characters"},
 		{name: "avatar length", body: `{"avatar_url":"` + strings.Repeat("x", 4097) + `"}`, want: "avatar_url is too long"},
 	} {

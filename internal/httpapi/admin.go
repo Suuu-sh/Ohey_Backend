@@ -44,7 +44,7 @@ func (r *router) adminListUsers(w http.ResponseWriter, req *http.Request, _ Auth
 	q := url.Values{}
 	q.Set(
 		"select",
-		"id,user_id,display_name,gender,character_key,avatar_url,is_plus,created_at,updated_at",
+		"id,user_id,display_name,character_key,avatar_url,is_plus,created_at,updated_at",
 	)
 	q.Set("order", "created_at.desc")
 	q.Set("limit", "80")
@@ -82,7 +82,6 @@ func (r *router) adminCreateUser(w http.ResponseWriter, req *http.Request, _ Aut
 	input.Password = strings.TrimSpace(input.Password)
 	input.UserID = strings.TrimSpace(input.UserID)
 	input.DisplayName = strings.TrimSpace(input.DisplayName)
-	input.Gender = profiles.NormalizeGender(input.Gender)
 	input.AvatarURL = strings.TrimSpace(input.AvatarURL)
 	input.Status = strings.TrimSpace(input.Status)
 	statusDate, errMessage := cleanDateOnlyOrToday(input.StatusDate, "status_date")
@@ -92,10 +91,6 @@ func (r *router) adminCreateUser(w http.ResponseWriter, req *http.Request, _ Aut
 	}
 	if errMessage := validateAdminProfileInput(input.UserID, input.DisplayName); errMessage != "" {
 		writeError(w, http.StatusBadRequest, errMessage)
-		return
-	}
-	if !profiles.IsValidGender(input.Gender) {
-		writeError(w, http.StatusBadRequest, "gender must be male, female, or unspecified")
 		return
 	}
 	if !strings.Contains(input.Email, "@") {
@@ -123,7 +118,6 @@ func (r *router) adminCreateUser(w http.ResponseWriter, req *http.Request, _ Aut
 		"user_metadata": map[string]any{
 			"display_name": input.DisplayName,
 			"user_id":      input.UserID,
-			"gender":       input.Gender,
 		},
 	}
 	var authResp map[string]any
@@ -141,7 +135,6 @@ func (r *router) adminCreateUser(w http.ResponseWriter, req *http.Request, _ Aut
 		"id":            createdUserID,
 		"user_id":       input.UserID,
 		"display_name":  input.DisplayName,
-		"gender":        input.Gender,
 		"character_key": "avatar",
 		"avatar_url":    input.AvatarURL,
 		"is_plus":       input.IsPlus,
@@ -214,10 +207,6 @@ func (r *router) adminUpdateUser(w http.ResponseWriter, req *http.Request, _ Aut
 		}
 		profilePayload["display_name"] = displayName
 		userMeta["display_name"] = displayName
-	}
-	if input.Gender != nil {
-		writeError(w, http.StatusBadRequest, "gender cannot be changed")
-		return
 	}
 	if input.AvatarURL != nil {
 		profilePayload["avatar_url"] = strings.TrimSpace(*input.AvatarURL)
@@ -672,7 +661,7 @@ func (r *router) adminUpdateMemory(w http.ResponseWriter, req *http.Request, _ A
 
 func (r *router) ensureOfficialProfile(req *http.Request) (string, error) {
 	q := url.Values{}
-	q.Set("select", "id,user_id,display_name,gender,character_key,avatar_url,is_plus")
+	q.Set("select", "id,user_id,display_name,character_key,avatar_url,is_plus")
 	q.Set("user_id", "eq."+officialProfileUserID)
 	q.Set("limit", "1")
 	var profiles []Profile
@@ -694,7 +683,6 @@ func (r *router) ensureOfficialProfile(req *http.Request) (string, error) {
 		"user_metadata": map[string]any{
 			"display_name": officialProfileDisplayName,
 			"user_id":      officialProfileUserID,
-			"gender":       "unspecified",
 		},
 	}
 	var authResp map[string]any
@@ -710,7 +698,6 @@ func (r *router) ensureOfficialProfile(req *http.Request) (string, error) {
 		"id":            createdUserID,
 		"user_id":       officialProfileUserID,
 		"display_name":  officialProfileDisplayName,
-		"gender":        "unspecified",
 		"character_key": "avatar",
 		"avatar_url":    "",
 		"is_plus":       true,
