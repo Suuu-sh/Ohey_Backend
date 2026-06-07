@@ -18,8 +18,6 @@ const (
 	APIPathFriendReqStatus  = "/v1/friend-requests/status"
 	APIPathFriendRequest    = "/v1/friend-requests/{id}"
 
-	APIPathHomeFeed = "/v1/home/feed"
-
 	APIPathWishItems        = "/v1/wish-items"
 	APIPathWishItem         = "/v1/wish-items/{id}"
 	APIPathProfileWishItems = "/v1/wish-items/profile/{id}"
@@ -28,12 +26,6 @@ const (
 	APIPathYurubo                 = "/v1/yurubos/{id}"
 	APIPathYuruboReaction         = "/v1/yurubos/{id}/reaction"
 	APIPathYuruboReactionApproval = "/v1/yurubos/{id}/reactions/{user_id}"
-
-	APIPathMemories     = "/v1/memories"
-	APIPathMemory       = "/v1/memories/{id}"
-	APIPathMemoryReport = "/v1/memories/{id}/report"
-	APIPathMemoryHides  = "/v1/memory-hides"
-	APIPathMemoryHide   = "/v1/memory-hides/{id}"
 
 	APIPathUserBlocks  = "/v1/user-blocks"
 	APIPathUserBlock   = "/v1/user-blocks/{id}"
@@ -57,10 +49,6 @@ const (
 	APIPathAdminUser                      = "/v1/admin/users/{id}"
 	APIPathAdminYurubos                   = "/v1/admin/yurubos"
 	APIPathAdminYurubo                    = "/v1/admin/yurubos/{id}"
-	APIPathAdminMemories                  = "/v1/admin/memories"
-	APIPathAdminMemory                    = "/v1/admin/memories/{id}"
-	APIPathAdminMemoryReports             = "/v1/admin/memory-reports"
-	APIPathAdminMemoryReport              = "/v1/admin/memory-reports/{id}"
 	APIPathAdminNotificationOutbox        = "/v1/admin/notification-outbox"
 	APIPathAdminNotificationOutboxProcess = "/v1/admin/notification-outbox/process"
 	APIPathAdminNotifications             = "/v1/admin/notifications"

@@ -6,13 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yota/ohey/backend/internal/contracts"
 	"github.com/yota/ohey/backend/internal/features/dailystatuses"
 	"github.com/yota/ohey/backend/internal/features/friendgroups"
 	"github.com/yota/ohey/backend/internal/features/friends"
-	"github.com/yota/ohey/backend/internal/features/homefeed"
 	"github.com/yota/ohey/backend/internal/features/invites"
-	"github.com/yota/ohey/backend/internal/features/memories"
 	"github.com/yota/ohey/backend/internal/features/notifications"
 	"github.com/yota/ohey/backend/internal/features/profiles"
 	"github.com/yota/ohey/backend/internal/features/usersafety"
@@ -44,20 +41,12 @@ type InviteUpdateRequest struct {
 	Status string `json:"status"`
 }
 
-type MemoryReportRequest struct {
-	Reason string `json:"reason"`
-}
-
 type UserSafetyUserRequest struct {
 	TargetUserID  string `json:"target_user_id"`
 	BlockedUserID string `json:"blocked_user_id"`
 	MutedUserID   string `json:"muted_user_id"`
 	UserID        string `json:"user_id"`
 	Reason        string `json:"reason"`
-}
-
-type FeedHiddenMemoryRequest struct {
-	MemoryID string `json:"memory_id"`
 }
 
 func (r *router) upsertProfile(w http.ResponseWriter, req *http.Request, authToken string) {
@@ -222,31 +211,6 @@ func (r *router) updateFriendRequest(w http.ResponseWriter, req *http.Request, a
 	writeJSON(w, http.StatusOK, row)
 }
 
-func (r *router) reportMemory(w http.ResponseWriter, req *http.Request, authToken string) {
-	var input MemoryReportRequest
-	if !decodeJSONBody(w, req, &input) {
-		return
-	}
-	if !r.enforceRateLimit(w, req, rateLimitReportMemory) {
-		return
-	}
-	result, err := r.memoryUsecase(req).ReportMemory(req.Context(), memories.ReportInput{
-		AuthToken:      authToken,
-		MemoryID:       req.PathValue("id"),
-		ReporterUserID: req.Header.Get("X-Ohey-User-ID"),
-		Reason:         input.Reason,
-	})
-	if err != nil {
-		writeMemoryError(w, err)
-		return
-	}
-	if result.Created {
-		writeJSON(w, http.StatusCreated, result.Body)
-		return
-	}
-	writeJSON(w, http.StatusOK, result.Body)
-}
-
 func (r *router) blockUser(w http.ResponseWriter, req *http.Request, authToken string) {
 	var input UserSafetyUserRequest
 	if !decodeJSONBody(w, req, &input) {
@@ -358,36 +322,6 @@ func (r *router) reportUser(w http.ResponseWriter, req *http.Request, authToken 
 	writeJSON(w, http.StatusCreated, row)
 }
 
-func (r *router) hideMemoryFromFeed(w http.ResponseWriter, req *http.Request, authToken string) {
-	var input FeedHiddenMemoryRequest
-	if !decodeJSONBody(w, req, &input) {
-		return
-	}
-	row, err := r.userSafetyUsecase().HideMemory(req.Context(), usersafety.MemoryInput{
-		AuthToken: authToken,
-		UserID:    req.Header.Get("X-Ohey-User-ID"),
-		MemoryID:  input.MemoryID,
-	})
-	if err != nil {
-		writeUserSafetyError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusCreated, row)
-}
-
-func (r *router) unhideMemoryFromFeed(w http.ResponseWriter, req *http.Request, authToken string) {
-	err := r.userSafetyUsecase().UnhideMemory(req.Context(), usersafety.MemoryInput{
-		AuthToken: authToken,
-		UserID:    req.Header.Get("X-Ohey-User-ID"),
-		MemoryID:  req.PathValue("id"),
-	})
-	if err != nil {
-		writeUserSafetyError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]bool{"unhidden": true})
-}
-
 func firstNonEmpty(values ...string) string {
 	for _, value := range values {
 		if strings.TrimSpace(value) != "" {
@@ -395,20 +329,6 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
-}
-
-func (r *router) listHomeFeed(w http.ResponseWriter, req *http.Request, authToken string) {
-	rows, err := r.homeFeedUsecase().ListHomeFeed(req.Context(), homefeed.ListInput{
-		AuthToken: authToken,
-		UserID:    req.Header.Get("X-Ohey-User-ID"),
-		Limit:     req.URL.Query().Get("limit"),
-		Cursor:    req.URL.Query().Get("cursor"),
-	})
-	if err != nil {
-		writeHomeFeedError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, rows)
 }
 
 func (r *router) listNotifications(w http.ResponseWriter, req *http.Request, authToken string) {
@@ -646,75 +566,6 @@ func writeFriendsError(w http.ResponseWriter, err error) {
 	writeSupabaseError(w, err)
 }
 
-func (r *router) memoryUsecase(req *http.Request) *memories.Usecase {
-	return memories.NewUsecase(memories.Dependencies{
-		Repository: memories.NewSupabaseRepository(r.deps.Supabase),
-		Publisher:  memoryEventPublisher{router: r, req: req},
-	})
-}
-
-type memoryEventPublisher struct {
-	router *router
-	req    *http.Request
-}
-
-func (p memoryEventPublisher) Publish(ctx context.Context, authToken string, event memories.DomainEvent) {
-	if p.router == nil || p.req == nil {
-		return
-	}
-	payload := map[string]any{
-		"memory_id":     event.MemoryID,
-		"owner_user_id": event.OwnerUserID,
-		"actor_user_id": event.ActorUserID,
-	}
-	if len(event.FriendIDs) > 0 {
-		payload["friend_ids"] = event.FriendIDs
-	}
-	if event.ReportReason != "" {
-		payload["reason"] = string(event.ReportReason)
-		payload["status"] = string(event.ModerationStatus)
-	}
-	switch event.Kind {
-	case memories.EventMemoryTagged:
-		p.router.enqueueAndProcessNotificationOutboxEvent(ctx, authToken, notificationOutboxEvent{
-			EventKind:     string(event.Kind),
-			AggregateType: contracts.FeedTypeMemory,
-			AggregateID:   event.MemoryID,
-			ActorUserID:   event.ActorUserID,
-			Payload:       payload,
-		})
-	case memories.EventMemoryReported:
-		p.router.enqueueAndProcessNotificationOutboxEvent(ctx, authToken, notificationOutboxEvent{
-			EventKind:     string(event.Kind),
-			AggregateType: contracts.FeedTypeMemory,
-			AggregateID:   event.MemoryID,
-			ActorUserID:   event.ActorUserID,
-			Payload:       payload,
-		})
-	}
-}
-
-func writeMemoryError(w http.ResponseWriter, err error) {
-	if kind, ok := memories.ErrorKindOf(err); ok {
-		switch kind {
-		case memories.ErrorKindInvalidInput:
-			writeError(w, http.StatusBadRequest, err.Error())
-		case memories.ErrorKindForbidden:
-			writeError(w, http.StatusForbidden, err.Error())
-		case memories.ErrorKindConflict:
-			writeError(w, http.StatusConflict, err.Error())
-		case memories.ErrorKindNotFound:
-			writeError(w, http.StatusNotFound, err.Error())
-		case memories.ErrorKindUpstream:
-			writeError(w, http.StatusBadGateway, "upstream service error")
-		default:
-			writeError(w, http.StatusBadRequest, err.Error())
-		}
-		return
-	}
-	writeSupabaseError(w, err)
-}
-
 func (r *router) userSafetyUsecase() *usersafety.Usecase {
 	return usersafety.NewUsecase(usersafety.Dependencies{
 		Repository: usersafety.NewSupabaseRepository(r.deps.Supabase, r.deps.AdminSupabase, r.deps.Config.SupabaseServiceRoleKey),
@@ -749,25 +600,6 @@ func writeFriendGroupsError(w http.ResponseWriter, err error) {
 			writeError(w, http.StatusBadRequest, err.Error())
 		case friendgroups.ErrorKindForbidden:
 			writeError(w, http.StatusForbidden, err.Error())
-		default:
-			writeError(w, http.StatusBadRequest, err.Error())
-		}
-		return
-	}
-	writeSupabaseError(w, err)
-}
-
-func (r *router) homeFeedUsecase() *homefeed.Usecase {
-	return homefeed.NewUsecase(homefeed.Dependencies{
-		Repository: homefeed.NewSupabaseRepository(r.deps.Supabase),
-	})
-}
-
-func writeHomeFeedError(w http.ResponseWriter, err error) {
-	if kind, ok := homefeed.ErrorKindOf(err); ok {
-		switch kind {
-		case homefeed.ErrorKindInvalidInput:
-			writeError(w, http.StatusBadRequest, err.Error())
 		default:
 			writeError(w, http.StatusBadRequest, err.Error())
 		}

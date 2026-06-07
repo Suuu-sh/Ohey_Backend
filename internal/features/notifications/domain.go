@@ -75,7 +75,6 @@ const (
 	KindInviteReceived           Kind = contracts.NotificationKindInviteReceived
 	KindInviteAccepted           Kind = contracts.NotificationKindInviteAccepted
 	KindTodayReservationReminder Kind = contracts.NotificationKindTodayReservationReminder
-	KindMemoryTagged             Kind = contracts.NotificationKindMemoryTagged
 	KindYuruboCreated            Kind = contracts.NotificationKindYuruboCreated
 	KindSystem                   Kind = contracts.NotificationKindSystem
 )
@@ -83,7 +82,6 @@ const (
 type Notification struct {
 	RecipientUserID  string
 	ActorUserID      string
-	MemoryID         string
 	FriendRequestID  string
 	InviteID         string
 	NotificationDate string
@@ -103,9 +101,6 @@ func (n Notification) Payload() map[string]any {
 	if n.ActorUserID != "" {
 		payload["actor_user_id"] = n.ActorUserID
 	}
-	if n.MemoryID != "" {
-		payload["memory_id"] = n.MemoryID
-	}
 	if n.FriendRequestID != "" {
 		payload["friend_request_id"] = n.FriendRequestID
 	}
@@ -123,9 +118,6 @@ func (n Notification) Payload() map[string]any {
 
 func (n Notification) PushData() map[string]string {
 	data := map[string]string{"kind": string(n.Kind)}
-	if n.MemoryID != "" {
-		data["memory_id"] = n.MemoryID
-	}
 	if n.FriendRequestID != "" {
 		data["friend_request_id"] = n.FriendRequestID
 	}

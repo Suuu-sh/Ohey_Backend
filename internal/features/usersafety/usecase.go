@@ -26,12 +26,6 @@ type ListInput struct {
 	UserID    string
 }
 
-type MemoryInput struct {
-	AuthToken string
-	UserID    string
-	MemoryID  string
-}
-
 func (u *Usecase) ListBlockedUsers(ctx context.Context, input ListInput) ([]map[string]any, error) {
 	userID, err := CleanUUID(input.UserID, "user id")
 	if err != nil {
@@ -103,22 +97,6 @@ func (u *Usecase) ReportUser(ctx context.Context, input UserTargetInput) (map[st
 	})
 }
 
-func (u *Usecase) HideMemory(ctx context.Context, input MemoryInput) (map[string]any, error) {
-	hidden, err := cleanHiddenMemory(input)
-	if err != nil {
-		return nil, err
-	}
-	return u.repository.HideMemory(ctx, input.AuthToken, hidden)
-}
-
-func (u *Usecase) UnhideMemory(ctx context.Context, input MemoryInput) error {
-	hidden, err := cleanHiddenMemory(input)
-	if err != nil {
-		return err
-	}
-	return u.repository.UnhideMemory(ctx, input.AuthToken, hidden)
-}
-
 func cleanUserRelation(input UserTargetInput) (UserRelation, error) {
 	actorUserID, err := CleanUUID(input.ActorUserID, "user id")
 	if err != nil {
@@ -132,16 +110,4 @@ func cleanUserRelation(input UserTargetInput) (UserRelation, error) {
 		return UserRelation{}, err
 	}
 	return UserRelation{ActorUserID: actorUserID, TargetUserID: targetUserID}, nil
-}
-
-func cleanHiddenMemory(input MemoryInput) (HiddenMemory, error) {
-	userID, err := CleanUUID(input.UserID, "user id")
-	if err != nil {
-		return HiddenMemory{}, err
-	}
-	memoryID, err := CleanUUID(input.MemoryID, "memory id")
-	if err != nil {
-		return HiddenMemory{}, err
-	}
-	return HiddenMemory{UserID: userID, MemoryID: memoryID}, nil
 }

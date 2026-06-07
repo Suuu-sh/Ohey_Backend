@@ -203,33 +203,6 @@ func (u *Usecase) NotifyInviteAccepted(ctx context.Context, authToken string, in
 	})
 }
 
-func (u *Usecase) NotifyMemoryTagged(ctx context.Context, authToken, memoryID, ownerUserID string, friendIDs []string) error {
-	if memoryID == "" || ownerUserID == "" || len(friendIDs) == 0 {
-		return nil
-	}
-	actorName := u.actorName(ctx, authToken, ownerUserID, KindMemoryTagged)
-	seen := map[string]bool{}
-	var firstErr error
-	for _, rawID := range friendIDs {
-		friendID := strings.TrimSpace(rawID)
-		if friendID == "" || friendID == ownerUserID || seen[friendID] {
-			continue
-		}
-		seen[friendID] = true
-		if err := u.tryCreateAndPush(ctx, authToken, Notification{
-			RecipientUserID: friendID,
-			ActorUserID:     ownerUserID,
-			MemoryID:        memoryID,
-			Kind:            KindMemoryTagged,
-			Title:           "思い出に追加されました",
-			Message:         actorName + "さんがあなたを一緒に過ごしたフレンズに追加しました。",
-		}); err != nil && firstErr == nil {
-			firstErr = err
-		}
-	}
-	return firstErr
-}
-
 func (u *Usecase) NotifyYuruboCreated(ctx context.Context, authToken string, yuruboRow map[string]any, groupIDs []string) error {
 	yuruboID, _ := yuruboRow["id"].(string)
 	ownerUserID, _ := yuruboRow["owner_user_id"].(string)

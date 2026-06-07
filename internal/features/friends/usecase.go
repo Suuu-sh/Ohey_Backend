@@ -85,11 +85,6 @@ func (u *Usecase) ListFriends(ctx context.Context, input ListInput) ([]map[strin
 	if err := u.repository.AttachTodayStatuses(ctx, input.AuthToken, rows, date); err != nil {
 		return nil, err
 	}
-	if err := u.repository.AttachMemoryStats(ctx, input.AuthToken, userID, rows); err != nil {
-		if u.logger != nil {
-			u.logger.Warn("failed to attach friend memory stats", "error", err)
-		}
-	}
 	return rows, nil
 }
 

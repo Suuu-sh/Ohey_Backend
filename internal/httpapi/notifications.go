@@ -14,6 +14,26 @@ import (
 	"github.com/yota/ohey/backend/internal/supabase"
 )
 
+type notificationOutboxEvent struct {
+	EventKind       string
+	AggregateType   string
+	AggregateID     string
+	ActorUserID     string
+	RecipientUserID string
+	Payload         map[string]any
+}
+
+type NotificationOutboxProcessResult struct {
+	ProcessedCount int `json:"processed_count"`
+	FailedCount    int `json:"failed_count"`
+	SkippedCount   int `json:"skipped_count"`
+}
+
+func ProcessNotificationOutboxOnce(ctx context.Context, deps Dependencies, limit int) (NotificationOutboxProcessResult, error) {
+	r := &router{deps: deps}
+	return r.processNotificationOutbox(ctx, deps.Config.SupabaseServiceRoleKey, limit)
+}
+
 func (r *router) notificationUsecase(_ *http.Request) *notifications.Usecase {
 	return notifications.NewUsecase(notifications.Dependencies{
 		Repository: notifications.NewSupabaseRepository(r.deps.Supabase, r.deps.AdminSupabase, r.deps.Config.SupabaseServiceRoleKey),
@@ -44,32 +64,6 @@ func (r *router) createInviteAcceptedNotification(req *http.Request, authToken s
 	if err := r.notificationUsecase(req).NotifyInviteAccepted(req.Context(), authToken, inviteRow); err != nil && r.deps.Logger != nil {
 		r.deps.Logger.Warn("failed to dispatch invite accepted notification", "error", err)
 	}
-}
-
-func (r *router) createMemoryTaggedNotifications(req *http.Request, authToken, memoryID, ownerUserID string, friendIDs []string) {
-	if err := r.notificationUsecase(req).NotifyMemoryTagged(req.Context(), authToken, memoryID, ownerUserID, friendIDs); err != nil && r.deps.Logger != nil {
-		r.deps.Logger.Warn("failed to dispatch memory tagged notification", "error", err)
-	}
-}
-
-type notificationOutboxEvent struct {
-	EventKind       string
-	AggregateType   string
-	AggregateID     string
-	ActorUserID     string
-	RecipientUserID string
-	Payload         map[string]any
-}
-
-type NotificationOutboxProcessResult struct {
-	ProcessedCount int `json:"processed_count"`
-	FailedCount    int `json:"failed_count"`
-	SkippedCount   int `json:"skipped_count"`
-}
-
-func ProcessNotificationOutboxOnce(ctx context.Context, deps Dependencies, limit int) (NotificationOutboxProcessResult, error) {
-	r := &router{deps: deps}
-	return r.processNotificationOutbox(ctx, deps.Config.SupabaseServiceRoleKey, limit)
 }
 
 func (r *router) enqueueAndProcessNotificationOutboxEvent(ctx context.Context, authToken string, event notificationOutboxEvent) {
@@ -143,11 +137,9 @@ func (r *router) dispatchNotificationOutboxEvent(ctx context.Context, authToken 
 		return usecase.NotifyInviteReceived(ctx, authToken, event.Payload)
 	case contracts.DomainEventInviteAccepted:
 		return usecase.NotifyInviteAccepted(ctx, authToken, event.Payload)
-	case contracts.DomainEventMemoryTagged:
-		return usecase.NotifyMemoryTagged(ctx, authToken, stringValue(event.Payload, "memory_id"), stringValue(event.Payload, "owner_user_id"), stringSliceValue(event.Payload, "friend_ids"))
 	case contracts.DomainEventYuruboCreated:
 		return usecase.NotifyYuruboCreated(ctx, authToken, event.Payload, stringSliceValue(event.Payload, "group_ids"))
-	case contracts.DomainEventMemoryReported, contracts.DomainEventSystemNotificationCreated:
+	case contracts.DomainEventSystemNotificationCreated:
 		return nil
 	default:
 		return fmt.Errorf("unsupported notification outbox event kind: %s", event.EventKind)

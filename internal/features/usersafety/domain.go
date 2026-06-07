@@ -61,11 +61,6 @@ type UserReport struct {
 	Reason         string
 }
 
-type HiddenMemory struct {
-	UserID   string
-	MemoryID string
-}
-
 func CleanReportReason(value string) (string, error) {
 	reason := strings.ToLower(strings.TrimSpace(value))
 	if reason == "" {

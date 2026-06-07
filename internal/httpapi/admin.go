@@ -10,12 +10,10 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 	"unicode"
 
 	"github.com/yota/ohey/backend/internal/contracts"
 	"github.com/yota/ohey/backend/internal/features/dailystatuses"
-	"github.com/yota/ohey/backend/internal/features/memories"
 	"github.com/yota/ohey/backend/internal/features/profiles"
 	"github.com/yota/ohey/backend/internal/features/yurubos"
 	"github.com/yota/ohey/backend/internal/supabase"
@@ -455,210 +453,6 @@ func (r *router) adminDeleteYurubo(w http.ResponseWriter, req *http.Request, _ A
 	writeJSON(w, http.StatusOK, rows)
 }
 
-func (r *router) adminListMemories(w http.ResponseWriter, req *http.Request, _ AuthUser) {
-	q := url.Values{}
-	q.Set("select", "id,owner_user_id,happened_at,place_name,place_lat,place_lng,memo,link_url,is_official,created_at,owner:profiles!memories_owner_user_id_fkey(id,user_id,display_name,avatar_url,is_plus)")
-	q.Set("order", "created_at.desc")
-	q.Set("limit", "80")
-	var rows []map[string]any
-	if err := r.deps.AdminSupabase.Get(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "memories", q, &rows); err != nil {
-		writeSupabaseError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, rows)
-}
-
-func (r *router) adminListMemoryReports(w http.ResponseWriter, req *http.Request, _ AuthUser) {
-	status := strings.TrimSpace(req.URL.Query().Get("status"))
-	rows, err := r.adminMemoryReports(req, true, status)
-	if err != nil {
-		if status != "" && status != contracts.QueryStatusAll {
-			writeSupabaseError(w, err)
-			return
-		}
-		rows, err = r.adminMemoryReports(req, false, status)
-	}
-	if err != nil {
-		writeSupabaseError(w, err)
-		return
-	}
-	for _, row := range rows {
-		if _, ok := row["status"].(string); !ok {
-			row["status"] = contracts.StatusPending
-		}
-		if _, ok := row["hidden"].(bool); !ok {
-			row["hidden"] = true
-		}
-	}
-	writeJSON(w, http.StatusOK, rows)
-}
-
-func (r *router) adminMemoryReports(req *http.Request, includeModerationColumns bool, status string) ([]map[string]any, error) {
-	selectColumns := "id,memory_id,reporter_user_id,reason,created_at,memory:memories!memory_reports_memory_id_fkey(id,owner_user_id,happened_at,memo,is_official,owner:profiles!memories_owner_user_id_fkey(id,user_id,display_name,avatar_url)),reporter:profiles!memory_reports_reporter_user_id_fkey(id,user_id,display_name,avatar_url)"
-	if includeModerationColumns {
-		selectColumns = "id,memory_id,reporter_user_id,reason,status,hidden_at,reviewed_at,reviewed_by_user_id,moderation_note,created_at,memory:memories!memory_reports_memory_id_fkey(id,owner_user_id,happened_at,memo,is_official,owner:profiles!memories_owner_user_id_fkey(id,user_id,display_name,avatar_url)),reporter:profiles!memory_reports_reporter_user_id_fkey(id,user_id,display_name,avatar_url)"
-	}
-	q := url.Values{}
-	q.Set("select", selectColumns)
-	q.Set("order", "created_at.desc")
-	q.Set("limit", "100")
-	if includeModerationColumns && status != "" && status != contracts.QueryStatusAll {
-		q.Set("status", supabase.PostgRESTEq(status))
-	}
-	var rows []map[string]any
-	if err := r.deps.AdminSupabase.Get(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "memory_reports", q, &rows); err != nil {
-		return nil, err
-	}
-	return rows, nil
-}
-
-func (r *router) adminUpdateMemoryReport(w http.ResponseWriter, req *http.Request, adminUser AuthUser) {
-	reportID, errMessage := cleanUUID(req.PathValue("id"), "report id")
-	if errMessage != "" {
-		writeError(w, http.StatusBadRequest, errMessage)
-		return
-	}
-	var input AdminUpdateMemoryReportRequest
-	if !decodeJSONBody(w, req, &input) {
-		return
-	}
-	status, err := memories.CleanModerationStatus(input.Status)
-	if err != nil {
-		writeMemoryError(w, err)
-		return
-	}
-	payload := map[string]any{
-		"status":              string(status),
-		"reviewed_at":         time.Now().UTC().Format(time.RFC3339),
-		"reviewed_by_user_id": adminUser.ID,
-		"moderation_note":     shortText(input.ModerationNote, 500),
-	}
-	q := url.Values{}
-	q.Set("id", "eq."+reportID)
-	var rows []map[string]any
-	if err := r.deps.AdminSupabase.Patch(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "memory_reports", q, payload, &rows); err != nil {
-		writeSupabaseError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, rows)
-}
-
-func (r *router) adminCreateMemory(w http.ResponseWriter, req *http.Request, _ AuthUser) {
-	var input AdminCreateMemoryRequest
-	if !decodeJSONBody(w, req, &input) {
-		return
-	}
-	input.OwnerUserID = strings.TrimSpace(input.OwnerUserID)
-	if input.IsOfficial {
-		officialProfileID, err := r.ensureOfficialProfile(req)
-		if err != nil {
-			writeSupabaseError(w, err)
-			return
-		}
-		input.OwnerUserID = officialProfileID
-	}
-	if input.OwnerUserID == "" {
-		writeError(w, http.StatusBadRequest, "owner_user_id is required")
-		return
-	}
-	if !input.IsOfficial {
-		ownerID, errMessage := cleanUUID(input.OwnerUserID, "owner_user_id")
-		if errMessage != "" {
-			writeError(w, http.StatusBadRequest, errMessage)
-			return
-		}
-		input.OwnerUserID = ownerID
-	}
-	friendIDs, errMessage := cleanUUIDs(input.FriendIDs, "friend id")
-	if errMessage != "" {
-		writeError(w, http.StatusBadRequest, errMessage)
-		return
-	}
-	happenedAt := input.HappenedAt
-	if happenedAt.IsZero() {
-		happenedAt = time.Now()
-	}
-	payload := map[string]any{
-		"owner_user_id": input.OwnerUserID,
-		"happened_at":   happenedAt.Format(time.RFC3339),
-		"place_name":    strings.TrimSpace(input.PlaceName),
-		"memo":          strings.TrimSpace(input.Memo),
-		"link_url":      strings.TrimSpace(input.LinkURL),
-		"is_official":   input.IsOfficial,
-	}
-	var rows []Memory
-	if err := r.deps.AdminSupabase.Post(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "memories", nil, payload, &rows); err != nil {
-		writeSupabaseError(w, err)
-		return
-	}
-	if len(rows) == 0 {
-		writeError(w, http.StatusBadGateway, "memory insert returned no rows")
-		return
-	}
-	if err := r.adminInsertMemoryFriends(req, rows[0].ID, friendIDs); err != nil {
-		writeSupabaseError(w, err)
-		return
-	}
-	r.createMemoryTaggedNotifications(req, r.deps.Config.SupabaseServiceRoleKey, rows[0].ID, input.OwnerUserID, friendIDs)
-	writeJSON(w, http.StatusCreated, rows[0])
-}
-
-func (r *router) adminUpdateMemory(w http.ResponseWriter, req *http.Request, _ AuthUser) {
-	memoryID, errMessage := cleanUUID(req.PathValue("id"), "memory id")
-	if errMessage != "" {
-		writeError(w, http.StatusBadRequest, errMessage)
-		return
-	}
-	var input AdminUpdateMemoryRequest
-	if !decodeJSONBody(w, req, &input) {
-		return
-	}
-	payload := map[string]any{}
-	if input.OwnerUserID != nil {
-		ownerID, errMessage := cleanUUID(*input.OwnerUserID, "owner_user_id")
-		if errMessage != "" {
-			writeError(w, http.StatusBadRequest, errMessage)
-			return
-		}
-		payload["owner_user_id"] = ownerID
-	}
-	if input.HappenedAt != nil {
-		payload["happened_at"] = input.HappenedAt.Format(time.RFC3339)
-	}
-	if input.PlaceName != nil {
-		payload["place_name"] = strings.TrimSpace(*input.PlaceName)
-	}
-	if input.Memo != nil {
-		payload["memo"] = strings.TrimSpace(*input.Memo)
-	}
-	if input.LinkURL != nil {
-		payload["link_url"] = strings.TrimSpace(*input.LinkURL)
-	}
-	if input.IsOfficial != nil {
-		payload["is_official"] = *input.IsOfficial
-		if *input.IsOfficial && input.OwnerUserID == nil {
-			officialProfileID, err := r.ensureOfficialProfile(req)
-			if err != nil {
-				writeSupabaseError(w, err)
-				return
-			}
-			payload["owner_user_id"] = officialProfileID
-		}
-	}
-	if len(payload) == 0 {
-		writeJSON(w, http.StatusOK, map[string]string{"id": memoryID})
-		return
-	}
-	q := url.Values{}
-	q.Set("id", "eq."+memoryID)
-	var rows []Memory
-	if err := r.deps.AdminSupabase.Patch(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "memories", q, payload, &rows); err != nil {
-		writeSupabaseError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, rows)
-}
-
 func (r *router) ensureOfficialProfile(req *http.Request) (string, error) {
 	q := url.Values{}
 	q.Set("select", "id,user_id,display_name,character_key,avatar_url,is_plus")
@@ -718,22 +512,6 @@ func randomAdminPassword() (string, error) {
 		return "", err
 	}
 	return "Ohey!" + hex.EncodeToString(bytes[:]), nil
-}
-
-func (r *router) adminDeleteMemory(w http.ResponseWriter, req *http.Request, _ AuthUser) {
-	memoryID, errMessage := cleanUUID(req.PathValue("id"), "memory id")
-	if errMessage != "" {
-		writeError(w, http.StatusBadRequest, errMessage)
-		return
-	}
-	q := url.Values{}
-	q.Set("id", "eq."+memoryID)
-	var rows []Memory
-	if err := r.deps.AdminSupabase.Delete(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "memories", q, &rows); err != nil {
-		writeSupabaseError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, rows)
 }
 
 func (r *router) admin(next func(http.ResponseWriter, *http.Request, AuthUser)) http.HandlerFunc {
@@ -831,15 +609,6 @@ func (r *router) isAdminUser(user AuthUser) bool {
 		}
 	}
 	return false
-}
-
-func (r *router) adminInsertMemoryFriends(req *http.Request, memoryID string, friendIDs []string) error {
-	links := memoryFriendLinks(memoryID, friendIDs)
-	if len(links) == 0 {
-		return nil
-	}
-	var ignored []map[string]any
-	return r.deps.AdminSupabase.Post(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "memory_tagged_users", nil, links, &ignored)
 }
 
 func (r *router) addAdminYuruboReactionCounts(ctx context.Context, rows []map[string]any) {

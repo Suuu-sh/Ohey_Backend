@@ -4,7 +4,6 @@ import (
 	"errors"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/yota/ohey/backend/internal/contracts"
 )
@@ -149,17 +148,5 @@ func (e DomainEvent) RequestRow() map[string]any {
 		"from_user_id": e.Request.FromUserID,
 		"to_user_id":   e.Request.ToUserID,
 		"status":       e.Request.Status,
-	}
-}
-
-type MemoryStats struct {
-	Count        int
-	LastMemoryAt time.Time
-}
-
-func (s *MemoryStats) Add(happenedAt time.Time) {
-	s.Count++
-	if happenedAt.After(s.LastMemoryAt) {
-		s.LastMemoryAt = happenedAt
 	}
 }

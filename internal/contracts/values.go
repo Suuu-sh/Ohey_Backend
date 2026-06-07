@@ -66,17 +66,14 @@ const (
 	NotificationKindInviteReceived           = "invite_received"
 	NotificationKindInviteAccepted           = "invite_accepted"
 	NotificationKindTodayReservationReminder = "today_reservation_reminder"
-	NotificationKindMemoryTagged             = "memory_tagged"
 	NotificationKindYuruboCreated            = "yurubo_created"
 	NotificationKindSystem                   = "system"
 )
 
 const (
-	FeedTypeMemory       = "memory"
 	FeedPostKindMine     = "mine"
 	FeedPostKindFriend   = "friend"
 	FeedPostKindOfficial = "official"
-	FeedPropMemory       = "memory"
 )
 
 const (
@@ -89,8 +86,6 @@ const (
 	DomainEventInviteAccepted            = "invite.accepted"
 	DomainEventFriendRequestCreated      = "friend_request.created"
 	DomainEventFriendRequestAccepted     = "friend_request.accepted"
-	DomainEventMemoryTagged              = "memory.tagged"
-	DomainEventMemoryReported            = "memory.reported"
 	DomainEventYuruboCreated             = "yurubo.created"
 	DomainEventSystemNotificationCreated = "system_notification.created"
 )

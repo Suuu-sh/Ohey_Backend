@@ -26,7 +26,6 @@ import (
 const (
 	testUserID    = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 	otherUserID   = "bbbbbbbb-cccc-dddd-eeee-ffffffffffff"
-	testMemoryID  = "11111111-2222-3333-4444-555555555555"
 	testRequestID = "22222222-3333-4444-5555-666666666666"
 )
 
@@ -314,7 +313,6 @@ func TestHandlerRejectsInvalidUUIDAndDate(t *testing.T) {
 		path   string
 		body   string
 	}{
-		{name: "uuid", method: http.MethodDelete, path: contractPath(contracts.APIPathMemory, "id", "not-a-uuid")},
 		{name: "date", method: http.MethodGet, path: contracts.APIPathDailyStatus + "?date=2026/05/23"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -420,30 +418,6 @@ func TestAdminUpdateUserWritesRequestedStatusDate(t *testing.T) {
 	}
 	if !strings.Contains(request.Body, `"status":"maybe_available"`) {
 		t.Fatalf("daily status body missing status: %s", request.Body)
-	}
-}
-
-func TestDeleteMemoryIsScopedToAuthenticatedOwner(t *testing.T) {
-	fake := newFakeSupabase(t, func(w http.ResponseWriter, req *http.Request) {
-		if req.URL.Path == "/rest/v1/memories" && req.Method == http.MethodDelete {
-			writeFakeJSON(w, http.StatusOK, []map[string]any{})
-			return
-		}
-		writeFakeJSON(w, http.StatusOK, []map[string]any{})
-	})
-	w := httptest.NewRecorder()
-
-	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodDelete, contractPath(contracts.APIPathMemory, "id", testMemoryID), ""))
-
-	if w.Code != http.StatusNotFound {
-		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
-	}
-	request, ok := fake.lastRequest("/rest/v1/memories")
-	if !ok {
-		t.Fatal("memories request was not sent")
-	}
-	if got := request.Query.Get("owner_user_id"); got != "eq."+testUserID {
-		t.Fatalf("owner_user_id filter = %q", got)
 	}
 }
 
@@ -606,129 +580,6 @@ func TestListBlockedUsersReturnsTargetProfiles(t *testing.T) {
 	}
 	if !strings.Contains(w.Body.String(), `"target_user_id":"`+otherUserID+`"`) {
 		t.Fatalf("body missing target_user_id: %s", w.Body.String())
-	}
-}
-
-func TestCreateMemoryValidatesFriendIDsAndCreatesLinks(t *testing.T) {
-	friendID := otherUserID
-	fake := newFakeSupabase(t, func(w http.ResponseWriter, req *http.Request) {
-		switch req.URL.Path {
-		case "/rest/v1/friendships":
-			writeFakeJSON(w, http.StatusOK, []map[string]any{{"id": "friendship"}})
-		case "/rest/v1/memories":
-			if req.Method == http.MethodGet {
-				writeFakeJSON(w, http.StatusOK, []map[string]any{})
-				return
-			}
-			writeFakeJSON(w, http.StatusCreated, []map[string]any{{
-				"id":            testMemoryID,
-				"happened_at":   "2026-05-23T10:00:00Z",
-				"owner_user_id": testUserID,
-				"place_name":    "Test Place",
-				"memo":          "memo",
-				"is_official":   false,
-			}})
-		case "/rest/v1/memory_tagged_users":
-			writeFakeJSON(w, http.StatusCreated, []map[string]any{})
-		case "/rest/v1/profiles":
-			writeFakeJSON(w, http.StatusOK, []map[string]any{{"display_name": "Actor", "user_id": "actor"}})
-		case "/rest/v1/notifications":
-			writeFakeJSON(w, http.StatusCreated, []map[string]any{{"id": "notification"}})
-		default:
-			writeFakeJSON(w, http.StatusOK, []map[string]any{})
-		}
-	})
-	body := `{"happened_at":"2026-05-23T10:00:00Z","place_name":" Test Place ","memo":"memo","friend_ids":["` + friendID + `","` + friendID + `"]}`
-	w := httptest.NewRecorder()
-
-	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPost, contracts.APIPathMemories, body))
-
-	if w.Code != http.StatusCreated {
-		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
-	}
-	request, ok := fake.lastRequest("/rest/v1/memory_tagged_users")
-	if !ok {
-		t.Fatal("memory_tagged_users request was not sent")
-	}
-	if strings.Count(request.Body, friendID) != 1 {
-		t.Fatalf("friend links were not deduplicated: %s", request.Body)
-	}
-}
-
-func TestCreateMemoryRejectsExistingLogOnSameLocalDay(t *testing.T) {
-	insertSent := false
-	fake := newFakeSupabase(t, func(w http.ResponseWriter, req *http.Request) {
-		switch req.URL.Path {
-		case "/rest/v1/friendships":
-			writeFakeJSON(w, http.StatusOK, []map[string]any{{"id": "friendship"}})
-		case "/rest/v1/memories":
-			if req.Method == http.MethodGet {
-				query := req.URL.Query()
-				if got := query.Get("owner_user_id"); got != "eq."+testUserID {
-					t.Fatalf("owner_user_id filter = %q", got)
-				}
-				if got := query.Get("is_official"); got != "eq.false" {
-					t.Fatalf("is_official filter = %q", got)
-				}
-				filters := query["happened_at"]
-				if len(filters) != 2 ||
-					filters[0] != "gte.2026-05-23T15:00:00Z" ||
-					filters[1] != "lt.2026-05-24T15:00:00Z" {
-					t.Fatalf("happened_at filters = %#v", filters)
-				}
-				writeFakeJSON(w, http.StatusOK, []map[string]any{{"id": testMemoryID}})
-				return
-			}
-			insertSent = true
-			writeFakeJSON(w, http.StatusCreated, []map[string]any{})
-		default:
-			writeFakeJSON(w, http.StatusOK, []map[string]any{})
-		}
-	})
-	body := `{"happened_at":"2026-05-24T12:30:00Z","happened_on":"2026-05-24","timezone_offset_minutes":540,"friend_ids":["` + otherUserID + `"]}`
-	w := httptest.NewRecorder()
-
-	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPost, contracts.APIPathMemories, body))
-
-	if w.Code != http.StatusConflict {
-		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
-	}
-	if insertSent {
-		t.Fatal("memory insert was sent despite same-day existing memory")
-	}
-	if !strings.Contains(w.Body.String(), "1日1つ") {
-		t.Fatalf("body does not explain daily limit: %s", w.Body.String())
-	}
-}
-
-func TestCreateMemoryRejectsInvalidFriendID(t *testing.T) {
-	fake := newFakeSupabase(t, nil)
-	w := httptest.NewRecorder()
-
-	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPost, contracts.APIPathMemories, `{"friend_ids":["bad"]}`))
-
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
-	}
-}
-
-func TestCreateMemoryRejectsNonFriendTag(t *testing.T) {
-	fake := newFakeSupabase(t, func(w http.ResponseWriter, req *http.Request) {
-		if req.URL.Path == "/rest/v1/friendships" {
-			writeFakeJSON(w, http.StatusOK, []map[string]any{})
-			return
-		}
-		writeFakeJSON(w, http.StatusOK, []map[string]any{})
-	})
-	w := httptest.NewRecorder()
-
-	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPost, contracts.APIPathMemories, `{"friend_ids":["`+otherUserID+`"]}`))
-
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
-	}
-	if _, ok := fake.lastRequest("/rest/v1/memories"); ok {
-		t.Fatal("memory insert was sent for a non-friend tag")
 	}
 }
 
@@ -1387,109 +1238,5 @@ func TestMarkNotificationsReadMasksSupabaseError(t *testing.T) {
 	body := w.Body.String()
 	if strings.Contains(body, "notification-secret") || strings.Contains(body, "raw upstream detail") {
 		t.Fatalf("raw upstream body leaked: %s", body)
-	}
-}
-
-func TestListFriendsAttachesMemoryStats(t *testing.T) {
-	friendID := otherUserID
-	older := "2026-05-20T10:00:00Z"
-	newer := "2026-05-22T12:30:00Z"
-	fake := newFakeSupabase(t, func(w http.ResponseWriter, req *http.Request) {
-		switch req.URL.Path {
-		case "/rest/v1/friendships":
-			writeFakeJSON(w, http.StatusOK, []map[string]any{{
-				"user_a_id":   testUserID,
-				"user_b_id":   friendID,
-				"is_favorite": true,
-				"user_a":      map[string]any{"id": testUserID, "user_id": "me", "display_name": "Me"},
-				"user_b":      map[string]any{"id": friendID, "user_id": "friend", "display_name": "Friend"},
-			}})
-		case "/rest/v1/daily_statuses":
-			writeFakeJSON(w, http.StatusOK, []map[string]any{})
-		case "/rest/v1/memory_tagged_users":
-			if req.URL.Query().Get("tagged_user_id") == "eq."+testUserID {
-				writeFakeJSON(w, http.StatusOK, []map[string]any{{
-					"tagged_user_id": testUserID,
-					"memories":       map[string]any{"owner_user_id": friendID, "happened_at": newer},
-				}})
-				return
-			}
-			writeFakeJSON(w, http.StatusOK, []map[string]any{{
-				"tagged_user_id": friendID,
-				"memories":       map[string]any{"owner_user_id": testUserID, "happened_at": older},
-			}})
-		default:
-			writeFakeJSON(w, http.StatusOK, []map[string]any{})
-		}
-	})
-	w := httptest.NewRecorder()
-
-	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodGet, contracts.APIPathFriends, ""))
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
-	}
-	var rows []map[string]any
-	if err := json.Unmarshal(w.Body.Bytes(), &rows); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if len(rows) != 1 {
-		t.Fatalf("rows = %d body = %s", len(rows), w.Body.String())
-	}
-	friend, ok := rows[0]["user_b"].(map[string]any)
-	if !ok {
-		t.Fatalf("user_b missing: %#v", rows[0])
-	}
-	if got := friend["total_memory_count"]; got != float64(2) {
-		t.Fatalf("total_memory_count = %#v", got)
-	}
-	if got := friend["last_memory_at"]; got != newer {
-		t.Fatalf("last_memory_at = %#v", got)
-	}
-
-	ownedReq, ok := fake.lastRequest("/rest/v1/memory_tagged_users")
-	if !ok {
-		t.Fatal("memory_tagged_users request was not sent")
-	}
-	if got := ownedReq.Query.Get("select"); got != "tagged_user_id,memories!inner(owner_user_id,happened_at)" {
-		t.Fatalf("select = %q", got)
-	}
-}
-
-func TestListFriendsIgnoresMemoryStatsSupabaseError(t *testing.T) {
-	fake := newFakeSupabase(t, func(w http.ResponseWriter, req *http.Request) {
-		switch req.URL.Path {
-		case "/rest/v1/friendships":
-			writeFakeJSON(w, http.StatusOK, []map[string]any{{
-				"user_a_id": testUserID,
-				"user_b_id": otherUserID,
-				"user_a":    map[string]any{"id": testUserID, "user_id": "me", "display_name": "Me"},
-				"user_b":    map[string]any{"id": otherUserID, "user_id": "friend", "display_name": "Friend"},
-			}})
-		case "/rest/v1/daily_statuses":
-			writeFakeJSON(w, http.StatusOK, []map[string]any{})
-		case "/rest/v1/memory_tagged_users":
-			http.Error(w, `{"secret":"memory-stats-secret","message":"raw upstream detail"}`, http.StatusInternalServerError)
-		default:
-			writeFakeJSON(w, http.StatusOK, []map[string]any{})
-		}
-	})
-	w := httptest.NewRecorder()
-
-	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodGet, contracts.APIPathFriends, ""))
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
-	}
-	body := w.Body.String()
-	if strings.Contains(body, "memory-stats-secret") || strings.Contains(body, "raw upstream detail") {
-		t.Fatalf("raw upstream body leaked: %s", body)
-	}
-	var rows []map[string]any
-	if err := json.Unmarshal(w.Body.Bytes(), &rows); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if len(rows) != 1 {
-		t.Fatalf("rows = %d body = %s", len(rows), body)
 	}
 }

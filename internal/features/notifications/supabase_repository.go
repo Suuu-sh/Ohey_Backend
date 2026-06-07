@@ -13,7 +13,7 @@ import (
 	"github.com/yota/ohey/backend/internal/supabase"
 )
 
-const notificationSelectColumns = "id,kind,title,message,created_at,read_at,actor_user_id,memory_id,friend_request_id,invite_id,notification_date,system_key,actor:profiles!notifications_actor_user_id_fkey(id,user_id,display_name,avatar_url),friend_request:friend_requests!notifications_friend_request_id_fkey(id,status),invite:invites!notifications_invite_id_fkey(id,status,activity_label)"
+const notificationSelectColumns = "id,kind,title,message,created_at,read_at,actor_user_id,friend_request_id,invite_id,notification_date,system_key,actor:profiles!notifications_actor_user_id_fkey(id,user_id,display_name,avatar_url),friend_request:friend_requests!notifications_friend_request_id_fkey(id,status),invite:invites!notifications_invite_id_fkey(id,status,activity_label)"
 
 type SupabaseRepository struct {
 	client         *supabase.Client
@@ -88,22 +88,6 @@ func (r *SupabaseRepository) DisplayName(ctx context.Context, authToken, userID 
 		return "", nil
 	}
 	return displayNameFromProfile(rows[0]), nil
-}
-
-func (r *SupabaseRepository) MemoryOwnerUserID(ctx context.Context, authToken, memoryID string) (string, error) {
-	q := url.Values{}
-	q.Set("select", "id,owner_user_id")
-	q.Set("id", "eq."+memoryID)
-	q.Set("limit", "1")
-	var memories []map[string]any
-	if err := r.client.Get(ctx, authToken, "memories", q, &memories); err != nil {
-		return "", err
-	}
-	if len(memories) == 0 {
-		return "", nil
-	}
-	ownerUserID, _ := memories[0]["owner_user_id"].(string)
-	return ownerUserID, nil
 }
 
 func (r *SupabaseRepository) TodayAcceptedInvites(ctx context.Context, authToken, userID, date string) ([]Invite, error) {

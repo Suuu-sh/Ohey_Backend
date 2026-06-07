@@ -11,7 +11,6 @@ import (
 	"github.com/yota/ohey/backend/internal/contracts"
 	"github.com/yota/ohey/backend/internal/features/dailystatuses"
 	"github.com/yota/ohey/backend/internal/features/friends"
-	"github.com/yota/ohey/backend/internal/features/memories"
 	"github.com/yota/ohey/backend/internal/features/profiles"
 	"github.com/yota/ohey/backend/internal/supabase"
 )
@@ -65,7 +64,6 @@ func (r *router) routes() {
 	r.mux.HandleFunc(route(http.MethodGet, contracts.APIPathFriendReqStatus), r.auth(r.getFriendRequestStatus))
 	r.mux.HandleFunc(route(http.MethodPost, contracts.APIPathFriendRequests), r.auth(r.createFriendRequest))
 	r.mux.HandleFunc(route(http.MethodPatch, contracts.APIPathFriendRequest), r.auth(r.updateFriendRequest))
-	r.mux.HandleFunc(route(http.MethodGet, contracts.APIPathHomeFeed), r.auth(r.listHomeFeed))
 	r.mux.HandleFunc(route(http.MethodGet, contracts.APIPathWishItems), r.auth(r.listWishItems))
 	r.mux.HandleFunc(route(http.MethodGet, contracts.APIPathProfileWishItems), r.auth(r.listProfileWishItems))
 	r.mux.HandleFunc(route(http.MethodPost, contracts.APIPathWishItems), r.auth(r.createWishItem))
@@ -78,10 +76,6 @@ func (r *router) routes() {
 	r.mux.HandleFunc(route(http.MethodPut, contracts.APIPathYuruboReaction), r.auth(r.reactYurubo))
 	r.mux.HandleFunc(route(http.MethodDelete, contracts.APIPathYuruboReaction), r.auth(r.unreactYurubo))
 	r.mux.HandleFunc(route(http.MethodPatch, contracts.APIPathYuruboReactionApproval), r.auth(r.updateYuruboReaction))
-	r.mux.HandleFunc(route(http.MethodGet, contracts.APIPathMemories), r.auth(r.listMemories))
-	r.mux.HandleFunc(route(http.MethodPost, contracts.APIPathMemories), r.auth(r.createMemory))
-	r.mux.HandleFunc(route(http.MethodDelete, contracts.APIPathMemory), r.auth(r.deleteMemory))
-	r.mux.HandleFunc(route(http.MethodPost, contracts.APIPathMemoryReport), r.auth(r.reportMemory))
 	r.mux.HandleFunc(route(http.MethodPost, contracts.APIPathUserBlocks), r.auth(r.blockUser))
 	r.mux.HandleFunc(route(http.MethodGet, contracts.APIPathUserBlocks), r.auth(r.listBlockedUsers))
 	r.mux.HandleFunc(route(http.MethodDelete, contracts.APIPathUserBlock), r.auth(r.unblockUser))
@@ -89,8 +83,6 @@ func (r *router) routes() {
 	r.mux.HandleFunc(route(http.MethodGet, contracts.APIPathUserMutes), r.auth(r.listMutedUsers))
 	r.mux.HandleFunc(route(http.MethodDelete, contracts.APIPathUserMute), r.auth(r.unmuteUser))
 	r.mux.HandleFunc(route(http.MethodPost, contracts.APIPathUserReports), r.auth(r.reportUser))
-	r.mux.HandleFunc(route(http.MethodPost, contracts.APIPathMemoryHides), r.auth(r.hideMemoryFromFeed))
-	r.mux.HandleFunc(route(http.MethodDelete, contracts.APIPathMemoryHide), r.auth(r.unhideMemoryFromFeed))
 	r.mux.HandleFunc(route(http.MethodGet, contracts.APIPathNotifications), r.auth(r.listNotifications))
 	r.mux.HandleFunc(route(http.MethodPatch, contracts.APIPathNotificationsReadAll), r.auth(r.markNotificationsRead))
 	r.mux.HandleFunc(route(http.MethodPut, contracts.APIPathMePushToken), r.auth(r.registerPushToken))
@@ -113,14 +105,8 @@ func (r *router) routes() {
 	r.mux.HandleFunc(route(http.MethodPost, contracts.APIPathAdminYurubos), r.admin(r.adminCreateYurubo))
 	r.mux.HandleFunc(route(http.MethodPatch, contracts.APIPathAdminYurubo), r.admin(r.adminUpdateYurubo))
 	r.mux.HandleFunc(route(http.MethodDelete, contracts.APIPathAdminYurubo), r.admin(r.adminDeleteYurubo))
-	r.mux.HandleFunc(route(http.MethodGet, contracts.APIPathAdminMemories), r.admin(r.adminListMemories))
-	r.mux.HandleFunc(route(http.MethodGet, contracts.APIPathAdminMemoryReports), r.admin(r.adminListMemoryReports))
-	r.mux.HandleFunc(route(http.MethodPatch, contracts.APIPathAdminMemoryReport), r.admin(r.adminUpdateMemoryReport))
 	r.mux.HandleFunc(route(http.MethodGet, contracts.APIPathAdminNotificationOutbox), r.admin(r.adminListNotificationOutbox))
 	r.mux.HandleFunc(route(http.MethodPost, contracts.APIPathAdminNotificationOutboxProcess), r.admin(r.adminProcessNotificationOutbox))
-	r.mux.HandleFunc(route(http.MethodPost, contracts.APIPathAdminMemories), r.admin(r.adminCreateMemory))
-	r.mux.HandleFunc(route(http.MethodPatch, contracts.APIPathAdminMemory), r.admin(r.adminUpdateMemory))
-	r.mux.HandleFunc(route(http.MethodDelete, contracts.APIPathAdminMemory), r.admin(r.adminDeleteMemory))
 	r.mux.HandleFunc(route(http.MethodPost, contracts.APIPathAdminNotifications), r.admin(r.adminCreateNotification))
 }
 
@@ -183,55 +169,6 @@ func (r *router) updateFriendFavorite(w http.ResponseWriter, req *http.Request, 
 	})
 	if err != nil {
 		writeFriendsError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, row)
-}
-
-func (r *router) listMemories(w http.ResponseWriter, req *http.Request, authToken string) {
-	rows, err := r.memoryUsecase(req).ListMemories(req.Context(), memories.ListInput{
-		AuthToken: authToken,
-		UserID:    req.Header.Get("X-Ohey-User-ID"),
-	})
-	if err != nil {
-		writeMemoryError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, rows)
-}
-
-func (r *router) createMemory(w http.ResponseWriter, req *http.Request, authToken string) {
-	var input CreateMemoryRequest
-	if !decodeJSONBody(w, req, &input) {
-		return
-	}
-	row, err := r.memoryUsecase(req).CreateMemory(req.Context(), memories.CreateInput{
-		AuthToken:             authToken,
-		OwnerUserID:           req.Header.Get("X-Ohey-User-ID"),
-		HappenedAt:            input.HappenedAt,
-		HappenedOn:            input.HappenedOn,
-		TimezoneOffsetMinutes: input.TimezoneOffsetMinutes,
-		PlaceName:             input.PlaceName,
-		PlaceLat:              input.PlaceLat,
-		PlaceLng:              input.PlaceLng,
-		Memo:                  input.Memo,
-		FriendIDs:             input.FriendIDs,
-	})
-	if err != nil {
-		writeMemoryError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusCreated, row)
-}
-
-func (r *router) deleteMemory(w http.ResponseWriter, req *http.Request, authToken string) {
-	row, err := r.memoryUsecase(req).DeleteMemory(req.Context(), memories.DeleteInput{
-		AuthToken:   authToken,
-		MemoryID:    req.PathValue("id"),
-		OwnerUserID: req.Header.Get("X-Ohey-User-ID"),
-	})
-	if err != nil {
-		writeMemoryError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, row)

@@ -142,7 +142,7 @@ func (u *Usecase) ListYurubos(ctx context.Context, input ListInput) ([]map[strin
 		return nil, err
 	}
 	ids := make([]string, 0, len(rows))
-	// ListOpenYurubos already selects owner_user_id. Keep it in memory and pass it
+	// ListOpenYurubos already selects owner_user_id. Keep it locally and pass it
 	// into reactionSummaries to avoid one OwnerID query per yurubo (N+1 DB load).
 	ownerIDs := make(map[string]string, len(rows))
 	out := make([]map[string]any, 0, len(rows))

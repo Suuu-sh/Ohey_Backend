@@ -100,25 +100,6 @@ func (r *SupabaseRepository) ReportUser(ctx context.Context, authToken string, r
 	return firstMap(rows, payload), nil
 }
 
-func (r *SupabaseRepository) HideMemory(ctx context.Context, authToken string, hidden HiddenMemory) (map[string]any, error) {
-	payload := map[string]any{"user_id": hidden.UserID, "memory_id": hidden.MemoryID}
-	q := url.Values{}
-	q.Set("on_conflict", "user_id,memory_id")
-	var rows []map[string]any
-	if err := r.client.Upsert(ctx, authToken, "memory_hides", q, payload, &rows); err != nil {
-		return nil, err
-	}
-	return firstMap(rows, payload), nil
-}
-
-func (r *SupabaseRepository) UnhideMemory(ctx context.Context, authToken string, hidden HiddenMemory) error {
-	q := url.Values{}
-	q.Set("user_id", "eq."+hidden.UserID)
-	q.Set("memory_id", "eq."+hidden.MemoryID)
-	var ignored []map[string]any
-	return r.client.Delete(ctx, authToken, "memory_hides", q, &ignored)
-}
-
 func (r *SupabaseRepository) attachTargetProfiles(ctx context.Context, authToken string, relationRows []map[string]any, targetKey string) ([]map[string]any, error) {
 	if len(relationRows) == 0 {
 		return []map[string]any{}, nil

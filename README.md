@@ -50,14 +50,6 @@ Authenticated requests must include:
 - `GET /v1/friend-requests/status?friend_id={id}`
 - `POST /v1/friend-requests`
 - `PATCH /v1/friend-requests/{id}`
-- `GET /v1/memories`
-- `POST /v1/memories`
-- `DELETE /v1/memories/{id}`
-- `PUT /v1/memories/{id}/like`
-- `DELETE /v1/memories/{id}/like`
-- `POST /v1/memories/{id}/report`
-- `POST /v1/memory-hides`
-- `DELETE /v1/memory-hides/{memory_id}`
 - `POST /v1/user-mutes`
 - `GET /v1/user-mutes`
 - `DELETE /v1/user-mutes/{user_id}`
@@ -98,15 +90,8 @@ Available endpoints:
 - `POST /v1/admin/users`
 - `PATCH /v1/admin/users/{id}`
 - `DELETE /v1/admin/users/{id}`
-- `GET /v1/admin/memories`
-- `GET /v1/admin/memory-reports`
-- `PATCH /v1/admin/memory-reports/{id}`
 - `GET /v1/admin/notification-outbox`
 - `POST /v1/admin/notification-outbox/process`
-- `GET /v1/admin/media/orphan-memory-photos`
-- `POST /v1/admin/memories`
-- `PATCH /v1/admin/memories/{id}`
-- `DELETE /v1/admin/memories/{id}`
 
 
 ## Push notifications
