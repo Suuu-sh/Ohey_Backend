@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yota/ohey/backend/internal/contracts"
 	"github.com/yota/ohey/backend/internal/supabase"
 )
 
@@ -87,7 +88,7 @@ func (r *SupabaseRepository) ReportUser(ctx context.Context, authToken string, r
 		"reporter_user_id": report.ReporterUserID,
 		"reported_user_id": report.ReportedUserID,
 		"reason":           report.Reason,
-		"status":           "pending",
+		"status":           contracts.StatusPending,
 		"updated_at":       time.Now().UTC().Format(time.RFC3339),
 	}
 	q := url.Values{}
@@ -97,25 +98,6 @@ func (r *SupabaseRepository) ReportUser(ctx context.Context, authToken string, r
 		return nil, err
 	}
 	return firstMap(rows, payload), nil
-}
-
-func (r *SupabaseRepository) HideMemory(ctx context.Context, authToken string, hidden HiddenMemory) (map[string]any, error) {
-	payload := map[string]any{"user_id": hidden.UserID, "memory_id": hidden.MemoryID}
-	q := url.Values{}
-	q.Set("on_conflict", "user_id,memory_id")
-	var rows []map[string]any
-	if err := r.client.Upsert(ctx, authToken, "memory_hides", q, payload, &rows); err != nil {
-		return nil, err
-	}
-	return firstMap(rows, payload), nil
-}
-
-func (r *SupabaseRepository) UnhideMemory(ctx context.Context, authToken string, hidden HiddenMemory) error {
-	q := url.Values{}
-	q.Set("user_id", "eq."+hidden.UserID)
-	q.Set("memory_id", "eq."+hidden.MemoryID)
-	var ignored []map[string]any
-	return r.client.Delete(ctx, authToken, "memory_hides", q, &ignored)
 }
 
 func (r *SupabaseRepository) attachTargetProfiles(ctx context.Context, authToken string, relationRows []map[string]any, targetKey string) ([]map[string]any, error) {
@@ -139,7 +121,7 @@ func (r *SupabaseRepository) attachTargetProfiles(ctx context.Context, authToken
 	sortedIDs := append([]string(nil), ids...)
 	sort.Strings(sortedIDs)
 	q := url.Values{}
-	q.Set("select", "id,user_id,display_name,gender,character_key,avatar_url,is_plus")
+	q.Set("select", "id,user_id,display_name,character_key,avatar_url,is_plus")
 	q.Set("id", "in.("+strings.Join(sortedIDs, ",")+")")
 	var profiles []map[string]any
 	if err := r.client.Get(ctx, authToken, "profiles", q, &profiles); err != nil {
@@ -197,16 +179,16 @@ func (r *SupabaseRepository) closeFriendRequests(ctx context.Context, relation U
 	outgoing := url.Values{}
 	outgoing.Set("from_user_id", "eq."+relation.ActorUserID)
 	outgoing.Set("to_user_id", "eq."+relation.TargetUserID)
-	outgoing.Set("status", "eq.pending")
+	outgoing.Set("status", supabase.PostgRESTEq(contracts.StatusPending))
 	var ignored []map[string]any
-	if err := r.adminClient.Patch(ctx, r.serviceRoleKey, "friend_requests", outgoing, map[string]any{"status": "cancelled", "responded_at": respondedAt}, &ignored); err != nil {
+	if err := r.adminClient.Patch(ctx, r.serviceRoleKey, "friend_requests", outgoing, map[string]any{"status": contracts.StatusCancelled, "responded_at": respondedAt}, &ignored); err != nil {
 		return err
 	}
 	incoming := url.Values{}
 	incoming.Set("from_user_id", "eq."+relation.TargetUserID)
 	incoming.Set("to_user_id", "eq."+relation.ActorUserID)
-	incoming.Set("status", "eq.pending")
-	return r.adminClient.Patch(ctx, r.serviceRoleKey, "friend_requests", incoming, map[string]any{"status": "rejected", "responded_at": respondedAt}, &ignored)
+	incoming.Set("status", supabase.PostgRESTEq(contracts.StatusPending))
+	return r.adminClient.Patch(ctx, r.serviceRoleKey, "friend_requests", incoming, map[string]any{"status": contracts.StatusRejected, "responded_at": respondedAt}, &ignored)
 }
 
 func (r *SupabaseRepository) closeInvites(ctx context.Context, relation UserRelation) error {
@@ -214,16 +196,16 @@ func (r *SupabaseRepository) closeInvites(ctx context.Context, relation UserRela
 	outgoing := url.Values{}
 	outgoing.Set("inviter_user_id", "eq."+relation.ActorUserID)
 	outgoing.Set("invitee_user_id", "eq."+relation.TargetUserID)
-	outgoing.Set("status", "eq.pending")
+	outgoing.Set("status", supabase.PostgRESTEq(contracts.StatusPending))
 	var ignored []map[string]any
-	if err := r.adminClient.Patch(ctx, r.serviceRoleKey, "invites", outgoing, map[string]any{"status": "cancelled", "responded_at": respondedAt}, &ignored); err != nil {
+	if err := r.adminClient.Patch(ctx, r.serviceRoleKey, "invites", outgoing, map[string]any{"status": contracts.StatusCancelled, "responded_at": respondedAt}, &ignored); err != nil {
 		return err
 	}
 	incoming := url.Values{}
 	incoming.Set("inviter_user_id", "eq."+relation.TargetUserID)
 	incoming.Set("invitee_user_id", "eq."+relation.ActorUserID)
-	incoming.Set("status", "eq.pending")
-	return r.adminClient.Patch(ctx, r.serviceRoleKey, "invites", incoming, map[string]any{"status": "rejected", "responded_at": respondedAt}, &ignored)
+	incoming.Set("status", supabase.PostgRESTEq(contracts.StatusPending))
+	return r.adminClient.Patch(ctx, r.serviceRoleKey, "invites", incoming, map[string]any{"status": contracts.StatusRejected, "responded_at": respondedAt}, &ignored)
 }
 
 func firstMap(rows []map[string]any, fallback map[string]any) map[string]any {

@@ -9,13 +9,11 @@ const (
 	testAuthToken = "access-token"
 	testUserID    = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 	otherUserID   = "bbbbbbbb-cccc-dddd-eeee-ffffffffffff"
-	testMemoryID  = "11111111-2222-3333-4444-555555555555"
 )
 
 type fakeRepository struct {
 	blocked UserRelation
 	report  UserReport
-	hidden  HiddenMemory
 	cleaned UserRelation
 }
 
@@ -38,11 +36,6 @@ func (f *fakeRepository) ReportUser(_ context.Context, _ string, report UserRepo
 	f.report = report
 	return map[string]any{"reported_user_id": report.ReportedUserID, "reason": report.Reason}, nil
 }
-func (f *fakeRepository) HideMemory(_ context.Context, _ string, hidden HiddenMemory) (map[string]any, error) {
-	f.hidden = hidden
-	return map[string]any{"memory_id": hidden.MemoryID}, nil
-}
-func (f *fakeRepository) UnhideMemory(context.Context, string, HiddenMemory) error { return nil }
 func (f *fakeRepository) CleanupBlockedRelations(_ context.Context, relation UserRelation) error {
 	f.cleaned = relation
 	return nil
@@ -114,19 +107,6 @@ func TestReportUserRejectsInvalidReason(t *testing.T) {
 		Reason:       "bad_reason",
 	})
 	assertUserError(t, err, ErrorKindInvalidInput, "report reason is invalid")
-}
-
-func TestHideMemoryCleansIDs(t *testing.T) {
-	repo := &fakeRepository{}
-	usecase := NewUsecase(Dependencies{Repository: repo})
-
-	_, err := usecase.HideMemory(context.Background(), MemoryInput{AuthToken: testAuthToken, UserID: testUserID, MemoryID: testMemoryID})
-	if err != nil {
-		t.Fatalf("HideMemory returned error: %v", err)
-	}
-	if repo.hidden.UserID != testUserID || repo.hidden.MemoryID != testMemoryID {
-		t.Fatalf("hidden = %#v", repo.hidden)
-	}
 }
 
 func assertUserError(t *testing.T, err error, wantKind ErrorKind, wantMessage string) {

@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/yota/ohey/backend/internal/contracts"
 )
 
 type ErrorKind string
@@ -68,20 +70,18 @@ func CleanUUIDs(values []string, field string) ([]string, error) {
 type Kind string
 
 const (
-	KindMemoryLike               Kind = "memory_like"
-	KindFriendRequestReceived    Kind = "friend_request_received"
-	KindFriendRequestAccepted    Kind = "friend_request_accepted"
-	KindInviteReceived           Kind = "invite_received"
-	KindInviteAccepted           Kind = "invite_accepted"
-	KindTodayReservationReminder Kind = "today_reservation_reminder"
-	KindMemoryTagged             Kind = "memory_tagged"
-	KindSystem                   Kind = "system"
+	KindFriendRequestReceived    Kind = contracts.NotificationKindFriendRequestReceived
+	KindFriendRequestAccepted    Kind = contracts.NotificationKindFriendRequestAccepted
+	KindInviteReceived           Kind = contracts.NotificationKindInviteReceived
+	KindInviteAccepted           Kind = contracts.NotificationKindInviteAccepted
+	KindTodayReservationReminder Kind = contracts.NotificationKindTodayReservationReminder
+	KindYuruboCreated            Kind = contracts.NotificationKindYuruboCreated
+	KindSystem                   Kind = contracts.NotificationKindSystem
 )
 
 type Notification struct {
 	RecipientUserID  string
 	ActorUserID      string
-	MemoryID         string
 	FriendRequestID  string
 	InviteID         string
 	NotificationDate string
@@ -101,9 +101,6 @@ func (n Notification) Payload() map[string]any {
 	if n.ActorUserID != "" {
 		payload["actor_user_id"] = n.ActorUserID
 	}
-	if n.MemoryID != "" {
-		payload["memory_id"] = n.MemoryID
-	}
 	if n.FriendRequestID != "" {
 		payload["friend_request_id"] = n.FriendRequestID
 	}
@@ -121,9 +118,6 @@ func (n Notification) Payload() map[string]any {
 
 func (n Notification) PushData() map[string]string {
 	data := map[string]string{"kind": string(n.Kind)}
-	if n.MemoryID != "" {
-		data["memory_id"] = n.MemoryID
-	}
 	if n.FriendRequestID != "" {
 		data["friend_request_id"] = n.FriendRequestID
 	}

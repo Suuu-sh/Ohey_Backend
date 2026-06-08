@@ -2,7 +2,6 @@ package notifications
 
 import (
 	"context"
-	"reflect"
 	"testing"
 	"time"
 )
@@ -12,7 +11,6 @@ const (
 	testUserID    = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 	otherUserID   = "bbbbbbbb-cccc-dddd-eeee-ffffffffffff"
 	thirdUserID   = "cccccccc-dddd-eeee-ffff-000000000000"
-	testMemoryID  = "11111111-2222-3333-4444-555555555555"
 	testRequestID = "22222222-3333-4444-5555-666666666666"
 	testInviteID  = "33333333-4444-5555-6666-777777777777"
 )
@@ -22,7 +20,6 @@ type fakeRepository struct {
 	listRows         []map[string]any
 	updatedCount     int
 	displayNames     map[string]string
-	memoryOwnerID    string
 	invites          []Invite
 	allProfileIDs    []string
 	pushTokens       []string
@@ -61,15 +58,15 @@ func (f *fakeRepository) DisplayName(_ context.Context, _ string, userID string)
 	return "Actor", nil
 }
 
-func (f *fakeRepository) MemoryOwnerUserID(context.Context, string, string) (string, error) {
-	return f.memoryOwnerID, nil
-}
-
 func (f *fakeRepository) TodayAcceptedInvites(context.Context, string, string, string) ([]Invite, error) {
 	return f.invites, nil
 }
 
 func (f *fakeRepository) AllProfileIDs(context.Context) ([]string, error) {
+	return f.allProfileIDs, nil
+}
+
+func (f *fakeRepository) VisibleYuruboRecipientIDs(context.Context, string, string, string, []string) ([]string, error) {
 	return f.allProfileIDs, nil
 }
 
@@ -89,7 +86,7 @@ type fakePushSender struct {
 }
 
 func (f *fakePushSender) Send(_ context.Context, token, title, body string, data map[string]string) error {
-	f.sent = append(f.sent, map[string]string{"token": token, "title": title, "body": body, "kind": data["kind"], "memory_id": data["memory_id"]})
+	f.sent = append(f.sent, map[string]string{"token": token, "title": title, "body": body, "kind": data["kind"]})
 	return f.err
 }
 
@@ -125,61 +122,19 @@ func TestNotifyFriendRequestReceivedCreatesProductCopy(t *testing.T) {
 	}
 }
 
-func TestNotifyMemoryTaggedDeduplicatesRecipientsAndSkipsOwner(t *testing.T) {
-	repo := &fakeRepository{}
-	usecase := NewUsecase(Dependencies{Repository: repo})
-
-	usecase.NotifyMemoryTagged(context.Background(), testAuthToken, testMemoryID, testUserID, []string{otherUserID, otherUserID, testUserID, thirdUserID})
-
-	if len(repo.created) != 2 {
-		t.Fatalf("created = %d, want 2", len(repo.created))
-	}
-	got := []string{repo.created[0].RecipientUserID, repo.created[1].RecipientUserID}
-	want := []string{otherUserID, thirdUserID}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("recipients = %v, want %v", got, want)
-	}
-}
-
-func TestNotifyMemoryLikedSkipsSelfAndPushesOnCreated(t *testing.T) {
-	for _, tc := range []struct {
-		name              string
-		ownerID           string
-		created           bool
-		wantNotifications int
-		wantPushes        int
-	}{
-		{name: "self", ownerID: testUserID, created: true, wantNotifications: 0, wantPushes: 0},
-		{name: "duplicate", ownerID: otherUserID, created: false, wantNotifications: 1, wantPushes: 0},
-		{name: "created", ownerID: otherUserID, created: true, wantNotifications: 1, wantPushes: 1},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			repo := &fakeRepository{memoryOwnerID: tc.ownerID, createReturn: []bool{tc.created}, pushTokens: []string{"token"}}
-			push := &fakePushSender{}
-			usecase := NewUsecase(Dependencies{Repository: repo, PushSender: push})
-
-			usecase.NotifyMemoryLiked(context.Background(), testAuthToken, testMemoryID, testUserID)
-
-			if len(repo.created) != tc.wantNotifications {
-				t.Fatalf("created = %d, want %d", len(repo.created), tc.wantNotifications)
-			}
-			if len(push.sent) != tc.wantPushes {
-				t.Fatalf("pushes = %d, want %d", len(push.sent), tc.wantPushes)
-			}
-		})
-	}
-}
-
 func TestInvalidPushTokenIsDeletedAfterSendFailure(t *testing.T) {
 	repo := &fakeRepository{
-		memoryOwnerID: otherUserID,
-		createReturn:  []bool{true},
-		pushTokens:    []string{"bad-token"},
+		createReturn: []bool{true},
+		pushTokens:   []string{"bad-token"},
 	}
 	push := &fakePushSender{err: fakeInvalidPushTokenError{}}
 	usecase := NewUsecase(Dependencies{Repository: repo, PushSender: push})
 
-	usecase.NotifyMemoryLiked(context.Background(), testAuthToken, testMemoryID, testUserID)
+	usecase.NotifyFriendRequestReceived(context.Background(), testAuthToken, map[string]any{
+		"id":           testRequestID,
+		"from_user_id": otherUserID,
+		"to_user_id":   testUserID,
+	})
 
 	if len(repo.deletedTokens) != 1 || repo.deletedTokens[0] != "bad-token" {
 		t.Fatalf("deletedTokens = %#v, want bad-token", repo.deletedTokens)

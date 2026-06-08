@@ -19,15 +19,26 @@ import (
 	"time"
 
 	"github.com/yota/ohey/backend/internal/config"
+	"github.com/yota/ohey/backend/internal/contracts"
 	"github.com/yota/ohey/backend/internal/supabase"
 )
 
 const (
 	testUserID    = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 	otherUserID   = "bbbbbbbb-cccc-dddd-eeee-ffffffffffff"
-	testMemoryID  = "11111111-2222-3333-4444-555555555555"
 	testRequestID = "22222222-3333-4444-5555-666666666666"
 )
+
+func contractPath(pattern string, replacements ...string) string {
+	if len(replacements)%2 != 0 {
+		panic("contractPath replacements must be key/value pairs")
+	}
+	path := pattern
+	for i := 0; i < len(replacements); i += 2 {
+		path = strings.ReplaceAll(path, "{"+replacements[i]+"}", replacements[i+1])
+	}
+	return path
+}
 
 type recordedRequest struct {
 	Method string
@@ -185,7 +196,6 @@ func TestAuthUsesJWKSVerifiedSubjectWithoutAuthUserRoundTrip(t *testing.T) {
 				"id":            testUserID,
 				"user_id":       "valid_user",
 				"display_name":  "Valid User",
-				"gender":        "unspecified",
 				"character_key": "avatar",
 				"is_plus":       false,
 			}})
@@ -194,7 +204,7 @@ func TestAuthUsesJWKSVerifiedSubjectWithoutAuthUserRoundTrip(t *testing.T) {
 		}
 	})
 	token := signedSupabaseJWT(t, privateKey, fake.server.URL+"/auth/v1", kid, testUserID, "user@example.com", time.Now().Add(time.Hour))
-	req := authedRequest(http.MethodGet, "/v1/me/profile", "")
+	req := authedRequest(http.MethodGet, contracts.APIPathMeProfile, "")
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 
@@ -218,7 +228,6 @@ func TestAuthCachesAuthServerUserForOpaqueToken(t *testing.T) {
 				"id":            testUserID,
 				"user_id":       "valid_user",
 				"display_name":  "Valid User",
-				"gender":        "unspecified",
 				"character_key": "avatar",
 				"is_plus":       false,
 			}})
@@ -230,7 +239,7 @@ func TestAuthCachesAuthServerUserForOpaqueToken(t *testing.T) {
 
 	for range 2 {
 		w := httptest.NewRecorder()
-		router.ServeHTTP(w, authedRequest(http.MethodGet, "/v1/me/profile", ""))
+		router.ServeHTTP(w, authedRequest(http.MethodGet, contracts.APIPathMeProfile, ""))
 		if w.Code != http.StatusOK {
 			t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
 		}
@@ -248,7 +257,7 @@ func TestAuthRejectsExpiredJWKSJWTWithoutAuthUserFallback(t *testing.T) {
 	}
 	fake := newFakeSupabase(t, nil)
 	token := signedSupabaseJWT(t, privateKey, fake.server.URL+"/auth/v1", "test-key", testUserID, "user@example.com", time.Now().Add(-time.Hour))
-	req := authedRequest(http.MethodGet, "/v1/me/profile", "")
+	req := authedRequest(http.MethodGet, contracts.APIPathMeProfile, "")
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 
@@ -267,7 +276,7 @@ func TestAuthRejectsExpiredJWKSJWTWithoutAuthUserFallback(t *testing.T) {
 
 func TestAuthRejectsUserIDMismatch(t *testing.T) {
 	fake := newFakeSupabase(t, nil)
-	req := authedRequest(http.MethodGet, "/v1/me/profile", "")
+	req := authedRequest(http.MethodGet, contracts.APIPathMeProfile, "")
 	req.Header.Set("X-Ohey-User-ID", otherUserID)
 	w := httptest.NewRecorder()
 
@@ -281,7 +290,7 @@ func TestAuthRejectsUserIDMismatch(t *testing.T) {
 func TestHandlerRejectsOversizedJSONBody(t *testing.T) {
 	fake := newFakeSupabase(t, nil)
 	largeToken := strings.Repeat("x", int(maxJSONBodyBytes)+1)
-	req := authedRequest(http.MethodPut, "/v1/me/push-token", `{"token":"`+largeToken+`","platform":"ios"}`)
+	req := authedRequest(http.MethodPut, contracts.APIPathMePushToken, `{"token":"`+largeToken+`","platform":"ios"}`)
 	w := httptest.NewRecorder()
 
 	testRouter(fake).ServeHTTP(w, req)
@@ -304,8 +313,7 @@ func TestHandlerRejectsInvalidUUIDAndDate(t *testing.T) {
 		path   string
 		body   string
 	}{
-		{name: "uuid", method: http.MethodDelete, path: "/v1/memories/not-a-uuid"},
-		{name: "date", method: http.MethodGet, path: "/v1/daily-status?date=2026/05/23"},
+		{name: "date", method: http.MethodGet, path: contracts.APIPathDailyStatus + "?date=2026/05/23"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			w := httptest.NewRecorder()
@@ -327,7 +335,7 @@ func TestSupabaseErrorsAreMasked(t *testing.T) {
 	})
 	w := httptest.NewRecorder()
 
-	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodGet, "/v1/me/profile", ""))
+	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodGet, contracts.APIPathMeProfile, ""))
 
 	if w.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
@@ -345,7 +353,7 @@ func TestAdminAccessRequiresConfiguredAdminEmail(t *testing.T) {
 	fake := newFakeSupabase(t, nil)
 	w := httptest.NewRecorder()
 
-	testRouter(fake, "admin@example.com").ServeHTTP(w, authedRequest(http.MethodGet, "/v1/admin/me", ""))
+	testRouter(fake, "admin@example.com").ServeHTTP(w, authedRequest(http.MethodGet, contracts.APIPathAdminMe, ""))
 
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
@@ -375,7 +383,7 @@ func TestAdminListUsersUsesRequestedStatusDate(t *testing.T) {
 	})
 	w := httptest.NewRecorder()
 
-	testRouter(fake, "user@example.com").ServeHTTP(w, authedRequest(http.MethodGet, "/v1/admin/users?date=2026-05-26", ""))
+	testRouter(fake, "user@example.com").ServeHTTP(w, authedRequest(http.MethodGet, contracts.APIPathAdminUsers+"?date=2026-05-26", ""))
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
@@ -395,7 +403,7 @@ func TestAdminUpdateUserWritesRequestedStatusDate(t *testing.T) {
 
 	testRouter(fake, "user@example.com").ServeHTTP(
 		w,
-		authedRequest(http.MethodPatch, "/v1/admin/users/"+otherUserID, `{"status":"maybe_available","status_date":"2026-05-26"}`),
+		authedRequest(http.MethodPatch, contractPath(contracts.APIPathAdminUser, "id", otherUserID), `{"status":"maybe_available","status_date":"2026-05-26"}`),
 	)
 
 	if w.Code != http.StatusOK {
@@ -410,30 +418,6 @@ func TestAdminUpdateUserWritesRequestedStatusDate(t *testing.T) {
 	}
 	if !strings.Contains(request.Body, `"status":"maybe_available"`) {
 		t.Fatalf("daily status body missing status: %s", request.Body)
-	}
-}
-
-func TestDeleteMemoryIsScopedToAuthenticatedOwner(t *testing.T) {
-	fake := newFakeSupabase(t, func(w http.ResponseWriter, req *http.Request) {
-		if req.URL.Path == "/rest/v1/memories" && req.Method == http.MethodDelete {
-			writeFakeJSON(w, http.StatusOK, []map[string]any{})
-			return
-		}
-		writeFakeJSON(w, http.StatusOK, []map[string]any{})
-	})
-	w := httptest.NewRecorder()
-
-	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodDelete, "/v1/memories/"+testMemoryID, ""))
-
-	if w.Code != http.StatusNotFound {
-		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
-	}
-	request, ok := fake.lastRequest("/rest/v1/memories")
-	if !ok {
-		t.Fatal("memories request was not sent")
-	}
-	if got := request.Query.Get("owner_user_id"); got != "eq."+testUserID {
-		t.Fatalf("owner_user_id filter = %q", got)
 	}
 }
 
@@ -457,7 +441,7 @@ func TestUpdateFriendRequestIsScopedToAuthenticatedParticipant(t *testing.T) {
 			w := httptest.NewRecorder()
 			body := `{"status":"` + tc.status + `"}`
 
-			testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPatch, "/v1/friend-requests/"+testRequestID, body))
+			testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPatch, contractPath(contracts.APIPathFriendRequest, "id", testRequestID), body))
 
 			if w.Code != http.StatusNotFound {
 				t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
@@ -483,7 +467,7 @@ func TestDeleteFriendshipIsScopedToAuthenticatedUserPair(t *testing.T) {
 	})
 	w := httptest.NewRecorder()
 
-	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodDelete, "/v1/friends/"+otherUserID, ""))
+	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodDelete, contractPath(contracts.APIPathFriend, "id", otherUserID), ""))
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
@@ -515,7 +499,7 @@ func TestGetFriendRequestStatusReturnsRequestID(t *testing.T) {
 	})
 	w := httptest.NewRecorder()
 
-	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodGet, "/v1/friend-requests/status?friend_id="+otherUserID, ""))
+	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodGet, contracts.APIPathFriendReqStatus+"?friend_id="+otherUserID, ""))
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
@@ -545,7 +529,7 @@ func TestListFriendRequestsScopesDirection(t *testing.T) {
 	})
 	w := httptest.NewRecorder()
 
-	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodGet, "/v1/friend-requests?direction=incoming", ""))
+	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodGet, contracts.APIPathFriendRequests+"?direction=incoming", ""))
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
@@ -585,7 +569,7 @@ func TestListBlockedUsersReturnsTargetProfiles(t *testing.T) {
 	})
 	w := httptest.NewRecorder()
 
-	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodGet, "/v1/user-blocks", ""))
+	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodGet, contracts.APIPathUserBlocks, ""))
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
@@ -596,129 +580,6 @@ func TestListBlockedUsersReturnsTargetProfiles(t *testing.T) {
 	}
 	if !strings.Contains(w.Body.String(), `"target_user_id":"`+otherUserID+`"`) {
 		t.Fatalf("body missing target_user_id: %s", w.Body.String())
-	}
-}
-
-func TestCreateMemoryValidatesFriendIDsAndCreatesLinks(t *testing.T) {
-	friendID := otherUserID
-	fake := newFakeSupabase(t, func(w http.ResponseWriter, req *http.Request) {
-		switch req.URL.Path {
-		case "/rest/v1/friendships":
-			writeFakeJSON(w, http.StatusOK, []map[string]any{{"id": "friendship"}})
-		case "/rest/v1/memories":
-			if req.Method == http.MethodGet {
-				writeFakeJSON(w, http.StatusOK, []map[string]any{})
-				return
-			}
-			writeFakeJSON(w, http.StatusCreated, []map[string]any{{
-				"id":            testMemoryID,
-				"happened_at":   "2026-05-23T10:00:00Z",
-				"owner_user_id": testUserID,
-				"place_name":    "Test Place",
-				"memo":          "memo",
-				"is_official":   false,
-			}})
-		case "/rest/v1/memory_tagged_users":
-			writeFakeJSON(w, http.StatusCreated, []map[string]any{})
-		case "/rest/v1/profiles":
-			writeFakeJSON(w, http.StatusOK, []map[string]any{{"display_name": "Actor", "user_id": "actor"}})
-		case "/rest/v1/notifications":
-			writeFakeJSON(w, http.StatusCreated, []map[string]any{{"id": "notification"}})
-		default:
-			writeFakeJSON(w, http.StatusOK, []map[string]any{})
-		}
-	})
-	body := `{"happened_at":"2026-05-23T10:00:00Z","place_name":" Test Place ","memo":"memo","friend_ids":["` + friendID + `","` + friendID + `"]}`
-	w := httptest.NewRecorder()
-
-	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPost, "/v1/memories", body))
-
-	if w.Code != http.StatusCreated {
-		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
-	}
-	request, ok := fake.lastRequest("/rest/v1/memory_tagged_users")
-	if !ok {
-		t.Fatal("memory_tagged_users request was not sent")
-	}
-	if strings.Count(request.Body, friendID) != 1 {
-		t.Fatalf("friend links were not deduplicated: %s", request.Body)
-	}
-}
-
-func TestCreateMemoryRejectsExistingLogOnSameLocalDay(t *testing.T) {
-	insertSent := false
-	fake := newFakeSupabase(t, func(w http.ResponseWriter, req *http.Request) {
-		switch req.URL.Path {
-		case "/rest/v1/friendships":
-			writeFakeJSON(w, http.StatusOK, []map[string]any{{"id": "friendship"}})
-		case "/rest/v1/memories":
-			if req.Method == http.MethodGet {
-				query := req.URL.Query()
-				if got := query.Get("owner_user_id"); got != "eq."+testUserID {
-					t.Fatalf("owner_user_id filter = %q", got)
-				}
-				if got := query.Get("is_official"); got != "eq.false" {
-					t.Fatalf("is_official filter = %q", got)
-				}
-				filters := query["happened_at"]
-				if len(filters) != 2 ||
-					filters[0] != "gte.2026-05-23T15:00:00Z" ||
-					filters[1] != "lt.2026-05-24T15:00:00Z" {
-					t.Fatalf("happened_at filters = %#v", filters)
-				}
-				writeFakeJSON(w, http.StatusOK, []map[string]any{{"id": testMemoryID}})
-				return
-			}
-			insertSent = true
-			writeFakeJSON(w, http.StatusCreated, []map[string]any{})
-		default:
-			writeFakeJSON(w, http.StatusOK, []map[string]any{})
-		}
-	})
-	body := `{"happened_at":"2026-05-24T12:30:00Z","happened_on":"2026-05-24","timezone_offset_minutes":540,"friend_ids":["` + otherUserID + `"]}`
-	w := httptest.NewRecorder()
-
-	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPost, "/v1/memories", body))
-
-	if w.Code != http.StatusConflict {
-		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
-	}
-	if insertSent {
-		t.Fatal("memory insert was sent despite same-day existing memory")
-	}
-	if !strings.Contains(w.Body.String(), "1日1つ") {
-		t.Fatalf("body does not explain daily limit: %s", w.Body.String())
-	}
-}
-
-func TestCreateMemoryRejectsInvalidFriendID(t *testing.T) {
-	fake := newFakeSupabase(t, nil)
-	w := httptest.NewRecorder()
-
-	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPost, "/v1/memories", `{"friend_ids":["bad"]}`))
-
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
-	}
-}
-
-func TestCreateMemoryRejectsNonFriendTag(t *testing.T) {
-	fake := newFakeSupabase(t, func(w http.ResponseWriter, req *http.Request) {
-		if req.URL.Path == "/rest/v1/friendships" {
-			writeFakeJSON(w, http.StatusOK, []map[string]any{})
-			return
-		}
-		writeFakeJSON(w, http.StatusOK, []map[string]any{})
-	})
-	w := httptest.NewRecorder()
-
-	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPost, "/v1/memories", `{"friend_ids":["`+otherUserID+`"]}`))
-
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
-	}
-	if _, ok := fake.lastRequest("/rest/v1/memories"); ok {
-		t.Fatal("memory insert was sent for a non-friend tag")
 	}
 }
 
@@ -744,7 +605,7 @@ func TestCreateFriendRequestValidatesAndScopesFriendshipCheck(t *testing.T) {
 	})
 	w := httptest.NewRecorder()
 
-	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPost, "/v1/friend-requests", `{"to_user_id":"`+otherUserID+`"}`))
+	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPost, contracts.APIPathFriendRequests, `{"to_user_id":"`+otherUserID+`"}`))
 
 	if w.Code != http.StatusCreated {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
@@ -759,7 +620,7 @@ func TestCreateFriendRequestRejectsInvalidRecipient(t *testing.T) {
 	fake := newFakeSupabase(t, nil)
 	w := httptest.NewRecorder()
 
-	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPost, "/v1/friend-requests", `{"to_user_id":"bad"}`))
+	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPost, contracts.APIPathFriendRequests, `{"to_user_id":"bad"}`))
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
@@ -795,7 +656,7 @@ func TestCreateInviteValidatesDateAndCreatesInvite(t *testing.T) {
 	})
 	w := httptest.NewRecorder()
 
-	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPost, "/v1/invites", `{"invitee_user_id":"`+otherUserID+`","scheduled_date":"2026-05-23","activity_label":" 焼肉 "}`))
+	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPost, contracts.APIPathInvites, `{"invitee_user_id":"`+otherUserID+`","scheduled_date":"2026-05-23","activity_label":" 焼肉 "}`))
 
 	if w.Code != http.StatusCreated {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
@@ -810,7 +671,7 @@ func TestCreateInviteRejectsInvalidDate(t *testing.T) {
 	fake := newFakeSupabase(t, nil)
 	w := httptest.NewRecorder()
 
-	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPost, "/v1/invites", `{"invitee_user_id":"`+otherUserID+`","scheduled_date":"2026/05/23"}`))
+	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPost, contracts.APIPathInvites, `{"invitee_user_id":"`+otherUserID+`","scheduled_date":"2026/05/23"}`))
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
@@ -832,7 +693,7 @@ func TestAdminCreateNotificationValidatesRecipientsAndDeduplicates(t *testing.T)
 	w := httptest.NewRecorder()
 	body := `{"title":"Title","message":"Message","recipient_user_ids":["` + otherUserID + `","` + otherUserID + `"]}`
 
-	testRouter(fake, "user@example.com").ServeHTTP(w, authedRequest(http.MethodPost, "/v1/admin/notifications", body))
+	testRouter(fake, "user@example.com").ServeHTTP(w, authedRequest(http.MethodPost, contracts.APIPathAdminNotifications, body))
 
 	if w.Code != http.StatusCreated {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
@@ -846,7 +707,7 @@ func TestAdminCreateNotificationRejectsInvalidRecipient(t *testing.T) {
 	fake := newFakeSupabase(t, nil)
 	w := httptest.NewRecorder()
 
-	testRouter(fake, "user@example.com").ServeHTTP(w, authedRequest(http.MethodPost, "/v1/admin/notifications", `{"title":"Title","message":"Message","recipient_user_ids":["bad"]}`))
+	testRouter(fake, "user@example.com").ServeHTTP(w, authedRequest(http.MethodPost, contracts.APIPathAdminNotifications, `{"title":"Title","message":"Message","recipient_user_ids":["bad"]}`))
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
@@ -866,7 +727,7 @@ func TestRegisterPushTokenValidation(t *testing.T) {
 			fake := newFakeSupabase(t, nil)
 			w := httptest.NewRecorder()
 
-			testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPut, "/v1/me/push-token", tc.body))
+			testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPut, contracts.APIPathMePushToken, tc.body))
 
 			if w.Code != http.StatusBadRequest {
 				t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
@@ -879,7 +740,7 @@ func TestAdminAccessAllowsConfiguredAdminEmailCaseInsensitive(t *testing.T) {
 	fake := newFakeSupabase(t, nil)
 	w := httptest.NewRecorder()
 
-	testRouter(fake, "USER@EXAMPLE.COM").ServeHTTP(w, authedRequest(http.MethodGet, "/v1/admin/me", ""))
+	testRouter(fake, "USER@EXAMPLE.COM").ServeHTTP(w, authedRequest(http.MethodGet, contracts.APIPathAdminMe, ""))
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
@@ -899,7 +760,7 @@ func TestSupabaseClientErrorsAreMasked(t *testing.T) {
 	})
 	w := httptest.NewRecorder()
 
-	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPatch, "/v1/me/profile", `{"display_name":"Name"}`))
+	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPatch, contracts.APIPathMeProfile, `{"display_name":"Name"}`))
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
@@ -924,7 +785,7 @@ func TestUpdateInviteIsScopedToAuthenticatedRecipientAndPending(t *testing.T) {
 	})
 	w := httptest.NewRecorder()
 
-	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPatch, "/v1/invites/"+inviteID, `{"status":"accepted"}`))
+	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPatch, contractPath(contracts.APIPathInvite, "id", inviteID), `{"status":"accepted"}`))
 
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
@@ -951,7 +812,7 @@ func TestRegisterPushTokenScopesToAuthenticatedUser(t *testing.T) {
 	})
 	w := httptest.NewRecorder()
 
-	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPut, "/v1/me/push-token", `{"token":"device-token","platform":"ios"}`))
+	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPut, contracts.APIPathMePushToken, `{"token":"device-token","platform":"ios"}`))
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
@@ -975,7 +836,7 @@ func TestUnregisterPushTokenScopesToAuthenticatedUser(t *testing.T) {
 	})
 	w := httptest.NewRecorder()
 
-	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodDelete, "/v1/me/push-token", `{"token":"device-token"}`))
+	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodDelete, contracts.APIPathMePushToken, `{"token":"device-token"}`))
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
@@ -1003,13 +864,13 @@ func TestUpdateProfileValidatesUserIDAndScopesToAuthUser(t *testing.T) {
 	router := testRouter(fake)
 
 	invalid := httptest.NewRecorder()
-	router.ServeHTTP(invalid, authedRequest(http.MethodPatch, "/v1/me/profile", `{"user_id":"bad user id"}`))
+	router.ServeHTTP(invalid, authedRequest(http.MethodPatch, contracts.APIPathMeProfile, `{"user_id":"bad user id"}`))
 	if invalid.Code != http.StatusBadRequest {
 		t.Fatalf("invalid status = %d body = %s", invalid.Code, invalid.Body.String())
 	}
 
 	w := httptest.NewRecorder()
-	router.ServeHTTP(w, authedRequest(http.MethodPatch, "/v1/me/profile", `{"user_id":"valid_user","display_name":"Name"}`))
+	router.ServeHTTP(w, authedRequest(http.MethodPatch, contracts.APIPathMeProfile, `{"user_id":"valid_user","display_name":"Name"}`))
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
 	}
@@ -1032,7 +893,7 @@ func TestUpsertProfileNormalizesAndScopesToAuthUser(t *testing.T) {
 	})
 	w := httptest.NewRecorder()
 
-	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPut, "/v1/me/profile", `{"user_id":" valid_user ","display_name":" Name ","gender":"","character_key":"","avatar_url":" avatar.png "}`))
+	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPut, contracts.APIPathMeProfile, `{"user_id":" valid_user ","display_name":" Name ","character_key":"","avatar_url":" avatar.png "}`))
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
@@ -1048,7 +909,6 @@ func TestUpsertProfileNormalizesAndScopesToAuthUser(t *testing.T) {
 		`"id":"` + testUserID + `"`,
 		`"user_id":"valid_user"`,
 		`"display_name":"Name"`,
-		`"gender":"unspecified"`,
 		`"character_key":"avatar"`,
 		`"avatar_url":"avatar.png"`,
 	} {
@@ -1068,7 +928,7 @@ func TestMarkNotificationsReadIsScopedToAuthenticatedRecipient(t *testing.T) {
 	})
 	w := httptest.NewRecorder()
 
-	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPatch, "/v1/notifications/read-all", `{}`))
+	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPatch, contracts.APIPathNotificationsReadAll, `{}`))
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
@@ -1099,7 +959,7 @@ func TestAdminBackendRequiresServiceRole(t *testing.T) {
 	})
 	w := httptest.NewRecorder()
 
-	router.ServeHTTP(w, authedRequest(http.MethodGet, "/v1/admin/me", ""))
+	router.ServeHTTP(w, authedRequest(http.MethodGet, contracts.APIPathAdminMe, ""))
 
 	if w.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
@@ -1110,7 +970,7 @@ func TestAdminDeleteUserRejectsSelfDelete(t *testing.T) {
 	fake := newFakeSupabase(t, nil)
 	w := httptest.NewRecorder()
 
-	testRouter(fake, "user@example.com").ServeHTTP(w, authedRequest(http.MethodDelete, "/v1/admin/users/"+testUserID, ""))
+	testRouter(fake, "user@example.com").ServeHTTP(w, authedRequest(http.MethodDelete, contractPath(contracts.APIPathAdminUser, "id", testUserID), ""))
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
@@ -1130,7 +990,7 @@ func TestDeleteOwnAccountUsesAdminAuthDelete(t *testing.T) {
 	})
 	w := httptest.NewRecorder()
 
-	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodDelete, "/v1/me/account", ""))
+	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodDelete, contracts.APIPathMeAccount, ""))
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
@@ -1168,7 +1028,7 @@ func TestUpdateFriendRequestAcceptedCreatesFriendship(t *testing.T) {
 	})
 	w := httptest.NewRecorder()
 
-	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPatch, "/v1/friend-requests/"+testRequestID, `{"status":"accepted"}`))
+	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPatch, contractPath(contracts.APIPathFriendRequest, "id", testRequestID), `{"status":"accepted"}`))
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
@@ -1197,7 +1057,7 @@ func TestUpdateFriendRequestRejectedDoesNotCreateFriendship(t *testing.T) {
 	})
 	w := httptest.NewRecorder()
 
-	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPatch, "/v1/friend-requests/"+testRequestID, `{"status":"rejected"}`))
+	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPatch, contractPath(contracts.APIPathFriendRequest, "id", testRequestID), `{"status":"rejected"}`))
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
@@ -1240,7 +1100,7 @@ func TestUpdateInviteAcceptedOnlyCreatesAcceptedNotification(t *testing.T) {
 			})
 			w := httptest.NewRecorder()
 
-			testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPatch, "/v1/invites/"+inviteID, `{"status":"`+tc.status+`"}`))
+			testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPatch, contractPath(contracts.APIPathInvite, "id", inviteID), `{"status":"`+tc.status+`"}`))
 
 			if w.Code != http.StatusOK {
 				t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
@@ -1273,7 +1133,7 @@ func TestAdminCreateNotificationSendToAllAndConflictPartialResult(t *testing.T) 
 	w := httptest.NewRecorder()
 	body := `{"title":"Title","message":"Message","send_to_all":true,"recipient_user_ids":["` + otherUserID + `"]}`
 
-	testRouter(fake, "user@example.com").ServeHTTP(w, authedRequest(http.MethodPost, "/v1/admin/notifications", body))
+	testRouter(fake, "user@example.com").ServeHTTP(w, authedRequest(http.MethodPost, contracts.APIPathAdminNotifications, body))
 
 	if w.Code != http.StatusCreated {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
@@ -1299,13 +1159,12 @@ func TestUpdateProfileRejectsImmutableAndOversizedFields(t *testing.T) {
 		body string
 		want string
 	}{
-		{name: "gender", body: `{"gender":"male"}`, want: "gender cannot be changed"},
 		{name: "display name length", body: `{"display_name":"` + strings.Repeat("名", 41) + `"}`, want: "display_name must be 1-40 characters"},
 		{name: "avatar length", body: `{"avatar_url":"` + strings.Repeat("x", 4097) + `"}`, want: "avatar_url is too long"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			w := httptest.NewRecorder()
-			router.ServeHTTP(w, authedRequest(http.MethodPatch, "/v1/me/profile", tc.body))
+			router.ServeHTTP(w, authedRequest(http.MethodPatch, contracts.APIPathMeProfile, tc.body))
 			if w.Code != http.StatusBadRequest {
 				t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
 			}
@@ -1329,7 +1188,7 @@ func TestAdminCreateNotificationMasksNonConflictInsertError(t *testing.T) {
 	})
 	w := httptest.NewRecorder()
 
-	testRouter(fake, "user@example.com").ServeHTTP(w, authedRequest(http.MethodPost, "/v1/admin/notifications", `{"title":"お知らせ","message":"本文","recipient_user_ids":["`+testUserID+`"]}`))
+	testRouter(fake, "user@example.com").ServeHTTP(w, authedRequest(http.MethodPost, contracts.APIPathAdminNotifications, `{"title":"お知らせ","message":"本文","recipient_user_ids":["`+testUserID+`"]}`))
 
 	if w.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
@@ -1350,7 +1209,7 @@ func TestRegisterPushTokenMasksSupabaseError(t *testing.T) {
 	})
 	w := httptest.NewRecorder()
 
-	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPut, "/v1/me/push-token", `{"token":"device-token","platform":"ios"}`))
+	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPut, contracts.APIPathMePushToken, `{"token":"device-token","platform":"ios"}`))
 
 	if w.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
@@ -1371,7 +1230,7 @@ func TestMarkNotificationsReadMasksSupabaseError(t *testing.T) {
 	})
 	w := httptest.NewRecorder()
 
-	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPatch, "/v1/notifications/read-all", `{}`))
+	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodPatch, contracts.APIPathNotificationsReadAll, `{}`))
 
 	if w.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
@@ -1379,109 +1238,5 @@ func TestMarkNotificationsReadMasksSupabaseError(t *testing.T) {
 	body := w.Body.String()
 	if strings.Contains(body, "notification-secret") || strings.Contains(body, "raw upstream detail") {
 		t.Fatalf("raw upstream body leaked: %s", body)
-	}
-}
-
-func TestListFriendsAttachesMemoryStats(t *testing.T) {
-	friendID := otherUserID
-	older := "2026-05-20T10:00:00Z"
-	newer := "2026-05-22T12:30:00Z"
-	fake := newFakeSupabase(t, func(w http.ResponseWriter, req *http.Request) {
-		switch req.URL.Path {
-		case "/rest/v1/friendships":
-			writeFakeJSON(w, http.StatusOK, []map[string]any{{
-				"user_a_id":   testUserID,
-				"user_b_id":   friendID,
-				"is_favorite": true,
-				"user_a":      map[string]any{"id": testUserID, "user_id": "me", "display_name": "Me"},
-				"user_b":      map[string]any{"id": friendID, "user_id": "friend", "display_name": "Friend"},
-			}})
-		case "/rest/v1/daily_statuses":
-			writeFakeJSON(w, http.StatusOK, []map[string]any{})
-		case "/rest/v1/memory_tagged_users":
-			if req.URL.Query().Get("tagged_user_id") == "eq."+testUserID {
-				writeFakeJSON(w, http.StatusOK, []map[string]any{{
-					"tagged_user_id": testUserID,
-					"memories":       map[string]any{"owner_user_id": friendID, "happened_at": newer},
-				}})
-				return
-			}
-			writeFakeJSON(w, http.StatusOK, []map[string]any{{
-				"tagged_user_id": friendID,
-				"memories":       map[string]any{"owner_user_id": testUserID, "happened_at": older},
-			}})
-		default:
-			writeFakeJSON(w, http.StatusOK, []map[string]any{})
-		}
-	})
-	w := httptest.NewRecorder()
-
-	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodGet, "/v1/friends", ""))
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
-	}
-	var rows []map[string]any
-	if err := json.Unmarshal(w.Body.Bytes(), &rows); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if len(rows) != 1 {
-		t.Fatalf("rows = %d body = %s", len(rows), w.Body.String())
-	}
-	friend, ok := rows[0]["user_b"].(map[string]any)
-	if !ok {
-		t.Fatalf("user_b missing: %#v", rows[0])
-	}
-	if got := friend["total_memory_count"]; got != float64(2) {
-		t.Fatalf("total_memory_count = %#v", got)
-	}
-	if got := friend["last_memory_at"]; got != newer {
-		t.Fatalf("last_memory_at = %#v", got)
-	}
-
-	ownedReq, ok := fake.lastRequest("/rest/v1/memory_tagged_users")
-	if !ok {
-		t.Fatal("memory_tagged_users request was not sent")
-	}
-	if got := ownedReq.Query.Get("select"); got != "tagged_user_id,memories!inner(owner_user_id,happened_at)" {
-		t.Fatalf("select = %q", got)
-	}
-}
-
-func TestListFriendsIgnoresMemoryStatsSupabaseError(t *testing.T) {
-	fake := newFakeSupabase(t, func(w http.ResponseWriter, req *http.Request) {
-		switch req.URL.Path {
-		case "/rest/v1/friendships":
-			writeFakeJSON(w, http.StatusOK, []map[string]any{{
-				"user_a_id": testUserID,
-				"user_b_id": otherUserID,
-				"user_a":    map[string]any{"id": testUserID, "user_id": "me", "display_name": "Me"},
-				"user_b":    map[string]any{"id": otherUserID, "user_id": "friend", "display_name": "Friend"},
-			}})
-		case "/rest/v1/daily_statuses":
-			writeFakeJSON(w, http.StatusOK, []map[string]any{})
-		case "/rest/v1/memory_tagged_users":
-			http.Error(w, `{"secret":"memory-stats-secret","message":"raw upstream detail"}`, http.StatusInternalServerError)
-		default:
-			writeFakeJSON(w, http.StatusOK, []map[string]any{})
-		}
-	})
-	w := httptest.NewRecorder()
-
-	testRouter(fake).ServeHTTP(w, authedRequest(http.MethodGet, "/v1/friends", ""))
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
-	}
-	body := w.Body.String()
-	if strings.Contains(body, "memory-stats-secret") || strings.Contains(body, "raw upstream detail") {
-		t.Fatalf("raw upstream body leaked: %s", body)
-	}
-	var rows []map[string]any
-	if err := json.Unmarshal(w.Body.Bytes(), &rows); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if len(rows) != 1 {
-		t.Fatalf("rows = %d body = %s", len(rows), body)
 	}
 }

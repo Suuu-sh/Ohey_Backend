@@ -15,17 +15,16 @@ const (
 )
 
 type fakeRepository struct {
-	calls           []string
-	friendships     []map[string]any
-	alreadyFriend   bool
-	blocked         bool
-	pendingRequest  map[string]any
-	createdRequest  map[string]any
-	updatedRequest  map[string]any
-	favoriteRow     map[string]any
-	friendshipRow   map[string]any
-	statusesDate    string
-	memoryStatsUser string
+	calls          []string
+	friendships    []map[string]any
+	alreadyFriend  bool
+	blocked        bool
+	pendingRequest map[string]any
+	createdRequest map[string]any
+	updatedRequest map[string]any
+	favoriteRow    map[string]any
+	friendshipRow  map[string]any
+	statusesDate   string
 }
 
 func (f *fakeRepository) ListFriendships(context.Context, string, string) ([]map[string]any, error) {
@@ -36,12 +35,6 @@ func (f *fakeRepository) ListFriendships(context.Context, string, string) ([]map
 func (f *fakeRepository) AttachTodayStatuses(_ context.Context, _ string, _ []map[string]any, date string) error {
 	f.calls = append(f.calls, "statuses")
 	f.statusesDate = date
-	return nil
-}
-
-func (f *fakeRepository) AttachMemoryStats(_ context.Context, _ string, currentUserID string, _ []map[string]any) error {
-	f.calls = append(f.calls, "stats")
-	f.memoryStatsUser = currentUserID
 	return nil
 }
 
@@ -104,7 +97,7 @@ func (f *fakePublisher) Publish(_ context.Context, _ string, event DomainEvent) 
 	f.events = append(f.events, event)
 }
 
-func TestListFriendsAttachesStatusAndStats(t *testing.T) {
+func TestListFriendsAttachesStatus(t *testing.T) {
 	repo := &fakeRepository{friendships: []map[string]any{{"id": "friendship"}}}
 	usecase := NewUsecase(Dependencies{Repository: repo})
 
@@ -115,11 +108,11 @@ func TestListFriendsAttachesStatusAndStats(t *testing.T) {
 	if len(rows) != 1 {
 		t.Fatalf("rows = %#v", rows)
 	}
-	if want := []string{"list", "statuses", "stats"}; !reflect.DeepEqual(repo.calls, want) {
+	if want := []string{"list", "statuses"}; !reflect.DeepEqual(repo.calls, want) {
 		t.Fatalf("calls = %v, want %v", repo.calls, want)
 	}
-	if repo.statusesDate != "2026-05-24" || repo.memoryStatsUser != testUserID {
-		t.Fatalf("date/user = %q/%q", repo.statusesDate, repo.memoryStatsUser)
+	if repo.statusesDate != "2026-05-24" {
+		t.Fatalf("date = %q", repo.statusesDate)
 	}
 }
 

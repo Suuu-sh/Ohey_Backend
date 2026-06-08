@@ -13,6 +13,10 @@ feature work:
 
 ## Local run
 
+Local backend runs are for backend-only diagnostics. Mobile dev / iOS Simulator
+verification should use the dev Render backend (`https://dev-ohey-backend.onrender.com`),
+not `localhost:8080`.
+
 ```sh
 cp .env.example .env
 # set SUPABASE_ANON_KEY from /Users/yota/Projects/Secrets/Ohey/supabase_dev-ohey.md
@@ -46,14 +50,6 @@ Authenticated requests must include:
 - `GET /v1/friend-requests/status?friend_id={id}`
 - `POST /v1/friend-requests`
 - `PATCH /v1/friend-requests/{id}`
-- `GET /v1/memories`
-- `POST /v1/memories`
-- `DELETE /v1/memories/{id}`
-- `PUT /v1/memories/{id}/like`
-- `DELETE /v1/memories/{id}/like`
-- `POST /v1/memories/{id}/report`
-- `POST /v1/memory-hides`
-- `DELETE /v1/memory-hides/{memory_id}`
 - `POST /v1/user-mutes`
 - `GET /v1/user-mutes`
 - `DELETE /v1/user-mutes/{user_id}`
@@ -84,8 +80,8 @@ dev and production before using `/v1/admin/*`:
 
 - `SUPABASE_SERVICE_ROLE_KEY`
 
-Admin access is intentionally hard-limited to the Supabase Auth user whose
-email is `yisshiki39@gmail.com`.
+Admin access is intentionally hard-limited to Supabase Auth users whose
+emails are listed in `OHEY_ADMIN_EMAILS` for the target Render/backend environment.
 
 Available endpoints:
 
@@ -94,15 +90,8 @@ Available endpoints:
 - `POST /v1/admin/users`
 - `PATCH /v1/admin/users/{id}`
 - `DELETE /v1/admin/users/{id}`
-- `GET /v1/admin/memories`
-- `GET /v1/admin/memory-reports`
-- `PATCH /v1/admin/memory-reports/{id}`
 - `GET /v1/admin/notification-outbox`
 - `POST /v1/admin/notification-outbox/process`
-- `GET /v1/admin/media/orphan-memory-photos`
-- `POST /v1/admin/memories`
-- `PATCH /v1/admin/memories/{id}`
-- `DELETE /v1/admin/memories/{id}`
 
 
 ## Push notifications

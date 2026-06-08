@@ -203,54 +203,39 @@ func (u *Usecase) NotifyInviteAccepted(ctx context.Context, authToken string, in
 	})
 }
 
-func (u *Usecase) NotifyMemoryTagged(ctx context.Context, authToken, memoryID, ownerUserID string, friendIDs []string) error {
-	if memoryID == "" || ownerUserID == "" || len(friendIDs) == 0 {
+func (u *Usecase) NotifyYuruboCreated(ctx context.Context, authToken string, yuruboRow map[string]any, groupIDs []string) error {
+	yuruboID, _ := yuruboRow["id"].(string)
+	ownerUserID, _ := yuruboRow["owner_user_id"].(string)
+	visibility, _ := yuruboRow["visibility"].(string)
+	title, _ := yuruboRow["title"].(string)
+	title = ShortText(title, 80)
+	if yuruboID == "" || ownerUserID == "" || visibility == "" || visibility == "private" {
 		return nil
 	}
-	actorName := u.actorName(ctx, authToken, ownerUserID, KindMemoryTagged)
-	seen := map[string]bool{}
+	recipientIDs, err := u.repository.VisibleYuruboRecipientIDs(ctx, authToken, ownerUserID, visibility, groupIDs)
+	if err != nil {
+		u.warn("failed to fetch yurubo notification recipients", KindYuruboCreated, err)
+		return err
+	}
+	actorName := u.actorName(ctx, authToken, ownerUserID, KindYuruboCreated)
+	message := actorName + "さんがゆるぼしました。"
+	if title != "" {
+		message = actorName + "さんが「" + title + "」でゆるぼしました。"
+	}
 	var firstErr error
-	for _, rawID := range friendIDs {
-		friendID := strings.TrimSpace(rawID)
-		if friendID == "" || friendID == ownerUserID || seen[friendID] {
-			continue
-		}
-		seen[friendID] = true
+	for _, recipientID := range recipientIDs {
 		if err := u.tryCreateAndPush(ctx, authToken, Notification{
-			RecipientUserID: friendID,
+			RecipientUserID: recipientID,
 			ActorUserID:     ownerUserID,
-			MemoryID:        memoryID,
-			Kind:            KindMemoryTagged,
-			Title:           "思い出に追加されました",
-			Message:         actorName + "さんがあなたを一緒に過ごしたフレンズに追加しました。",
+			Kind:            KindYuruboCreated,
+			Title:           "フレンズがゆるぼしました",
+			Message:         message,
+			SystemKey:       "yurubo_created:" + yuruboID,
 		}); err != nil && firstErr == nil {
 			firstErr = err
 		}
 	}
 	return firstErr
-}
-
-func (u *Usecase) NotifyMemoryLiked(ctx context.Context, authToken, memoryID, actorUserID string) error {
-	if memoryID == "" || actorUserID == "" {
-		return nil
-	}
-	recipientUserID, err := u.repository.MemoryOwnerUserID(ctx, authToken, memoryID)
-	if err != nil {
-		u.warn("failed to fetch memory for like notification", KindMemoryLike, err)
-		return err
-	}
-	if recipientUserID == "" || recipientUserID == actorUserID {
-		return nil
-	}
-	actorName := u.actorName(ctx, authToken, actorUserID, KindMemoryLike)
-	return u.tryCreateAndPush(ctx, authToken, Notification{
-		RecipientUserID: recipientUserID,
-		ActorUserID:     actorUserID,
-		MemoryID:        memoryID,
-		Kind:            KindMemoryLike,
-		Title:           "思い出にいいねされました",
-		Message:         actorName + "さんがあなたの思い出にいいねしました。",
-	})
 }
 
 func (u *Usecase) CreateTodayReservationReminders(ctx context.Context, authToken, userID, date string) error {

@@ -9,10 +9,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yota/ohey/backend/internal/contracts"
 	"github.com/yota/ohey/backend/internal/supabase"
 )
 
-const notificationSelectColumns = "id,kind,title,message,created_at,read_at,actor_user_id,memory_id,friend_request_id,invite_id,notification_date,system_key,actor:profiles!notifications_actor_user_id_fkey(id,user_id,display_name,avatar_url),friend_request:friend_requests!notifications_friend_request_id_fkey(id,status),invite:invites!notifications_invite_id_fkey(id,status,activity_label)"
+const notificationSelectColumns = "id,kind,title,message,created_at,read_at,actor_user_id,friend_request_id,invite_id,notification_date,system_key,actor:profiles!notifications_actor_user_id_fkey(id,user_id,display_name,avatar_url),friend_request:friend_requests!notifications_friend_request_id_fkey(id,status),invite:invites!notifications_invite_id_fkey(id,status,activity_label)"
 
 type SupabaseRepository struct {
 	client         *supabase.Client
@@ -89,27 +90,11 @@ func (r *SupabaseRepository) DisplayName(ctx context.Context, authToken, userID 
 	return displayNameFromProfile(rows[0]), nil
 }
 
-func (r *SupabaseRepository) MemoryOwnerUserID(ctx context.Context, authToken, memoryID string) (string, error) {
-	q := url.Values{}
-	q.Set("select", "id,owner_user_id")
-	q.Set("id", "eq."+memoryID)
-	q.Set("limit", "1")
-	var memories []map[string]any
-	if err := r.client.Get(ctx, authToken, "memories", q, &memories); err != nil {
-		return "", err
-	}
-	if len(memories) == 0 {
-		return "", nil
-	}
-	ownerUserID, _ := memories[0]["owner_user_id"].(string)
-	return ownerUserID, nil
-}
-
 func (r *SupabaseRepository) TodayAcceptedInvites(ctx context.Context, authToken, userID, date string) ([]Invite, error) {
 	q := url.Values{}
 	q.Set("select", "id,inviter_user_id,invitee_user_id,scheduled_date,activity_label,status")
 	q.Set("scheduled_date", "eq."+date)
-	q.Set("status", "eq.accepted")
+	q.Set("status", supabase.PostgRESTEq(contracts.StatusAccepted))
 	q.Set("or", "(inviter_user_id.eq."+userID+",invitee_user_id.eq."+userID+")")
 	var rows []map[string]any
 	if err := r.client.Get(ctx, authToken, "invites", q, &rows); err != nil {
@@ -139,6 +124,56 @@ func (r *SupabaseRepository) AllProfileIDs(ctx context.Context) ([]string, error
 		id, _ := profile["id"].(string)
 		if cleanID, err := CleanUUID(id, "recipient user id"); err == nil {
 			ids = append(ids, cleanID)
+		}
+	}
+	return ids, nil
+}
+
+func (r *SupabaseRepository) VisibleYuruboRecipientIDs(ctx context.Context, authToken, ownerUserID, visibility string, groupIDs []string) ([]string, error) {
+	seen := map[string]bool{}
+	ids := []string{}
+	add := func(id string) {
+		id = strings.TrimSpace(id)
+		if id == "" || id == ownerUserID || seen[id] {
+			return
+		}
+		seen[id] = true
+		ids = append(ids, id)
+	}
+	client := r.client
+	token := authToken
+	if r.adminClient != nil && r.serviceRoleKey != "" {
+		client = r.adminClient
+		token = r.serviceRoleKey
+	}
+	if visibility == contracts.VisibilityGroup && len(groupIDs) > 0 {
+		q := url.Values{}
+		q.Set("select", "friend_user_id")
+		q.Set("group_id", "in.("+strings.Join(groupIDs, ",")+")")
+		var rows []map[string]any
+		if err := client.Get(ctx, token, "friend_group_members", q, &rows); err != nil {
+			return nil, err
+		}
+		for _, row := range rows {
+			id, _ := row["friend_user_id"].(string)
+			add(id)
+		}
+		return ids, nil
+	}
+	q := url.Values{}
+	q.Set("select", "user_a_id,user_b_id")
+	q.Set("or", "(user_a_id.eq."+ownerUserID+",user_b_id.eq."+ownerUserID+")")
+	var rows []map[string]any
+	if err := client.Get(ctx, token, "friendships", q, &rows); err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		userA, _ := row["user_a_id"].(string)
+		userB, _ := row["user_b_id"].(string)
+		if userA == ownerUserID {
+			add(userB)
+		} else if userB == ownerUserID {
+			add(userA)
 		}
 	}
 	return ids, nil

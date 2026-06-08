@@ -2,114 +2,103 @@ package httpapi
 
 import (
 	"net/http"
-	"net/url"
-	"strconv"
-	"strings"
+
+	"github.com/yota/ohey/backend/internal/features/wishitems"
 )
 
-const wishItemSelectColumns = "id,owner_user_id,title,note,category,place_text,place_url,visibility,status,created_at,updated_at"
-
-type wishItemCreateRequest struct {
-	Title      string `json:"title"`
-	Note       string `json:"note"`
-	Category   string `json:"category"`
-	PlaceText  string `json:"place_text"`
-	PlaceURL   string `json:"place_url"`
-	Visibility string `json:"visibility"`
+func (r *router) wishItemsUsecase() *wishitems.Usecase {
+	return wishitems.NewUsecase(wishitems.Dependencies{
+		Repository: wishitems.NewSupabaseRepository(r.deps.Supabase),
+	})
 }
 
 func (r *router) listWishItems(w http.ResponseWriter, req *http.Request, authToken string) {
-	userID := req.Header.Get("X-Ohey-User-ID")
-	limit := 50
-	if raw := req.URL.Query().Get("limit"); raw != "" {
-		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 && parsed <= 100 {
-			limit = parsed
-		}
-	}
-	q := url.Values{}
-	q.Set("select", wishItemSelectColumns)
-	q.Set("owner_user_id", "eq."+userID)
-	q.Set("status", "eq.active")
-	q.Set("order", "created_at.desc")
-	q.Set("limit", strconv.Itoa(limit))
-	var rows []map[string]any
-	if err := r.deps.Supabase.Get(req.Context(), authToken, "wish_items", q, &rows); err != nil {
-		writeError(w, http.StatusBadGateway, sanitizeSupabaseError(err))
+	rows, err := r.wishItemsUsecase().ListWishItems(req.Context(), wishitems.ListInput{
+		AuthToken: authToken,
+		UserID:    req.Header.Get("X-Ohey-User-ID"),
+		Limit:     req.URL.Query().Get("limit"),
+	})
+	if err != nil {
+		writeWishItemsError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, rows)
 }
 
 func (r *router) listProfileWishItems(w http.ResponseWriter, req *http.Request, authToken string) {
-	profileID, msg := cleanUUID(req.PathValue("id"), "profile id")
-	if msg != "" {
-		writeError(w, http.StatusBadRequest, msg)
-		return
-	}
-	limit := 30
-	if raw := req.URL.Query().Get("limit"); raw != "" {
-		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 && parsed <= 100 {
-			limit = parsed
-		}
-	}
-	q := url.Values{}
-	q.Set("select", wishItemSelectColumns)
-	q.Set("owner_user_id", "eq."+profileID)
-	q.Set("visibility", "eq.friends")
-	q.Set("status", "eq.active")
-	q.Set("order", "created_at.desc")
-	q.Set("limit", strconv.Itoa(limit))
-	var rows []map[string]any
-	if err := r.deps.Supabase.Get(req.Context(), authToken, "wish_items", q, &rows); err != nil {
-		writeError(w, http.StatusBadGateway, sanitizeSupabaseError(err))
+	rows, err := r.wishItemsUsecase().ListProfileWishItems(req.Context(), wishitems.ProfileListInput{
+		AuthToken: authToken,
+		ProfileID: req.PathValue("id"),
+		Limit:     req.URL.Query().Get("limit"),
+	})
+	if err != nil {
+		writeWishItemsError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, rows)
 }
 
 func (r *router) createWishItem(w http.ResponseWriter, req *http.Request, authToken string) {
-	var body wishItemCreateRequest
+	var body wishitems.CreateBody
 	if !decodeJSONBody(w, req, &body) {
 		return
 	}
-	title := strings.TrimSpace(body.Title)
-	if title == "" {
-		writeError(w, http.StatusBadRequest, "title is required")
+	row, err := r.wishItemsUsecase().CreateWishItem(req.Context(), wishitems.CreateInput{
+		AuthToken:   authToken,
+		OwnerUserID: req.Header.Get("X-Ohey-User-ID"),
+		Body:        body,
+	})
+	if err != nil {
+		writeWishItemsError(w, err)
 		return
 	}
-	if len([]rune(title)) > 80 {
-		writeError(w, http.StatusBadRequest, "title is too long")
+	writeJSON(w, http.StatusCreated, row)
+}
+
+func (r *router) updateWishItem(w http.ResponseWriter, req *http.Request, authToken string) {
+	var body wishitems.UpdateBody
+	if !decodeJSONBody(w, req, &body) {
 		return
 	}
-	category := strings.TrimSpace(body.Category)
-	if category == "" {
-		category = "other"
-	}
-	visibility := strings.TrimSpace(body.Visibility)
-	if visibility == "" {
-		visibility = "private"
-	}
-	if visibility != "private" && visibility != "friends" {
-		writeError(w, http.StatusBadRequest, "invalid visibility")
+	row, err := r.wishItemsUsecase().UpdateWishItem(req.Context(), wishitems.UpdateInput{
+		AuthToken:   authToken,
+		WishItemID:  req.PathValue("id"),
+		OwnerUserID: req.Header.Get("X-Ohey-User-ID"),
+		Body:        body,
+	})
+	if err != nil {
+		writeWishItemsError(w, err)
 		return
 	}
-	payload := map[string]any{
-		"owner_user_id": req.Header.Get("X-Ohey-User-ID"),
-		"title":         title,
-		"note":          strings.TrimSpace(body.Note),
-		"category":      category,
-		"place_text":    strings.TrimSpace(body.PlaceText),
-		"place_url":     strings.TrimSpace(body.PlaceURL),
-		"visibility":    visibility,
-	}
-	var rows []map[string]any
-	if err := r.deps.Supabase.Post(req.Context(), authToken, "wish_items", nil, payload, &rows); err != nil {
-		writeError(w, http.StatusBadGateway, sanitizeSupabaseError(err))
+	writeJSON(w, http.StatusOK, row)
+}
+
+func (r *router) deleteWishItem(w http.ResponseWriter, req *http.Request, authToken string) {
+	row, err := r.wishItemsUsecase().DeleteWishItem(req.Context(), wishitems.DeleteInput{
+		AuthToken:   authToken,
+		WishItemID:  req.PathValue("id"),
+		OwnerUserID: req.Header.Get("X-Ohey-User-ID"),
+	})
+	if err != nil {
+		writeWishItemsError(w, err)
 		return
 	}
-	if len(rows) == 0 {
-		writeError(w, http.StatusBadGateway, "wish item insert returned no rows")
+	writeJSON(w, http.StatusOK, row)
+}
+
+func writeWishItemsError(w http.ResponseWriter, err error) {
+	if kind, ok := wishitems.ErrorKindOf(err); ok {
+		switch kind {
+		case wishitems.ErrorKindInvalidInput:
+			writeError(w, http.StatusBadRequest, err.Error())
+		case wishitems.ErrorKindNotFound:
+			writeError(w, http.StatusNotFound, err.Error())
+		case wishitems.ErrorKindUpstream:
+			writeError(w, http.StatusBadGateway, err.Error())
+		default:
+			writeError(w, http.StatusBadRequest, err.Error())
+		}
 		return
 	}
-	writeJSON(w, http.StatusCreated, rows[0])
+	writeError(w, http.StatusBadGateway, "upstream database error")
 }

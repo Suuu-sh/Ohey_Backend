@@ -30,11 +30,6 @@ type actionRateLimiter struct {
 var timeNow = time.Now
 
 var (
-	rateLimitReportMemory = rateLimitPolicy{
-		Action: "memory_report",
-		Limit:  10,
-		Window: time.Hour,
-	}
 	rateLimitReportUser = rateLimitPolicy{
 		Action: "user_report",
 		Limit:  10,

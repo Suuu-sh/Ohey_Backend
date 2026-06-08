@@ -4,6 +4,8 @@ import (
 	"errors"
 	"regexp"
 	"strings"
+
+	"github.com/yota/ohey/backend/internal/contracts"
 )
 
 type ErrorKind string
@@ -59,18 +61,18 @@ type UserReport struct {
 	Reason         string
 }
 
-type HiddenMemory struct {
-	UserID   string
-	MemoryID string
-}
-
 func CleanReportReason(value string) (string, error) {
 	reason := strings.ToLower(strings.TrimSpace(value))
 	if reason == "" {
-		return "other", nil
+		return contracts.ReportReasonOther, nil
 	}
 	switch reason {
-	case "spam", "harassment", "inappropriate", "violence", "minor_safety", "other":
+	case contracts.ReportReasonSpam,
+		contracts.ReportReasonHarassment,
+		contracts.ReportReasonInappropriate,
+		contracts.ReportReasonViolence,
+		contracts.ReportReasonMinorSafety,
+		contracts.ReportReasonOther:
 		return reason, nil
 	default:
 		return "", UserError{Kind: ErrorKindInvalidInput, Message: "report reason is invalid"}

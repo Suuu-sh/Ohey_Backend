@@ -14,7 +14,6 @@ type SignupRequest struct {
 	Password    string         `json:"password"`
 	UserID      string         `json:"user_id"`
 	DisplayName string         `json:"display_name"`
-	Gender      string         `json:"gender"`
 	AvatarURL   string         `json:"avatar_url"`
 	Avatar      map[string]any `json:"avatar,omitempty"`
 }
@@ -36,13 +35,12 @@ func (r *router) signupWithPassword(w http.ResponseWriter, req *http.Request) {
 	password := input.Password
 	userID := strings.TrimSpace(input.UserID)
 	displayName := strings.TrimSpace(input.DisplayName)
-	gender := strings.TrimSpace(input.Gender)
 	avatarURL := strings.TrimSpace(input.AvatarURL)
 	if email == "" || len(password) < 6 {
 		writeError(w, http.StatusBadRequest, "メールアドレスと6文字以上のパスワードを入力してください。")
 		return
 	}
-	if userID == "" || displayName == "" || gender == "" {
+	if userID == "" || displayName == "" {
 		writeError(w, http.StatusBadRequest, "profile fields are required")
 		return
 	}
@@ -54,7 +52,6 @@ func (r *router) signupWithPassword(w http.ResponseWriter, req *http.Request) {
 		"user_metadata": map[string]any{
 			"user_id":       userID,
 			"display_name":  displayName,
-			"gender":        gender,
 			"character_key": "avatar",
 			"avatar_url":    avatarURL,
 		},

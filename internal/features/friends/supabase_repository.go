@@ -9,11 +9,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yota/ohey/backend/internal/contracts"
 	"github.com/yota/ohey/backend/internal/supabase"
 )
 
-const friendshipSelectColumns = "user_a_id,user_b_id,is_favorite,user_a:profiles!friendships_user_a_id_fkey(id,user_id,display_name,gender,character_key,avatar_url,is_plus),user_b:profiles!friendships_user_b_id_fkey(id,user_id,display_name,gender,character_key,avatar_url,is_plus)"
-const friendRequestSelectColumns = "id,from_user_id,to_user_id,status,created_at,responded_at,from_user:profiles!friend_requests_from_user_id_fkey(id,user_id,display_name,gender,character_key,avatar_url,is_plus),to_user:profiles!friend_requests_to_user_id_fkey(id,user_id,display_name,gender,character_key,avatar_url,is_plus)"
+const friendshipSelectColumns = "user_a_id,user_b_id,is_favorite,user_a:profiles!friendships_user_a_id_fkey(id,user_id,display_name,character_key,avatar_url,is_plus),user_b:profiles!friendships_user_b_id_fkey(id,user_id,display_name,character_key,avatar_url,is_plus)"
+const friendRequestSelectColumns = "id,from_user_id,to_user_id,status,created_at,responded_at,from_user:profiles!friend_requests_from_user_id_fkey(id,user_id,display_name,character_key,avatar_url,is_plus),to_user:profiles!friend_requests_to_user_id_fkey(id,user_id,display_name,character_key,avatar_url,is_plus)"
 
 type SupabaseRepository struct {
 	client         *supabase.Client
@@ -87,105 +88,6 @@ func (r *SupabaseRepository) AttachTodayStatuses(ctx context.Context, authToken 
 	return nil
 }
 
-func (r *SupabaseRepository) AttachMemoryStats(ctx context.Context, authToken, currentUserID string, rows []map[string]any) error {
-	profiles := map[string]map[string]any{}
-	for _, row := range rows {
-		for _, key := range []string{"user_a", "user_b"} {
-			profile, ok := row[key].(map[string]any)
-			if !ok {
-				continue
-			}
-			id, _ := profile["id"].(string)
-			if id != "" && id != currentUserID {
-				profiles[id] = profile
-			}
-		}
-	}
-	if len(profiles) == 0 {
-		return nil
-	}
-	friendIDs := make([]string, 0, len(profiles))
-	for id := range profiles {
-		friendIDs = append(friendIDs, id)
-	}
-	sort.Strings(friendIDs)
-	stats := make(map[string]*MemoryStats, len(friendIDs))
-	for _, id := range friendIDs {
-		stats[id] = &MemoryStats{}
-	}
-	if err := r.attachOwnedMemoryStats(ctx, authToken, currentUserID, friendIDs, stats); err != nil {
-		return err
-	}
-	if err := r.attachTaggedMemoryStats(ctx, authToken, currentUserID, friendIDs, stats); err != nil {
-		return err
-	}
-	for id, profile := range profiles {
-		stat := stats[id]
-		if stat == nil {
-			profile["total_memory_count"] = 0
-			continue
-		}
-		profile["total_memory_count"] = stat.Count
-		if !stat.LastMemoryAt.IsZero() {
-			profile["last_memory_at"] = stat.LastMemoryAt.Format(time.RFC3339)
-		}
-	}
-	return nil
-}
-
-func (r *SupabaseRepository) attachOwnedMemoryStats(ctx context.Context, authToken, currentUserID string, friendIDs []string, stats map[string]*MemoryStats) error {
-	q := url.Values{}
-	q.Set("select", "tagged_user_id,memories!inner(owner_user_id,happened_at)")
-	q.Set("tagged_user_id", "in.("+strings.Join(friendIDs, ",")+")")
-	q.Set("memories.owner_user_id", "eq."+currentUserID)
-	var rows []map[string]any
-	if err := r.client.Get(ctx, authToken, "memory_tagged_users", q, &rows); err != nil {
-		return err
-	}
-	for _, row := range rows {
-		friendID, _ := row["tagged_user_id"].(string)
-		if stat := stats[friendID]; stat != nil {
-			stat.Add(embeddedMemoryTime(row))
-		}
-	}
-	return nil
-}
-
-func (r *SupabaseRepository) attachTaggedMemoryStats(ctx context.Context, authToken, currentUserID string, friendIDs []string, stats map[string]*MemoryStats) error {
-	q := url.Values{}
-	q.Set("select", "tagged_user_id,memories!inner(owner_user_id,happened_at)")
-	q.Set("tagged_user_id", "eq."+currentUserID)
-	q.Set("memories.owner_user_id", "in.("+strings.Join(friendIDs, ",")+")")
-	var rows []map[string]any
-	if err := r.client.Get(ctx, authToken, "memory_tagged_users", q, &rows); err != nil {
-		return err
-	}
-	for _, row := range rows {
-		log, ok := row["memories"].(map[string]any)
-		if !ok {
-			continue
-		}
-		friendID, _ := log["owner_user_id"].(string)
-		if stat := stats[friendID]; stat != nil {
-			stat.Add(embeddedMemoryTime(row))
-		}
-	}
-	return nil
-}
-
-func embeddedMemoryTime(row map[string]any) time.Time {
-	log, ok := row["memories"].(map[string]any)
-	if !ok {
-		return time.Time{}
-	}
-	value, _ := log["happened_at"].(string)
-	parsed, err := time.Parse(time.RFC3339, value)
-	if err == nil {
-		return parsed
-	}
-	return time.Time{}
-}
-
 func (r *SupabaseRepository) UpdateFriendFavorite(ctx context.Context, authToken, userID, friendID string, isFavorite bool) (map[string]any, error) {
 	q := url.Values{}
 	q.Set("or", "(and(user_a_id.eq."+userID+",user_b_id.eq."+friendID+"),and(user_a_id.eq."+friendID+",user_b_id.eq."+userID+"))")
@@ -257,7 +159,7 @@ func (r *SupabaseRepository) BlockExistsBetweenUsers(ctx context.Context, authTo
 func (r *SupabaseRepository) ListPendingFriendRequests(ctx context.Context, authToken, userID string, direction RequestDirection) ([]map[string]any, error) {
 	q := url.Values{}
 	q.Set("select", friendRequestSelectColumns)
-	q.Set("status", "eq.pending")
+	q.Set("status", supabase.PostgRESTEq(contracts.StatusPending))
 	switch direction {
 	case RequestDirectionIncoming:
 		q.Set("to_user_id", "eq."+userID)
@@ -277,7 +179,7 @@ func (r *SupabaseRepository) ListPendingFriendRequests(ctx context.Context, auth
 func (r *SupabaseRepository) PendingFriendRequestBetween(ctx context.Context, authToken, userID, friendID string) (map[string]any, error) {
 	q := url.Values{}
 	q.Set("select", "id,from_user_id,to_user_id")
-	q.Set("status", "eq.pending")
+	q.Set("status", supabase.PostgRESTEq(contracts.StatusPending))
 	q.Set("or", "(and(from_user_id.eq."+userID+",to_user_id.eq."+friendID+"),and(from_user_id.eq."+friendID+",to_user_id.eq."+userID+"))")
 	q.Set("limit", "1")
 	var rows []map[string]any
@@ -288,7 +190,7 @@ func (r *SupabaseRepository) PendingFriendRequestBetween(ctx context.Context, au
 }
 
 func (r *SupabaseRepository) CreateFriendRequest(ctx context.Context, authToken, fromUserID, toUserID string) (map[string]any, error) {
-	payload := map[string]any{"from_user_id": fromUserID, "to_user_id": toUserID, "status": "pending"}
+	payload := map[string]any{"from_user_id": fromUserID, "to_user_id": toUserID, "status": contracts.StatusPending}
 	var rows []map[string]any
 	if err := r.client.Post(ctx, authToken, "friend_requests", nil, payload, &rows); err != nil {
 		return nil, err
@@ -302,7 +204,7 @@ func (r *SupabaseRepository) CreateFriendRequest(ctx context.Context, authToken,
 func (r *SupabaseRepository) UpdatePendingFriendRequestStatus(ctx context.Context, authToken, requestID, userID string, status RequestStatus, respondedAt time.Time) (map[string]any, error) {
 	q := url.Values{}
 	q.Set("id", "eq."+requestID)
-	q.Set("status", "eq.pending")
+	q.Set("status", supabase.PostgRESTEq(contracts.StatusPending))
 	if status == RequestStatusCancelled {
 		q.Set("from_user_id", "eq."+userID)
 	} else {

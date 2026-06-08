@@ -5,6 +5,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/yota/ohey/backend/internal/contracts"
 )
 
 type PushTokenRequest struct {
@@ -28,9 +30,9 @@ func (r *router) registerPushToken(w http.ResponseWriter, req *http.Request, aut
 		return
 	}
 	if platform == "" {
-		platform = "ios"
+		platform = contracts.PushPlatformIOS
 	}
-	if platform != "ios" && platform != "android" {
+	if platform != contracts.PushPlatformIOS && platform != contracts.PushPlatformAndroid {
 		writeError(w, http.StatusBadRequest, "platform must be ios or android")
 		return
 	}
