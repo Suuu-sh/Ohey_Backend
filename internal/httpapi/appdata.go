@@ -583,8 +583,16 @@ func writeFriendsError(w http.ResponseWriter, err error) {
 }
 
 func (r *router) userSafetyUsecase() *usersafety.Usecase {
+	var repository usersafety.Repository = usersafety.NewSupabaseRepository(r.deps.Supabase, r.deps.AdminSupabase, r.deps.Config.SupabaseServiceRoleKey)
+	if r.deps.Config.DataStore == "postgres" || r.deps.Config.DataStore == "neon" {
+		if r.deps.Postgres == nil {
+			repository = usersafety.NewPostgresRepository(nil)
+		} else {
+			repository = usersafety.NewPostgresRepository(r.deps.Postgres.Pool())
+		}
+	}
 	return usersafety.NewUsecase(usersafety.Dependencies{
-		Repository: usersafety.NewSupabaseRepository(r.deps.Supabase, r.deps.AdminSupabase, r.deps.Config.SupabaseServiceRoleKey),
+		Repository: repository,
 	})
 }
 
@@ -604,8 +612,16 @@ func writeUserSafetyError(w http.ResponseWriter, err error) {
 }
 
 func (r *router) friendGroupsUsecase() *friendgroups.Usecase {
+	var repository friendgroups.Repository = friendgroups.NewSupabaseRepository(r.deps.Supabase)
+	if r.deps.Config.DataStore == "postgres" || r.deps.Config.DataStore == "neon" {
+		if r.deps.Postgres == nil {
+			repository = friendgroups.NewPostgresRepository(nil)
+		} else {
+			repository = friendgroups.NewPostgresRepository(r.deps.Postgres.Pool())
+		}
+	}
 	return friendgroups.NewUsecase(friendgroups.Dependencies{
-		Repository: friendgroups.NewSupabaseRepository(r.deps.Supabase),
+		Repository: repository,
 	})
 }
 
