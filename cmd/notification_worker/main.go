@@ -12,6 +12,7 @@ import (
 
 	"github.com/yota/ohey/backend/internal/config"
 	"github.com/yota/ohey/backend/internal/httpapi"
+	"github.com/yota/ohey/backend/internal/postgres"
 	"github.com/yota/ohey/backend/internal/supabase"
 )
 
@@ -22,7 +23,8 @@ func main() {
 		logger.Error("configuration error", "error", err)
 		os.Exit(1)
 	}
-	if strings.TrimSpace(cfg.SupabaseServiceRoleKey) == "" {
+	usesPostgresStore := cfg.DataStore == "postgres" || cfg.DataStore == "neon"
+	if !usesPostgresStore && strings.TrimSpace(cfg.SupabaseServiceRoleKey) == "" {
 		logger.Error("SUPABASE_SERVICE_ROLE_KEY is required for notification worker")
 		os.Exit(1)
 	}
@@ -38,8 +40,24 @@ func main() {
 	}
 
 	httpClient := &http.Client{Timeout: 30 * time.Second}
-	supabaseClient := supabase.NewClient(cfg.SupabaseURL, cfg.SupabaseAnonKey, httpClient)
-	adminSupabaseClient := supabase.NewClient(cfg.SupabaseURL, cfg.SupabaseServiceRoleKey, httpClient)
+	var supabaseClient *supabase.Client
+	var adminSupabaseClient *supabase.Client
+	if !usesPostgresStore {
+		supabaseClient = supabase.NewClient(cfg.SupabaseURL, cfg.SupabaseAnonKey, httpClient)
+		adminSupabaseClient = supabase.NewClient(cfg.SupabaseURL, cfg.SupabaseServiceRoleKey, httpClient)
+	}
+	var postgresDB *postgres.DB
+	if usesPostgresStore {
+		postgresDB, err = postgres.Open(context.Background(), postgres.Config{
+			DatabaseURL: cfg.DatabaseURL,
+			MaxConns:    cfg.DatabaseMaxConns,
+		})
+		if err != nil {
+			logger.Error("postgres configuration error", "error", err)
+			os.Exit(1)
+		}
+		defer postgresDB.Close()
+	}
 	fcm, err := httpapi.NewFCMSender(cfg.FCMServiceAccountJSON, httpClient)
 	if err != nil {
 		logger.Error("fcm configuration error", "error", err)
@@ -51,6 +69,7 @@ func main() {
 		Logger:        logger,
 		Supabase:      supabaseClient,
 		AdminSupabase: adminSupabaseClient,
+		Postgres:      postgresDB,
 		FCM:           fcm,
 	}, limit)
 	if err != nil {
