@@ -119,6 +119,33 @@ func (r *router) adminCreateUser(w http.ResponseWriter, req *http.Request, _ Aut
 	}
 	input.Status = string(cleanStatus)
 
+	if r.usesPostgresStore() {
+		if r.deps.Postgres == nil || r.deps.ClerkAPI == nil || !r.deps.ClerkAPI.configured() {
+			writeError(w, http.StatusServiceUnavailable, "admin backend is not configured")
+			return
+		}
+		created, err := r.deps.ClerkAPI.CreateUser(req.Context(), input.Email, input.Password, input.UserID, input.DisplayName, input.AvatarURL)
+		if err != nil {
+			writeError(w, http.StatusBadGateway, "auth provider error")
+			return
+		}
+		clerkUserID := stringValue(created, "id")
+		row, err := scanAdminProfile(r.deps.Postgres.Pool().QueryRow(req.Context(), `insert into profiles (clerk_user_id,user_id,display_name,character_key,avatar_url,is_plus,updated_at) values ($1,$2,$3,'avatar',$4,$5,now()) returning id::text,user_id,display_name,character_key,avatar_url,is_plus,created_at,updated_at`, clerkUserID, input.UserID, input.DisplayName, input.AvatarURL, input.IsPlus))
+		if err != nil {
+			_ = r.deps.ClerkAPI.DeleteUser(req.Context(), clerkUserID)
+			writeError(w, http.StatusBadGateway, "database error")
+			return
+		}
+		if err := r.upsertAdminDailyStatus(req.Context(), stringValue(row, "id"), statusDate, input.Status); err != nil {
+			_ = r.deps.ClerkAPI.DeleteUser(req.Context(), clerkUserID)
+			writeError(w, http.StatusBadGateway, "database error")
+			return
+		}
+		row["status"] = input.Status
+		writeJSON(w, http.StatusCreated, row)
+		return
+	}
+
 	authPayload := map[string]any{
 		"email":         input.Email,
 		"password":      input.Password,
@@ -252,6 +279,50 @@ func (r *router) adminUpdateUser(w http.ResponseWriter, req *http.Request, _ Aut
 		authPayload["user_metadata"] = userMeta
 	}
 
+	if r.usesPostgresStore() {
+		if input.Email != nil {
+			writeError(w, http.StatusBadRequest, "email changes are not supported in Clerk admin yet")
+			return
+		}
+		if r.deps.Postgres == nil {
+			writeError(w, http.StatusServiceUnavailable, "admin backend is not configured")
+			return
+		}
+		clerkUserID, err := r.postgresClerkUserIDForProfile(req.Context(), targetID)
+		if err != nil {
+			writeError(w, http.StatusBadGateway, "database error")
+			return
+		}
+		if len(authPayload) > 0 {
+			if r.deps.ClerkAPI == nil || !r.deps.ClerkAPI.configured() {
+				writeError(w, http.StatusServiceUnavailable, "admin backend is not configured")
+				return
+			}
+			clerkPayload := map[string]any{}
+			if password, ok := authPayload["password"]; ok {
+				clerkPayload["password"] = password
+			}
+			if len(userMeta) > 0 {
+				clerkPayload["public_metadata"] = userMeta
+			}
+			if err := r.deps.ClerkAPI.UpdateUser(req.Context(), clerkUserID, clerkPayload); err != nil {
+				writeError(w, http.StatusBadGateway, "auth provider error")
+				return
+			}
+		}
+		if len(profilePayload) > 0 {
+			row, err := r.patchPostgresAdminProfile(req.Context(), targetID, profilePayload)
+			if err != nil {
+				writeError(w, http.StatusBadGateway, "database error")
+				return
+			}
+			writeJSON(w, http.StatusOK, []map[string]any{row})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"id": targetID})
+		return
+	}
+
 	if len(authPayload) > 0 {
 		var ignored map[string]any
 		if err := r.deps.AdminSupabase.AdminUpdateUser(req.Context(), targetID, authPayload, &ignored); err != nil {
@@ -283,6 +354,26 @@ func (r *router) adminDeleteUser(w http.ResponseWriter, req *http.Request, admin
 	}
 	if targetID == adminUser.ID {
 		writeError(w, http.StatusBadRequest, "cannot delete the signed-in admin user")
+		return
+	}
+	if r.usesPostgresStore() {
+		if r.deps.Postgres == nil {
+			writeError(w, http.StatusServiceUnavailable, "admin backend is not configured")
+			return
+		}
+		clerkUserID, err := r.postgresClerkUserIDForProfile(req.Context(), targetID)
+		if err != nil {
+			writeError(w, http.StatusBadGateway, "database error")
+			return
+		}
+		if _, err := r.deps.Postgres.Pool().Exec(req.Context(), `delete from profiles where id=$1`, targetID); err != nil {
+			writeError(w, http.StatusBadGateway, "database error")
+			return
+		}
+		if clerkUserID != "" && r.deps.ClerkAPI != nil && r.deps.ClerkAPI.configured() {
+			_ = r.deps.ClerkAPI.DeleteUser(req.Context(), clerkUserID)
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"id": targetID})
 		return
 	}
 	if err := r.deps.AdminSupabase.AdminDeleteUser(req.Context(), targetID); err != nil {
@@ -581,6 +672,70 @@ func (r *router) admin(next func(http.ResponseWriter, *http.Request, AuthUser)) 
 		}
 		next(w, req, authUser)
 	}
+}
+
+type adminProfileRow interface {
+	Scan(dest ...any) error
+}
+
+func scanAdminProfile(row adminProfileRow) (map[string]any, error) {
+	var id, userID, displayName, characterKey string
+	var avatarURL *string
+	var isPlus bool
+	var createdAt, updatedAt any
+	if err := row.Scan(&id, &userID, &displayName, &characterKey, &avatarURL, &isPlus, &createdAt, &updatedAt); err != nil {
+		return nil, err
+	}
+	out := map[string]any{"id": id, "user_id": userID, "display_name": displayName, "character_key": characterKey, "avatar_url": "", "is_plus": isPlus, "created_at": createdAt, "updated_at": updatedAt}
+	if avatarURL != nil {
+		out["avatar_url"] = *avatarURL
+	}
+	return out, nil
+}
+
+func (r *router) postgresClerkUserIDForProfile(ctx context.Context, profileID string) (string, error) {
+	if r.deps.Postgres == nil {
+		return "", errors.New("postgres pool is not configured")
+	}
+	var clerkUserID *string
+	if err := r.deps.Postgres.Pool().QueryRow(ctx, `select clerk_user_id from profiles where id=$1`, profileID).Scan(&clerkUserID); err != nil {
+		return "", err
+	}
+	if clerkUserID == nil {
+		return "", nil
+	}
+	return *clerkUserID, nil
+}
+
+func (r *router) patchPostgresAdminProfile(ctx context.Context, profileID string, payload map[string]any) (map[string]any, error) {
+	if r.deps.Postgres == nil {
+		return nil, errors.New("postgres pool is not configured")
+	}
+	current, err := scanAdminProfile(r.deps.Postgres.Pool().QueryRow(ctx, `select id::text,user_id,display_name,character_key,avatar_url,is_plus,created_at,updated_at from profiles where id=$1`, profileID))
+	if err != nil {
+		return nil, err
+	}
+	userID := stringValue(current, "user_id")
+	displayName := stringValue(current, "display_name")
+	avatarURL := stringValue(current, "avatar_url")
+	characterKey := stringValue(current, "character_key")
+	isPlus, _ := current["is_plus"].(bool)
+	if v, ok := payload["user_id"].(string); ok {
+		userID = v
+	}
+	if v, ok := payload["display_name"].(string); ok {
+		displayName = v
+	}
+	if v, ok := payload["avatar_url"].(string); ok {
+		avatarURL = v
+	}
+	if v, ok := payload["character_key"].(string); ok {
+		characterKey = v
+	}
+	if v, ok := payload["is_plus"].(bool); ok {
+		isPlus = v
+	}
+	return scanAdminProfile(r.deps.Postgres.Pool().QueryRow(ctx, `update profiles set user_id=$2,display_name=$3,character_key=$4,avatar_url=$5,is_plus=$6,updated_at=now() where id=$1 returning id::text,user_id,display_name,character_key,avatar_url,is_plus,created_at,updated_at`, profileID, userID, displayName, characterKey, avatarURL, isPlus))
 }
 
 func (r *router) adminListPostgresUsers(ctx context.Context, search, statusDate string) ([]map[string]any, error) {

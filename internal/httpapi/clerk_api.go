@@ -85,6 +85,35 @@ func (c *clerkAPIClient) CreateUser(ctx context.Context, email, password, userID
 	return nil, fmt.Errorf("clerk create user failed: status=%d body=%v", resp.StatusCode, out)
 }
 
+func (c *clerkAPIClient) UpdateUser(ctx context.Context, clerkUserID string, payload map[string]any) error {
+	if !c.configured() {
+		return fmt.Errorf("clerk api is not configured")
+	}
+	if strings.TrimSpace(clerkUserID) == "" || len(payload) == 0 {
+		return nil
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, clerkAPIBaseURL+"/users/"+strings.TrimSpace(clerkUserID), bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	c.authorize(req)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		return nil
+	}
+	b, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	return fmt.Errorf("clerk update user failed: status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(b)))
+}
+
 func (c *clerkAPIClient) authorize(req *http.Request) {
 	req.Header.Set("Authorization", "Bearer "+c.secretKey)
 }
