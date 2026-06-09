@@ -27,6 +27,10 @@ func (f *fakeRepository) GetByUserID(context.Context, string, string) (*Profile,
 	return f.profileByUserID, nil
 }
 
+func (f *fakeRepository) GetByClerkUserID(context.Context, string, string) (*Profile, error) {
+	return f.profile, nil
+}
+
 func (f *fakeRepository) UpsertBootstrap(_ context.Context, _ string, payload map[string]any) (map[string]any, error) {
 	f.bootstrapPayload = payload
 	return payload, nil

@@ -47,6 +47,21 @@ func (r *SupabaseRepository) GetByUserID(ctx context.Context, authToken, userID 
 	return &rows[0], nil
 }
 
+func (r *SupabaseRepository) GetByClerkUserID(ctx context.Context, authToken, clerkUserID string) (*Profile, error) {
+	q := url.Values{}
+	q.Set("select", profileSelectColumns)
+	q.Set("clerk_user_id", "eq."+clerkUserID)
+	q.Set("limit", "1")
+	var rows []Profile
+	if err := r.client.Get(ctx, authToken, "profiles", q, &rows); err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+	return &rows[0], nil
+}
+
 func (r *SupabaseRepository) UpsertBootstrap(ctx context.Context, authToken string, payload map[string]any) (map[string]any, error) {
 	q := url.Values{}
 	q.Set("on_conflict", "id")
