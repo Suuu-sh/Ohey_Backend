@@ -20,6 +20,7 @@ type Config struct {
 	ClerkIssuer            string
 	ClerkJWKSURL           string
 	ClerkAudience          string
+	ClerkSecretKey         string
 	AllowedOrigins         []string
 	FCMServiceAccountJSON  string
 	AdminEmails            []string
@@ -39,6 +40,7 @@ func Load() (Config, error) {
 		ClerkIssuer:            strings.TrimRight(os.Getenv(EnvClerkIssuer), "/"),
 		ClerkJWKSURL:           strings.TrimSpace(os.Getenv(EnvClerkJWKSURL)),
 		ClerkAudience:          strings.TrimSpace(os.Getenv(EnvClerkAudience)),
+		ClerkSecretKey:         strings.TrimSpace(os.Getenv(EnvClerkSecretKey)),
 		AllowedOrigins:         splitCSV(getEnv(EnvAllowedOrigins, "*")),
 		FCMServiceAccountJSON:  strings.TrimSpace(os.Getenv(EnvFCMServiceAccountJSON)),
 		AdminEmails:            splitCSV(os.Getenv(EnvOheyAdminEmails)),

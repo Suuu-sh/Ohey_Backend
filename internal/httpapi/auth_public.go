@@ -19,7 +19,12 @@ type SignupRequest struct {
 }
 
 func (r *router) signupWithPassword(w http.ResponseWriter, req *http.Request) {
-	if r.deps.AdminSupabase == nil || strings.TrimSpace(r.deps.Config.SupabaseServiceRoleKey) == "" {
+	if r.deps.Config.AuthProvider == "clerk" {
+		if r.deps.ClerkAPI == nil || !r.deps.ClerkAPI.configured() {
+			writeError(w, http.StatusServiceUnavailable, "signup is not configured")
+			return
+		}
+	} else if r.deps.AdminSupabase == nil || strings.TrimSpace(r.deps.Config.SupabaseServiceRoleKey) == "" {
 		writeError(w, http.StatusServiceUnavailable, "signup is not configured")
 		return
 	}
@@ -42,6 +47,15 @@ func (r *router) signupWithPassword(w http.ResponseWriter, req *http.Request) {
 	}
 	if userID == "" || displayName == "" {
 		writeError(w, http.StatusBadRequest, "profile fields are required")
+		return
+	}
+	if r.deps.Config.AuthProvider == "clerk" {
+		created, err := r.deps.ClerkAPI.CreateUser(req.Context(), email, password, userID, displayName, avatarURL)
+		if err != nil {
+			writeClerkSignupError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, map[string]any{"user": created})
 		return
 	}
 
@@ -86,6 +100,18 @@ func clientIP(req *http.Request) string {
 		return host
 	}
 	return req.RemoteAddr
+}
+
+func writeClerkSignupError(w http.ResponseWriter, err error) {
+	body := strings.ToLower(err.Error())
+	switch {
+	case strings.Contains(body, "already") || strings.Contains(body, "duplicate") || strings.Contains(body, "taken"):
+		writeError(w, http.StatusConflict, "このメールアドレスはすでに登録されています。")
+	case strings.Contains(body, "password") || strings.Contains(body, "email"):
+		writeError(w, http.StatusBadRequest, "登録情報を確認してください。")
+	default:
+		writeError(w, http.StatusBadGateway, "signup failed")
+	}
 }
 
 func writeSupabaseAuthSignupError(w http.ResponseWriter, err error) {

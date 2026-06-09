@@ -42,6 +42,7 @@ func main() {
 		}
 		defer postgresDB.Close()
 	}
+	clerkAPI := httpapi.NewClerkAPIClientForDependencies(cfg.ClerkSecretKey, httpClient)
 	fcm, err := httpapi.NewFCMSender(cfg.FCMServiceAccountJSON, httpClient)
 	if err != nil {
 		logger.Error("fcm configuration error", "error", err)
@@ -50,7 +51,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,
-		Handler:           httpapi.NewRouter(httpapi.Dependencies{Config: cfg, Logger: logger, Supabase: supabaseClient, AdminSupabase: adminSupabaseClient, Postgres: postgresDB, FCM: fcm}),
+		Handler:           httpapi.NewRouter(httpapi.Dependencies{Config: cfg, Logger: logger, Supabase: supabaseClient, AdminSupabase: adminSupabaseClient, Postgres: postgresDB, FCM: fcm, ClerkAPI: clerkAPI}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      20 * time.Second,

@@ -13,6 +13,7 @@ const (
 	EnvClerkIssuer            = "CLERK_ISSUER"
 	EnvClerkJWKSURL           = "CLERK_JWKS_URL"
 	EnvClerkAudience          = "CLERK_AUDIENCE"
+	EnvClerkSecretKey         = "CLERK_SECRET_KEY"
 	EnvAllowedOrigins         = "ALLOWED_ORIGINS"
 	EnvFCMServiceAccountJSON  = "FCM_SERVICE_ACCOUNT_JSON"
 	EnvOheyAdminEmails        = "OHEY_ADMIN_EMAILS"

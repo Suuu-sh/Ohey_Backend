@@ -23,6 +23,7 @@ type Dependencies struct {
 	AdminSupabase *supabase.Client
 	Postgres      *postgres.DB
 	FCM           *fcmSender
+	ClerkAPI      *clerkAPIClient
 }
 
 type router struct {

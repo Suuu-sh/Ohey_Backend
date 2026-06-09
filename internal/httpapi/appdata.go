@@ -358,6 +358,29 @@ func (r *router) markNotificationsRead(w http.ResponseWriter, req *http.Request,
 
 func (r *router) deleteOwnAccount(w http.ResponseWriter, req *http.Request, _ string) {
 	userID := strings.TrimSpace(req.Header.Get("X-Ohey-User-ID"))
+	if r.usesPostgresStore() {
+		if r.deps.Postgres == nil {
+			writeError(w, http.StatusServiceUnavailable, "database is not configured")
+			return
+		}
+		clerkUserID := strings.TrimSpace(req.Header.Get("X-Ohey-Clerk-User-ID"))
+		if clerkUserID != "" && (r.deps.ClerkAPI == nil || !r.deps.ClerkAPI.configured()) {
+			writeError(w, http.StatusServiceUnavailable, "account deletion is temporarily unavailable")
+			return
+		}
+		if _, err := r.deps.Postgres.Pool().Exec(req.Context(), `delete from profiles where id=$1`, userID); err != nil {
+			writeError(w, http.StatusBadGateway, "database error")
+			return
+		}
+		if clerkUserID != "" {
+			if err := r.deps.ClerkAPI.DeleteUser(req.Context(), clerkUserID); err != nil {
+				writeError(w, http.StatusBadGateway, "auth provider error")
+				return
+			}
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"id": userID})
+		return
+	}
 	if r.deps.AdminSupabase == nil || strings.TrimSpace(r.deps.Config.SupabaseServiceRoleKey) == "" {
 		writeError(w, http.StatusServiceUnavailable, "account deletion is temporarily unavailable")
 		return
