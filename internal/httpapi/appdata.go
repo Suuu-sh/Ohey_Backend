@@ -461,8 +461,16 @@ func (r *router) inviteUsecase(req *http.Request) *invites.Usecase {
 }
 
 func (r *router) friendsUsecase(req *http.Request) *friends.Usecase {
+	var repository friends.Repository = friends.NewSupabaseRepository(r.deps.Supabase, r.deps.AdminSupabase, r.deps.Config.SupabaseServiceRoleKey)
+	if r.deps.Config.DataStore == "postgres" || r.deps.Config.DataStore == "neon" {
+		if r.deps.Postgres == nil {
+			repository = friends.NewPostgresRepository(nil)
+		} else {
+			repository = friends.NewPostgresRepository(r.deps.Postgres.Pool())
+		}
+	}
 	return friends.NewUsecase(friends.Dependencies{
-		Repository: friends.NewSupabaseRepository(r.deps.Supabase, r.deps.AdminSupabase, r.deps.Config.SupabaseServiceRoleKey),
+		Repository: repository,
 		Publisher:  friendRequestEventPublisher{router: r, req: req},
 		Logger:     r.deps.Logger,
 	})
