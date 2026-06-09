@@ -30,12 +30,27 @@ type router struct {
 	authVerifier *authVerifier
 }
 
+func newConfiguredAuthVerifier(deps Dependencies) *authVerifier {
+	switch deps.Config.AuthProvider {
+	case "clerk":
+		return newClerkAuthVerifier(
+			deps.Config.ClerkIssuer,
+			deps.Config.ClerkJWKSURL,
+			deps.Config.ClerkAudience,
+			nil,
+			timeNow,
+		)
+	default:
+		return newSupabaseAuthVerifier(deps.Supabase, deps.Config.SupabaseURL, timeNow)
+	}
+}
+
 func NewRouter(deps Dependencies) http.Handler {
 	r := &router{
 		deps:         deps,
 		mux:          http.NewServeMux(),
 		rateLimiter:  newActionRateLimiter(timeNow),
-		authVerifier: newAuthVerifier(deps.Supabase, deps.Config.SupabaseURL, timeNow),
+		authVerifier: newConfiguredAuthVerifier(deps),
 	}
 	r.routes()
 	return r.withCORS(r.mux)

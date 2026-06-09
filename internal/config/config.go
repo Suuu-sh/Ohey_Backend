@@ -12,6 +12,10 @@ type Config struct {
 	SupabaseURL            string
 	SupabaseAnonKey        string
 	SupabaseServiceRoleKey string
+	AuthProvider           string
+	ClerkIssuer            string
+	ClerkJWKSURL           string
+	ClerkAudience          string
 	AllowedOrigins         []string
 	FCMServiceAccountJSON  string
 	AdminEmails            []string
@@ -24,6 +28,10 @@ func Load() (Config, error) {
 		SupabaseURL:            strings.TrimRight(os.Getenv(EnvSupabaseURL), "/"),
 		SupabaseAnonKey:        os.Getenv(EnvSupabaseAnonKey),
 		SupabaseServiceRoleKey: strings.TrimSpace(os.Getenv(EnvSupabaseServiceRoleKey)),
+		AuthProvider:           strings.ToLower(getEnv(EnvAuthProvider, "supabase")),
+		ClerkIssuer:            strings.TrimRight(os.Getenv(EnvClerkIssuer), "/"),
+		ClerkJWKSURL:           strings.TrimSpace(os.Getenv(EnvClerkJWKSURL)),
+		ClerkAudience:          strings.TrimSpace(os.Getenv(EnvClerkAudience)),
 		AllowedOrigins:         splitCSV(getEnv(EnvAllowedOrigins, "*")),
 		FCMServiceAccountJSON:  strings.TrimSpace(os.Getenv(EnvFCMServiceAccountJSON)),
 		AdminEmails:            splitCSV(os.Getenv(EnvOheyAdminEmails)),
@@ -33,6 +41,21 @@ func Load() (Config, error) {
 	}
 	if cfg.SupabaseAnonKey == "" {
 		return cfg, errors.New(EnvSupabaseAnonKey + " is required")
+	}
+	if cfg.AuthProvider == "" {
+		cfg.AuthProvider = "supabase"
+	}
+	switch cfg.AuthProvider {
+	case "supabase":
+	case "clerk":
+		if cfg.ClerkIssuer == "" {
+			return cfg, errors.New(EnvClerkIssuer + " is required when " + EnvAuthProvider + "=clerk")
+		}
+		if cfg.ClerkJWKSURL == "" {
+			cfg.ClerkJWKSURL = cfg.ClerkIssuer + "/.well-known/jwks.json"
+		}
+	default:
+		return cfg, errors.New(EnvAuthProvider + " must be supabase or clerk")
 	}
 	return cfg, nil
 }

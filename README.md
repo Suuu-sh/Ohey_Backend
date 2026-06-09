@@ -1,6 +1,6 @@
 # Ohey Backend
 
-Go API for Ohey. It proxies authenticated requests to Supabase/PostgREST using the caller's Supabase JWT so RLS remains enforced by Supabase.
+Go API for Ohey. Today it proxies authenticated requests to Supabase/PostgREST using the caller's Supabase JWT so RLS remains enforced by Supabase. The Clerk migration is staged: the backend can already verify Clerk JWTs, while database access is still being moved away from Supabase RLS.
 
 ## Architecture
 
@@ -32,8 +32,15 @@ curl http://localhost:8080/healthz
 
 Authenticated requests must include:
 
-- `Authorization: Bearer <supabase access token>`
-- `X-Ohey-User-ID: <auth.users.id>`
+- `Authorization: Bearer <access token>`
+- `X-Ohey-User-ID: <authenticated user id>`
+
+Auth provider configuration:
+
+- `AUTH_PROVIDER=supabase` verifies Supabase access tokens and can fall back to Supabase Auth `/user`.
+- `AUTH_PROVIDER=clerk` verifies Clerk session JWTs against `CLERK_ISSUER` / `CLERK_JWKS_URL` and optional `CLERK_AUDIENCE`.
+
+During the migration, Supabase URL/key are still required because repositories still use Supabase/PostgREST. After data access moves to Neon through backend-owned SQL, Clerk tokens will no longer be sent to Supabase.
 
 ## Endpoints
 
