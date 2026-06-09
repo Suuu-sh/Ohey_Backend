@@ -40,7 +40,14 @@ Auth provider configuration:
 - `AUTH_PROVIDER=supabase` verifies Supabase access tokens and can fall back to Supabase Auth `/user`.
 - `AUTH_PROVIDER=clerk` verifies Clerk session JWTs against `CLERK_ISSUER` / `CLERK_JWKS_URL` and optional `CLERK_AUDIENCE`.
 
-During the migration, Supabase URL/key are still required because repositories still use Supabase/PostgREST. After data access moves to Neon through backend-owned SQL, Clerk tokens will no longer be sent to Supabase.
+During the migration, `DATA_STORE=supabase` remains the default because repositories still use Supabase/PostgREST. The Neon/Postgres runtime path is staged behind `DATA_STORE=neon` / `DATA_STORE=postgres`, which requires `DATABASE_URL` and `AUTH_PROVIDER=clerk`. After feature repositories move to backend-owned SQL, Clerk tokens will no longer be sent to Supabase.
+
+Database provider configuration:
+
+- `DATA_STORE=supabase` keeps the current Supabase/PostgREST repositories.
+- `DATA_STORE=neon` or `DATA_STORE=postgres` opens a backend-owned Postgres pool from `DATABASE_URL`.
+- For Neon API runtime connections, use the pooled connection string from Neon (hostname contains `-pooler`) to avoid connection exhaustion; use a direct non-pooled URL for migrations, dumps, and admin tooling.
+- `DATABASE_MAX_CONNS` caps the backend pgx pool, default `10`.
 
 ## Endpoints
 

@@ -12,6 +12,7 @@ import (
 	"github.com/yota/ohey/backend/internal/features/dailystatuses"
 	"github.com/yota/ohey/backend/internal/features/friends"
 	"github.com/yota/ohey/backend/internal/features/profiles"
+	"github.com/yota/ohey/backend/internal/postgres"
 	"github.com/yota/ohey/backend/internal/supabase"
 )
 
@@ -20,6 +21,7 @@ type Dependencies struct {
 	Logger        *slog.Logger
 	Supabase      *supabase.Client
 	AdminSupabase *supabase.Client
+	Postgres      *postgres.DB
 	FCM           *fcmSender
 }
 

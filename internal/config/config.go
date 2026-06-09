@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -12,6 +13,9 @@ type Config struct {
 	SupabaseURL            string
 	SupabaseAnonKey        string
 	SupabaseServiceRoleKey string
+	DataStore              string
+	DatabaseURL            string
+	DatabaseMaxConns       int32
 	AuthProvider           string
 	ClerkIssuer            string
 	ClerkJWKSURL           string
@@ -28,6 +32,9 @@ func Load() (Config, error) {
 		SupabaseURL:            strings.TrimRight(os.Getenv(EnvSupabaseURL), "/"),
 		SupabaseAnonKey:        os.Getenv(EnvSupabaseAnonKey),
 		SupabaseServiceRoleKey: strings.TrimSpace(os.Getenv(EnvSupabaseServiceRoleKey)),
+		DataStore:              strings.ToLower(getEnv(EnvDataStore, "supabase")),
+		DatabaseURL:            strings.TrimSpace(os.Getenv(EnvDatabaseURL)),
+		DatabaseMaxConns:       int32FromEnv(EnvDatabaseMaxConns, 10),
 		AuthProvider:           strings.ToLower(getEnv(EnvAuthProvider, "supabase")),
 		ClerkIssuer:            strings.TrimRight(os.Getenv(EnvClerkIssuer), "/"),
 		ClerkJWKSURL:           strings.TrimSpace(os.Getenv(EnvClerkJWKSURL)),
@@ -36,11 +43,26 @@ func Load() (Config, error) {
 		FCMServiceAccountJSON:  strings.TrimSpace(os.Getenv(EnvFCMServiceAccountJSON)),
 		AdminEmails:            splitCSV(os.Getenv(EnvOheyAdminEmails)),
 	}
-	if cfg.SupabaseURL == "" {
-		return cfg, errors.New(EnvSupabaseURL + " is required")
+	if cfg.DataStore == "" {
+		cfg.DataStore = "supabase"
 	}
-	if cfg.SupabaseAnonKey == "" {
-		return cfg, errors.New(EnvSupabaseAnonKey + " is required")
+	switch cfg.DataStore {
+	case "supabase":
+		if cfg.SupabaseURL == "" {
+			return cfg, errors.New(EnvSupabaseURL + " is required")
+		}
+		if cfg.SupabaseAnonKey == "" {
+			return cfg, errors.New(EnvSupabaseAnonKey + " is required")
+		}
+	case "postgres", "neon":
+		if cfg.DatabaseURL == "" {
+			return cfg, errors.New(EnvDatabaseURL + " is required when " + EnvDataStore + "=" + cfg.DataStore)
+		}
+	default:
+		return cfg, errors.New(EnvDataStore + " must be supabase, postgres, or neon")
+	}
+	if cfg.DataStore != "supabase" && cfg.AuthProvider != "clerk" {
+		return cfg, errors.New(EnvAuthProvider + " must be clerk when " + EnvDataStore + "=" + cfg.DataStore)
 	}
 	if cfg.AuthProvider == "" {
 		cfg.AuthProvider = "supabase"
@@ -76,4 +98,16 @@ func splitCSV(value string) []string {
 		}
 	}
 	return out
+}
+
+func int32FromEnv(key string, fallback int32) int32 {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseInt(value, 10, 32)
+	if err != nil || parsed <= 0 {
+		return fallback
+	}
+	return int32(parsed)
 }
