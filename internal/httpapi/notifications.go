@@ -36,10 +36,20 @@ func ProcessNotificationOutboxOnce(ctx context.Context, deps Dependencies, limit
 
 func (r *router) notificationUsecase(_ *http.Request) *notifications.Usecase {
 	return notifications.NewUsecase(notifications.Dependencies{
-		Repository: notifications.NewSupabaseRepository(r.deps.Supabase, r.deps.AdminSupabase, r.deps.Config.SupabaseServiceRoleKey),
+		Repository: r.notificationRepository(),
 		PushSender: r.deps.FCM,
 		Logger:     r.deps.Logger,
 	})
+}
+
+func (r *router) notificationRepository() notifications.Repository {
+	if r.deps.Config.DataStore == "postgres" || r.deps.Config.DataStore == "neon" {
+		if r.deps.Postgres == nil {
+			return notifications.NewPostgresRepository(nil)
+		}
+		return notifications.NewPostgresRepository(r.deps.Postgres.Pool())
+	}
+	return notifications.NewSupabaseRepository(r.deps.Supabase, r.deps.AdminSupabase, r.deps.Config.SupabaseServiceRoleKey)
 }
 
 func (r *router) createFriendRequestReceivedNotification(req *http.Request, authToken string, requestRow map[string]any) {
@@ -124,7 +134,7 @@ func (r *router) recordNotificationOutboxEvent(ctx context.Context, event notifi
 
 func (r *router) dispatchNotificationOutboxEvent(ctx context.Context, authToken string, event notificationOutboxEvent) error {
 	usecase := notifications.NewUsecase(notifications.Dependencies{
-		Repository: notifications.NewSupabaseRepository(r.deps.Supabase, r.deps.AdminSupabase, r.deps.Config.SupabaseServiceRoleKey),
+		Repository: r.notificationRepository(),
 		PushSender: r.deps.FCM,
 		Logger:     r.deps.Logger,
 	})
