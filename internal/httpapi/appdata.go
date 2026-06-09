@@ -454,8 +454,16 @@ func (r *router) updateInvite(w http.ResponseWriter, req *http.Request, authToke
 }
 
 func (r *router) inviteUsecase(req *http.Request) *invites.Usecase {
+	var repository invites.Repository = invites.NewSupabaseRepository(r.deps.Supabase)
+	if r.deps.Config.DataStore == "postgres" || r.deps.Config.DataStore == "neon" {
+		if r.deps.Postgres == nil {
+			repository = invites.NewPostgresRepository(nil)
+		} else {
+			repository = invites.NewPostgresRepository(r.deps.Postgres.Pool())
+		}
+	}
 	return invites.NewUsecase(invites.Dependencies{
-		Repository: invites.NewSupabaseRepository(r.deps.Supabase),
+		Repository: repository,
 		Publisher:  inviteEventPublisher{router: r, req: req},
 	})
 }
