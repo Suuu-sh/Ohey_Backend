@@ -7,8 +7,16 @@ import (
 )
 
 func (r *router) wishItemsUsecase() *wishitems.Usecase {
+	var repository wishitems.Repository = wishitems.NewSupabaseRepository(r.deps.Supabase)
+	if r.deps.Config.DataStore == "postgres" || r.deps.Config.DataStore == "neon" {
+		if r.deps.Postgres == nil {
+			repository = wishitems.NewPostgresRepository(nil)
+		} else {
+			repository = wishitems.NewPostgresRepository(r.deps.Postgres.Pool())
+		}
+	}
 	return wishitems.NewUsecase(wishitems.Dependencies{
-		Repository: wishitems.NewSupabaseRepository(r.deps.Supabase),
+		Repository: repository,
 	})
 }
 
@@ -27,9 +35,10 @@ func (r *router) listWishItems(w http.ResponseWriter, req *http.Request, authTok
 
 func (r *router) listProfileWishItems(w http.ResponseWriter, req *http.Request, authToken string) {
 	rows, err := r.wishItemsUsecase().ListProfileWishItems(req.Context(), wishitems.ProfileListInput{
-		AuthToken: authToken,
-		ProfileID: req.PathValue("id"),
-		Limit:     req.URL.Query().Get("limit"),
+		AuthToken:    authToken,
+		ViewerUserID: req.Header.Get("X-Ohey-User-ID"),
+		ProfileID:    req.PathValue("id"),
+		Limit:        req.URL.Query().Get("limit"),
 	})
 	if err != nil {
 		writeWishItemsError(w, err)

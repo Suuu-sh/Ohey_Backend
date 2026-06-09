@@ -21,9 +21,10 @@ type ListInput struct {
 }
 
 type ProfileListInput struct {
-	AuthToken string
-	ProfileID string
-	Limit     string
+	AuthToken    string
+	ViewerUserID string
+	ProfileID    string
+	Limit        string
 }
 
 type CreateInput struct {
@@ -57,6 +58,15 @@ func (u *Usecase) ListProfileWishItems(ctx context.Context, input ProfileListInp
 	profileID, err := CleanUUID(input.ProfileID, "profile id")
 	if err != nil {
 		return nil, err
+	}
+	if repo, ok := u.repository.(interface {
+		ListProfileWishItemsForViewer(context.Context, string, string, string, int) ([]map[string]any, error)
+	}); ok {
+		viewerUserID, err := CleanUUID(input.ViewerUserID, "viewer user id")
+		if err != nil {
+			return nil, err
+		}
+		return repo.ListProfileWishItemsForViewer(ctx, input.AuthToken, viewerUserID, profileID, CleanLimit(input.Limit, 30))
 	}
 	return u.repository.ListProfileWishItems(ctx, input.AuthToken, profileID, CleanLimit(input.Limit, 30))
 }
