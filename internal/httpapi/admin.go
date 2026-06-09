@@ -39,6 +39,16 @@ func (r *router) adminListUsers(w http.ResponseWriter, req *http.Request, _ Auth
 		return
 	}
 
+	if r.usesPostgresStore() {
+		rows, err := r.adminListPostgresUsers(req.Context(), req.URL.Query().Get("search"), statusDate)
+		if err != nil {
+			writeError(w, http.StatusBadGateway, "database error")
+			return
+		}
+		writeJSON(w, http.StatusOK, rows)
+		return
+	}
+
 	q := url.Values{}
 	q.Set(
 		"select",
@@ -516,7 +526,12 @@ func randomAdminPassword() (string, error) {
 
 func (r *router) admin(next func(http.ResponseWriter, *http.Request, AuthUser)) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		if r.deps.AdminSupabase == nil || r.deps.Config.SupabaseServiceRoleKey == "" {
+		if r.usesPostgresStore() {
+			if r.deps.Postgres == nil {
+				writeError(w, http.StatusServiceUnavailable, "admin backend is not configured")
+				return
+			}
+		} else if r.deps.AdminSupabase == nil || r.deps.Config.SupabaseServiceRoleKey == "" {
 			writeError(w, http.StatusServiceUnavailable, "admin backend is not configured")
 			return
 		}
@@ -530,10 +545,22 @@ func (r *router) admin(next func(http.ResponseWriter, *http.Request, AuthUser)) 
 			writeAuthVerificationError(w, err)
 			return
 		}
-		authUserID, errMessage := cleanUUID(authUser.ID, "auth user id")
-		if errMessage != "" {
-			writeError(w, http.StatusUnauthorized, "invalid auth user")
-			return
+		authUserID := ""
+		if r.deps.Config.AuthProvider == "clerk" {
+			profile, err := r.profileUsecase().GetProfile(req.Context(), profiles.AuthInput{AuthToken: token, ClerkUserID: strings.TrimSpace(authUser.ID)})
+			if err != nil || profile == nil {
+				writeProfileError(w, profiles.UserError{Kind: profiles.ErrorKindNotFound, Message: "profile not found"})
+				return
+			}
+			authUserID = profile.ID
+			req.Header.Set("X-Ohey-Clerk-User-ID", strings.TrimSpace(authUser.ID))
+		} else {
+			cleanID, errMessage := cleanUUID(authUser.ID, "auth user id")
+			if errMessage != "" {
+				writeError(w, http.StatusUnauthorized, "invalid auth user")
+				return
+			}
+			authUserID = cleanID
 		}
 		if headerUserID := strings.TrimSpace(req.Header.Get("X-Ohey-User-ID")); headerUserID != "" {
 			cleanHeaderUserID, errMessage := cleanUUID(headerUserID, "X-Ohey-User-ID")
@@ -547,12 +574,47 @@ func (r *router) admin(next func(http.ResponseWriter, *http.Request, AuthUser)) 
 			}
 		}
 		authUser.ID = authUserID
+		req.Header.Set("X-Ohey-User-ID", authUserID)
 		if !r.isAdminUser(authUser) {
 			writeError(w, http.StatusForbidden, "admin access required")
 			return
 		}
 		next(w, req, authUser)
 	}
+}
+
+func (r *router) adminListPostgresUsers(ctx context.Context, search, statusDate string) ([]map[string]any, error) {
+	if r.deps.Postgres == nil {
+		return []map[string]any{}, nil
+	}
+	search = strings.TrimSpace(search)
+	args := []any{statusDate, contracts.DailyStatusUnselected}
+	where := ""
+	if search != "" {
+		args = append(args, "%"+search+"%")
+		where = " where display_name ilike $3 or user_id ilike $3"
+	}
+	rows, err := r.deps.Postgres.Pool().Query(ctx, `select id::text,user_id,display_name,character_key,avatar_url,is_plus,created_at,updated_at,coalesce((select status from daily_statuses ds where ds.user_id=profiles.id and ds.status_date=$1),$2) from profiles`+where+` order by created_at desc limit 80`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []map[string]any{}
+	for rows.Next() {
+		var id, userID, displayName, characterKey, status string
+		var avatarURL *string
+		var isPlus bool
+		var createdAt, updatedAt any
+		if err := rows.Scan(&id, &userID, &displayName, &characterKey, &avatarURL, &isPlus, &createdAt, &updatedAt, &status); err != nil {
+			return nil, err
+		}
+		row := map[string]any{"id": id, "user_id": userID, "display_name": displayName, "character_key": characterKey, "avatar_url": "", "is_plus": isPlus, "created_at": createdAt, "updated_at": updatedAt, "status": status}
+		if avatarURL != nil {
+			row["avatar_url"] = *avatarURL
+		}
+		out = append(out, row)
+	}
+	return out, rows.Err()
 }
 
 func (r *router) adminStatusesForDate(ctx context.Context, rows []map[string]any, statusDate string) (map[string]string, error) {
@@ -587,6 +649,13 @@ func (r *router) adminStatusesForDate(ctx context.Context, rows []map[string]any
 }
 
 func (r *router) upsertAdminDailyStatus(ctx context.Context, targetUserID, statusDate, status string) error {
+	if r.usesPostgresStore() {
+		if r.deps.Postgres == nil {
+			return errors.New("postgres pool is not configured")
+		}
+		_, err := r.deps.Postgres.Pool().Exec(ctx, `insert into daily_statuses (user_id,status_date,status,updated_at) values ($1,$2,$3,now()) on conflict (user_id,status_date) do update set status=excluded.status, updated_at=now()`, targetUserID, statusDate, status)
+		return err
+	}
 	q := url.Values{}
 	q.Set("on_conflict", "user_id,status_date")
 	payload := map[string]any{
