@@ -7,27 +7,23 @@ services:
     envVars:
       - key: OHEY_ENV
         value: production
-      - key: SUPABASE_URL
-        sync: false
-      - key: SUPABASE_ANON_KEY
-        sync: false
       - key: OHEY_ADMIN_EMAILS
         sync: false
-      - key: SUPABASE_SERVICE_ROLE_KEY
-        sync: false
       - key: DATA_STORE
-        value: supabase
+        value: neon
       - key: DATABASE_URL
         sync: false
       - key: DATABASE_MAX_CONNS
         value: "10"
       - key: AUTH_PROVIDER
-        value: supabase
+        value: clerk
       - key: CLERK_ISSUER
         sync: false
       - key: CLERK_JWKS_URL
         sync: false
       - key: CLERK_AUDIENCE
+        sync: false
+      - key: CLERK_SECRET_KEY
         sync: false
       - key: FCM_SERVICE_ACCOUNT_JSON
         sync: false
