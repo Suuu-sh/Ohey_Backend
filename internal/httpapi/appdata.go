@@ -638,8 +638,16 @@ func writeProfileError(w http.ResponseWriter, err error) {
 }
 
 func (r *router) dailyStatusUsecase() *dailystatuses.Usecase {
+	var repository dailystatuses.Repository = dailystatuses.NewSupabaseRepository(r.deps.Supabase)
+	if r.deps.Config.DataStore == "postgres" || r.deps.Config.DataStore == "neon" {
+		if r.deps.Postgres == nil {
+			repository = dailystatuses.NewPostgresRepository(nil)
+		} else {
+			repository = dailystatuses.NewPostgresRepository(r.deps.Postgres.Pool())
+		}
+	}
 	return dailystatuses.NewUsecase(dailystatuses.Dependencies{
-		Repository: dailystatuses.NewSupabaseRepository(r.deps.Supabase),
+		Repository: repository,
 	})
 }
 
