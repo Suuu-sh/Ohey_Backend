@@ -55,8 +55,9 @@ func (r *router) upsertProfile(w http.ResponseWriter, req *http.Request, authTok
 		return
 	}
 	row, err := r.profileUsecase().BootstrapProfile(req.Context(), profiles.BootstrapUsecaseInput{
-		AuthToken:  authToken,
-		AuthUserID: req.Header.Get("X-Ohey-User-ID"),
+		AuthToken:   authToken,
+		AuthUserID:  req.Header.Get("X-Ohey-User-ID"),
+		ClerkUserID: req.Header.Get("X-Ohey-Clerk-User-ID"),
 		Request: profiles.BootstrapRequest{
 			UserID:       input.UserID,
 			DisplayName:  input.DisplayName,
