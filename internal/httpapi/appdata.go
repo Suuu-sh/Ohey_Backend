@@ -609,8 +609,16 @@ func writeFriendGroupsError(w http.ResponseWriter, err error) {
 }
 
 func (r *router) profileUsecase() *profiles.Usecase {
+	var repository profiles.Repository = profiles.NewSupabaseRepository(r.deps.Supabase)
+	if r.deps.Config.DataStore == "postgres" || r.deps.Config.DataStore == "neon" {
+		if r.deps.Postgres == nil {
+			repository = profiles.NewPostgresRepository(nil)
+		} else {
+			repository = profiles.NewPostgresRepository(r.deps.Postgres.Pool())
+		}
+	}
 	return profiles.NewUsecase(profiles.Dependencies{
-		Repository: profiles.NewSupabaseRepository(r.deps.Supabase),
+		Repository: repository,
 	})
 }
 

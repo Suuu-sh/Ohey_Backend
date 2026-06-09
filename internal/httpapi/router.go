@@ -263,7 +263,7 @@ func (r *router) auth(next func(http.ResponseWriter, *http.Request, string)) htt
 			return
 		}
 		if r.deps.Config.AuthProvider == "clerk" {
-			r.authClerk(w, req, next, authUser)
+			r.authClerk(w, req, next, token, authUser)
 			return
 		}
 		userID := strings.TrimSpace(req.Header.Get("X-Ohey-User-ID"))
@@ -286,7 +286,7 @@ func (r *router) auth(next func(http.ResponseWriter, *http.Request, string)) htt
 	}
 }
 
-func (r *router) authClerk(w http.ResponseWriter, req *http.Request, next func(http.ResponseWriter, *http.Request, string), authUser AuthUser) {
+func (r *router) authClerk(w http.ResponseWriter, req *http.Request, next func(http.ResponseWriter, *http.Request, string), authToken string, authUser AuthUser) {
 	clerkUserID := strings.TrimSpace(authUser.ID)
 	if clerkUserID == "" {
 		writeError(w, http.StatusUnauthorized, "invalid auth user")
@@ -296,11 +296,14 @@ func (r *router) authClerk(w http.ResponseWriter, req *http.Request, next func(h
 		writeError(w, http.StatusForbidden, "auth user mismatch")
 		return
 	}
-	if r.deps.Config.SupabaseServiceRoleKey == "" {
-		writeError(w, http.StatusInternalServerError, "service role is required for Clerk auth")
-		return
+	downstreamToken := authToken
+	if r.deps.Config.DataStore == "supabase" {
+		if r.deps.Config.SupabaseServiceRoleKey == "" {
+			writeError(w, http.StatusInternalServerError, "service role is required for Clerk auth")
+			return
+		}
+		downstreamToken = r.deps.Config.SupabaseServiceRoleKey
 	}
-	downstreamToken := r.deps.Config.SupabaseServiceRoleKey
 	profile, err := r.profileUsecase().GetProfile(req.Context(), profiles.AuthInput{
 		AuthToken:   downstreamToken,
 		ClerkUserID: clerkUserID,
