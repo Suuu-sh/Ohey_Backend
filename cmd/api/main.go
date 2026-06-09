@@ -10,7 +10,6 @@ import (
 	"github.com/yota/ohey/backend/internal/config"
 	"github.com/yota/ohey/backend/internal/httpapi"
 	"github.com/yota/ohey/backend/internal/postgres"
-	"github.com/yota/ohey/backend/internal/supabase"
 )
 
 func main() {
@@ -22,14 +21,6 @@ func main() {
 	}
 
 	httpClient := &http.Client{Timeout: 15 * time.Second}
-	var supabaseClient *supabase.Client
-	var adminSupabaseClient *supabase.Client
-	if cfg.SupabaseURL != "" && cfg.SupabaseAnonKey != "" {
-		supabaseClient = supabase.NewClient(cfg.SupabaseURL, cfg.SupabaseAnonKey, httpClient)
-	}
-	if cfg.SupabaseURL != "" && cfg.SupabaseServiceRoleKey != "" {
-		adminSupabaseClient = supabase.NewClient(cfg.SupabaseURL, cfg.SupabaseServiceRoleKey, httpClient)
-	}
 	var postgresDB *postgres.DB
 	if cfg.DataStore == "postgres" || cfg.DataStore == "neon" {
 		postgresDB, err = postgres.Open(context.Background(), postgres.Config{
@@ -51,7 +42,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,
-		Handler:           httpapi.NewRouter(httpapi.Dependencies{Config: cfg, Logger: logger, Supabase: supabaseClient, AdminSupabase: adminSupabaseClient, Postgres: postgresDB, FCM: fcm, ClerkAPI: clerkAPI}),
+		Handler:           httpapi.NewRouter(httpapi.Dependencies{Config: cfg, Logger: logger, Postgres: postgresDB, FCM: fcm, ClerkAPI: clerkAPI}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      20 * time.Second,

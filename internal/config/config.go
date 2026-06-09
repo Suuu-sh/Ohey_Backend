@@ -8,78 +8,59 @@ import (
 )
 
 type Config struct {
-	Environment            string
-	Port                   string
-	SupabaseURL            string
-	SupabaseAnonKey        string
-	SupabaseServiceRoleKey string
-	DataStore              string
-	DatabaseURL            string
-	DatabaseMaxConns       int32
-	AuthProvider           string
-	ClerkIssuer            string
-	ClerkJWKSURL           string
-	ClerkAudience          string
-	ClerkSecretKey         string
-	AllowedOrigins         []string
-	FCMServiceAccountJSON  string
-	AdminEmails            []string
+	Environment           string
+	Port                  string
+	DataStore             string
+	DatabaseURL           string
+	DatabaseMaxConns      int32
+	AuthProvider          string
+	ClerkIssuer           string
+	ClerkJWKSURL          string
+	ClerkAudience         string
+	ClerkSecretKey        string
+	AllowedOrigins        []string
+	FCMServiceAccountJSON string
+	AdminEmails           []string
 }
 
 func Load() (Config, error) {
 	cfg := Config{
-		Environment:            getEnv(EnvOheyEnvironment, "production"),
-		Port:                   getEnv(EnvPort, "8080"),
-		SupabaseURL:            strings.TrimRight(os.Getenv(EnvSupabaseURL), "/"),
-		SupabaseAnonKey:        os.Getenv(EnvSupabaseAnonKey),
-		SupabaseServiceRoleKey: strings.TrimSpace(os.Getenv(EnvSupabaseServiceRoleKey)),
-		DataStore:              strings.ToLower(getEnv(EnvDataStore, "supabase")),
-		DatabaseURL:            strings.TrimSpace(os.Getenv(EnvDatabaseURL)),
-		DatabaseMaxConns:       int32FromEnv(EnvDatabaseMaxConns, 10),
-		AuthProvider:           strings.ToLower(getEnv(EnvAuthProvider, "supabase")),
-		ClerkIssuer:            strings.TrimRight(os.Getenv(EnvClerkIssuer), "/"),
-		ClerkJWKSURL:           strings.TrimSpace(os.Getenv(EnvClerkJWKSURL)),
-		ClerkAudience:          strings.TrimSpace(os.Getenv(EnvClerkAudience)),
-		ClerkSecretKey:         strings.TrimSpace(os.Getenv(EnvClerkSecretKey)),
-		AllowedOrigins:         splitCSV(getEnv(EnvAllowedOrigins, "*")),
-		FCMServiceAccountJSON:  strings.TrimSpace(os.Getenv(EnvFCMServiceAccountJSON)),
-		AdminEmails:            splitCSV(os.Getenv(EnvOheyAdminEmails)),
+		Environment:           getEnv(EnvOheyEnvironment, "production"),
+		Port:                  getEnv(EnvPort, "8080"),
+		DataStore:             strings.ToLower(getEnv(EnvDataStore, "neon")),
+		DatabaseURL:           strings.TrimSpace(os.Getenv(EnvDatabaseURL)),
+		DatabaseMaxConns:      int32FromEnv(EnvDatabaseMaxConns, 10),
+		AuthProvider:          strings.ToLower(getEnv(EnvAuthProvider, "clerk")),
+		ClerkIssuer:           strings.TrimRight(os.Getenv(EnvClerkIssuer), "/"),
+		ClerkJWKSURL:          strings.TrimSpace(os.Getenv(EnvClerkJWKSURL)),
+		ClerkAudience:         strings.TrimSpace(os.Getenv(EnvClerkAudience)),
+		ClerkSecretKey:        strings.TrimSpace(os.Getenv(EnvClerkSecretKey)),
+		AllowedOrigins:        splitCSV(getEnv(EnvAllowedOrigins, "*")),
+		FCMServiceAccountJSON: strings.TrimSpace(os.Getenv(EnvFCMServiceAccountJSON)),
+		AdminEmails:           splitCSV(os.Getenv(EnvOheyAdminEmails)),
 	}
 	if cfg.DataStore == "" {
-		cfg.DataStore = "supabase"
+		cfg.DataStore = "neon"
 	}
 	switch cfg.DataStore {
-	case "supabase":
-		if cfg.SupabaseURL == "" {
-			return cfg, errors.New(EnvSupabaseURL + " is required")
-		}
-		if cfg.SupabaseAnonKey == "" {
-			return cfg, errors.New(EnvSupabaseAnonKey + " is required")
-		}
 	case "postgres", "neon":
 		if cfg.DatabaseURL == "" {
 			return cfg, errors.New(EnvDatabaseURL + " is required when " + EnvDataStore + "=" + cfg.DataStore)
 		}
 	default:
-		return cfg, errors.New(EnvDataStore + " must be supabase, postgres, or neon")
-	}
-	if cfg.DataStore != "supabase" && cfg.AuthProvider != "clerk" {
-		return cfg, errors.New(EnvAuthProvider + " must be clerk when " + EnvDataStore + "=" + cfg.DataStore)
+		return cfg, errors.New(EnvDataStore + " must be postgres or neon")
 	}
 	if cfg.AuthProvider == "" {
-		cfg.AuthProvider = "supabase"
+		cfg.AuthProvider = "clerk"
 	}
-	switch cfg.AuthProvider {
-	case "supabase":
-	case "clerk":
-		if cfg.ClerkIssuer == "" {
-			return cfg, errors.New(EnvClerkIssuer + " is required when " + EnvAuthProvider + "=clerk")
-		}
-		if cfg.ClerkJWKSURL == "" {
-			cfg.ClerkJWKSURL = cfg.ClerkIssuer + "/.well-known/jwks.json"
-		}
-	default:
-		return cfg, errors.New(EnvAuthProvider + " must be supabase or clerk")
+	if cfg.AuthProvider != "clerk" {
+		return cfg, errors.New(EnvAuthProvider + " must be clerk")
+	}
+	if cfg.ClerkIssuer == "" {
+		return cfg, errors.New(EnvClerkIssuer + " is required when " + EnvAuthProvider + "=clerk")
+	}
+	if cfg.ClerkJWKSURL == "" {
+		cfg.ClerkJWKSURL = cfg.ClerkIssuer + "/.well-known/jwks.json"
 	}
 	return cfg, nil
 }

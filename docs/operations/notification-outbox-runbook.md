@@ -1,6 +1,6 @@
 # Notification outbox manual runbook
 
-Last updated: 2026-05-28
+Last updated: 2026-06-09
 
 Render cron is intentionally disabled for production because Render Cron Jobs are paid. Until user volume justifies Pro / paid cron, notification retry is operated manually.
 
@@ -11,17 +11,17 @@ Use this runbook when one of these happens:
 - push delivery or in-app notification creation failed temporarily
 - `notification_outbox` has `pending` / `failed` rows
 - an admin sees reports of missing push notifications
-- after Firebase / Supabase incident recovery
+- after Firebase / database incident recovery
 
 Normal request handling still creates and dispatches notifications in-process. This runbook only covers retrying rows that were stored in `notification_outbox`.
 
 ## Required access
 
-- Admin Supabase Auth user included in `OHEY_ADMIN_EMAILS`
+- Clerk admin user email included in `OHEY_ADMIN_EMAILS`
 - Backend production URL
-- Valid access token from the admin app/session
+- Valid Clerk session token from the admin app/session
 
-Never expose `SUPABASE_SERVICE_ROLE_KEY` or Firebase service-account values to Mobile clients.
+Never expose `CLERK_SECRET_KEY`, `DATABASE_URL`, or Firebase service-account values to Mobile clients.
 
 ## Inspect outbox
 
@@ -88,4 +88,4 @@ Future cron settings:
 - service name: `ohey-notification-outbox-worker`
 - schedule: `*/5 * * * *`
 - docker command: `/ohey-notification-worker`
-- env: `OHEY_ENV`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `FCM_SERVICE_ACCOUNT_JSON`, `ALLOWED_ORIGINS`
+- env: `OHEY_ENV`, `DATABASE_URL`, `CLERK_ISSUER`, `CLERK_SECRET_KEY`, `FCM_SERVICE_ACCOUNT_JSON`, `ALLOWED_ORIGINS`

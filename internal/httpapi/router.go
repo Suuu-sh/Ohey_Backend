@@ -2,28 +2,25 @@ package httpapi
 
 import (
 	"encoding/json"
-	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/yota/ohey/backend/internal/config"
 	"github.com/yota/ohey/backend/internal/contracts"
 	"github.com/yota/ohey/backend/internal/features/dailystatuses"
 	"github.com/yota/ohey/backend/internal/features/friends"
 	"github.com/yota/ohey/backend/internal/features/profiles"
 	"github.com/yota/ohey/backend/internal/postgres"
-	"github.com/yota/ohey/backend/internal/supabase"
 )
 
 type Dependencies struct {
-	Config        config.Config
-	Logger        *slog.Logger
-	Supabase      *supabase.Client
-	AdminSupabase *supabase.Client
-	Postgres      *postgres.DB
-	FCM           *fcmSender
-	ClerkAPI      *clerkAPIClient
+	Config   config.Config
+	Logger   *slog.Logger
+	Postgres *postgres.DB
+	FCM      *fcmSender
+	ClerkAPI *clerkAPIClient
 }
 
 type router struct {
@@ -34,18 +31,13 @@ type router struct {
 }
 
 func newConfiguredAuthVerifier(deps Dependencies) *authVerifier {
-	switch deps.Config.AuthProvider {
-	case "clerk":
-		return newClerkAuthVerifier(
-			deps.Config.ClerkIssuer,
-			deps.Config.ClerkJWKSURL,
-			deps.Config.ClerkAudience,
-			nil,
-			timeNow,
-		)
-	default:
-		return newSupabaseAuthVerifier(deps.Supabase, deps.Config.SupabaseURL, timeNow)
-	}
+	return newClerkAuthVerifier(
+		deps.Config.ClerkIssuer,
+		deps.Config.ClerkJWKSURL,
+		deps.Config.ClerkAudience,
+		nil,
+		timeNow,
+	)
 }
 
 func NewRouter(deps Dependencies) http.Handler {
@@ -57,6 +49,13 @@ func NewRouter(deps Dependencies) http.Handler {
 	}
 	r.routes()
 	return r.withCORS(r.mux)
+}
+
+func postgresPool(r *router) *pgxpool.Pool {
+	if r == nil || r.deps.Postgres == nil {
+		return nil
+	}
+	return r.deps.Postgres.Pool()
 }
 
 func route(method, path string) string {
@@ -300,13 +299,6 @@ func (r *router) authClerk(w http.ResponseWriter, req *http.Request, next func(h
 		return
 	}
 	downstreamToken := authToken
-	if r.deps.Config.DataStore == "supabase" {
-		if r.deps.Config.SupabaseServiceRoleKey == "" {
-			writeError(w, http.StatusInternalServerError, "service role is required for Clerk auth")
-			return
-		}
-		downstreamToken = r.deps.Config.SupabaseServiceRoleKey
-	}
 	profile, err := r.profileUsecase().GetProfile(req.Context(), profiles.AuthInput{
 		AuthToken:   downstreamToken,
 		ClerkUserID: clerkUserID,
@@ -365,30 +357,6 @@ func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, map[string]string{"error": message})
 }
 
-func writeSupabaseError(w http.ResponseWriter, err error) {
-	var apiErr supabase.APIError
-	if errors.As(err, &apiErr) {
-		writeError(w, apiErr.StatusCode, safeSupabaseErrorMessage(apiErr.StatusCode))
-		return
-	}
+func writeUpstreamError(w http.ResponseWriter, _ error) {
 	writeError(w, http.StatusBadGateway, "upstream service error")
-}
-
-func safeSupabaseErrorMessage(status int) string {
-	switch {
-	case status == http.StatusUnauthorized:
-		return "authentication failed"
-	case status == http.StatusForbidden:
-		return "access denied"
-	case status == http.StatusNotFound:
-		return "resource not found"
-	case status == http.StatusConflict:
-		return "request conflicts with existing data"
-	case status == http.StatusTooManyRequests:
-		return "too many requests"
-	case status >= 500:
-		return "upstream service error"
-	default:
-		return "request rejected by upstream service"
-	}
 }

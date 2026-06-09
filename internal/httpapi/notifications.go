@@ -5,14 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/yota/ohey/backend/internal/contracts"
 	"github.com/yota/ohey/backend/internal/features/notifications"
-	"github.com/yota/ohey/backend/internal/supabase"
 )
 
 type notificationOutboxEvent struct {
@@ -32,12 +30,10 @@ type NotificationOutboxProcessResult struct {
 
 func ProcessNotificationOutboxOnce(ctx context.Context, deps Dependencies, limit int) (NotificationOutboxProcessResult, error) {
 	r := &router{deps: deps}
-	return r.processNotificationOutbox(ctx, deps.Config.SupabaseServiceRoleKey, limit)
+	return r.processNotificationOutbox(ctx, "", limit)
 }
 
-func (r *router) usesPostgresStore() bool {
-	return r.deps.Config.DataStore == "postgres" || r.deps.Config.DataStore == "neon"
-}
+func (r *router) usesPostgresStore() bool { return true }
 
 func (r *router) notificationUsecase(_ *http.Request) *notifications.Usecase {
 	return notifications.NewUsecase(notifications.Dependencies{
@@ -48,13 +44,7 @@ func (r *router) notificationUsecase(_ *http.Request) *notifications.Usecase {
 }
 
 func (r *router) notificationRepository() notifications.Repository {
-	if r.usesPostgresStore() {
-		if r.deps.Postgres == nil {
-			return notifications.NewPostgresRepository(nil)
-		}
-		return notifications.NewPostgresRepository(r.deps.Postgres.Pool())
-	}
-	return notifications.NewSupabaseRepository(r.deps.Supabase, r.deps.AdminSupabase, r.deps.Config.SupabaseServiceRoleKey)
+	return notifications.NewPostgresRepository(postgresPool(r))
 }
 
 func (r *router) createFriendRequestReceivedNotification(req *http.Request, authToken string, requestRow map[string]any) {
@@ -99,48 +89,7 @@ func (r *router) recordNotificationOutboxEvent(ctx context.Context, event notifi
 	if event.EventKind == "" {
 		return ""
 	}
-	if r.usesPostgresStore() {
-		return r.recordPostgresNotificationOutboxEvent(ctx, event, status)
-	}
-	if r.deps.AdminSupabase == nil || r.deps.Config.SupabaseServiceRoleKey == "" {
-		return ""
-	}
-	payload := event.Payload
-	if payload == nil {
-		payload = map[string]any{}
-	}
-	status = strings.TrimSpace(status)
-	if status == "" {
-		status = contracts.StatusPending
-	}
-	body := map[string]any{
-		"event_kind":     event.EventKind,
-		"aggregate_type": event.AggregateType,
-		"payload":        payload,
-		"status":         status,
-	}
-	if status == contracts.OutboxStatusProcessed {
-		body["attempts"] = 1
-		body["processed_at"] = time.Now().UTC().Format(time.RFC3339)
-	}
-	if event.AggregateID != "" {
-		body["aggregate_id"] = event.AggregateID
-	}
-	if event.ActorUserID != "" {
-		body["actor_user_id"] = event.ActorUserID
-	}
-	if event.RecipientUserID != "" {
-		body["recipient_user_id"] = event.RecipientUserID
-	}
-	var rows []map[string]any
-	if err := r.deps.AdminSupabase.Post(ctx, r.deps.Config.SupabaseServiceRoleKey, "notification_outbox", nil, body, &rows); err != nil {
-		if r.deps.Logger != nil {
-			r.deps.Logger.Warn("failed to record notification outbox event", "event", event.EventKind, "error", err)
-		}
-		return ""
-	}
-	id, _ := firstMap(rows, nil)["id"].(string)
-	return id
+	return r.recordPostgresNotificationOutboxEvent(ctx, event, status)
 }
 
 func (r *router) recordPostgresNotificationOutboxEvent(ctx context.Context, event notificationOutboxEvent, status string) string {
@@ -225,19 +174,7 @@ func (r *router) markNotificationOutboxFailed(ctx context.Context, outboxID stri
 }
 
 func (r *router) patchNotificationOutbox(ctx context.Context, outboxID string, payload map[string]any) {
-	if r.usesPostgresStore() {
-		r.patchPostgresNotificationOutbox(ctx, outboxID, payload)
-		return
-	}
-	if r.deps.AdminSupabase == nil || r.deps.Config.SupabaseServiceRoleKey == "" || outboxID == "" {
-		return
-	}
-	q := url.Values{}
-	q.Set("id", "eq."+outboxID)
-	var ignored []map[string]any
-	if err := r.deps.AdminSupabase.Patch(ctx, r.deps.Config.SupabaseServiceRoleKey, "notification_outbox", q, payload, &ignored); err != nil && r.deps.Logger != nil {
-		r.deps.Logger.Warn("failed to update notification outbox", "id", outboxID, "error", err)
-	}
+	r.patchPostgresNotificationOutbox(ctx, outboxID, payload)
 }
 
 func (r *router) patchPostgresNotificationOutbox(ctx context.Context, outboxID string, payload map[string]any) {
@@ -251,25 +188,9 @@ func (r *router) patchPostgresNotificationOutbox(ctx context.Context, outboxID s
 }
 
 func (r *router) adminListNotificationOutbox(w http.ResponseWriter, req *http.Request, _ AuthUser) {
-	if r.usesPostgresStore() {
-		rows, err := r.listPostgresNotificationOutbox(req.Context(), strings.TrimSpace(req.URL.Query().Get("status")), 100)
-		if err != nil {
-			writeError(w, http.StatusBadGateway, "database error")
-			return
-		}
-		writeJSON(w, http.StatusOK, rows)
-		return
-	}
-	q := url.Values{}
-	q.Set("select", "id,event_kind,aggregate_type,aggregate_id,actor_user_id,recipient_user_id,status,attempts,last_error,next_attempt_at,processed_at,created_at,payload")
-	q.Set("order", "created_at.desc")
-	q.Set("limit", "100")
-	if status := strings.TrimSpace(req.URL.Query().Get("status")); status != "" && status != contracts.QueryStatusAll {
-		q.Set("status", supabase.PostgRESTEq(status))
-	}
-	var rows []map[string]any
-	if err := r.deps.AdminSupabase.Get(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "notification_outbox", q, &rows); err != nil {
-		writeSupabaseError(w, err)
+	rows, err := r.listPostgresNotificationOutbox(req.Context(), strings.TrimSpace(req.URL.Query().Get("status")), 100)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "database error")
 		return
 	}
 	writeJSON(w, http.StatusOK, rows)
@@ -285,9 +206,9 @@ func (r *router) adminProcessNotificationOutbox(w http.ResponseWriter, req *http
 		}
 		limit = min(parsed, 100)
 	}
-	result, err := r.processNotificationOutbox(req.Context(), r.deps.Config.SupabaseServiceRoleKey, limit)
+	result, err := r.processNotificationOutbox(req.Context(), "", limit)
 	if err != nil {
-		writeSupabaseError(w, err)
+		writeUpstreamError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, result)
@@ -328,35 +249,7 @@ func (r *router) processNotificationOutbox(ctx context.Context, authToken string
 }
 
 func (r *router) notificationOutboxDueRows(ctx context.Context, limit int) ([]map[string]any, error) {
-	if r.usesPostgresStore() {
-		return r.postgresNotificationOutboxDueRows(ctx, limit)
-	}
-	if r.deps.AdminSupabase == nil || r.deps.Config.SupabaseServiceRoleKey == "" {
-		return []map[string]any{}, nil
-	}
-	q := url.Values{}
-	q.Set("select", "id,event_kind,aggregate_type,aggregate_id,actor_user_id,recipient_user_id,status,attempts,payload,next_attempt_at")
-	q.Set("status", supabase.PostgRESTIn(contracts.StatusPending, contracts.OutboxStatusFailed))
-	q.Set("order", "created_at.asc")
-	q.Set("limit", strconv.Itoa(limit))
-	var rows []map[string]any
-	if err := r.deps.AdminSupabase.Get(ctx, r.deps.Config.SupabaseServiceRoleKey, "notification_outbox", q, &rows); err != nil {
-		return nil, err
-	}
-	now := time.Now().UTC()
-	due := make([]map[string]any, 0, len(rows))
-	for _, row := range rows {
-		nextAttempt := strings.TrimSpace(stringValue(row, "next_attempt_at"))
-		if nextAttempt == "" {
-			due = append(due, row)
-			continue
-		}
-		parsed, err := time.Parse(time.RFC3339, nextAttempt)
-		if err != nil || !parsed.After(now) {
-			due = append(due, row)
-		}
-	}
-	return due, nil
+	return r.postgresNotificationOutboxDueRows(ctx, limit)
 }
 
 func (r *router) listPostgresNotificationOutbox(ctx context.Context, status string, limit int) ([]map[string]any, error) {
@@ -583,5 +476,5 @@ func writeNotificationError(w http.ResponseWriter, err error) {
 		}
 		return
 	}
-	writeSupabaseError(w, err)
+	writeUpstreamError(w, err)
 }

@@ -3,7 +3,6 @@ package httpapi
 import (
 	"context"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
@@ -40,8 +39,6 @@ func (r *router) registerPushToken(w http.ResponseWriter, req *http.Request, aut
 		return
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
-	q := make(map[string][]string)
-	q["on_conflict"] = []string{"token"}
 	payload := map[string]any{
 		"token":        token,
 		"user_id":      req.Header.Get("X-Ohey-User-ID"),
@@ -49,25 +46,16 @@ func (r *router) registerPushToken(w http.ResponseWriter, req *http.Request, aut
 		"updated_at":   now,
 		"last_seen_at": now,
 	}
-	var rows []map[string]any
-	if r.deps.Config.DataStore == "postgres" || r.deps.Config.DataStore == "neon" {
-		if r.deps.Postgres == nil {
-			writeError(w, http.StatusServiceUnavailable, "database is not configured")
-			return
-		}
-		row, err := upsertPostgresPushToken(req.Context(), r.deps.Postgres.Pool(), payload)
-		if err != nil {
-			writeError(w, http.StatusBadGateway, "database error")
-			return
-		}
-		writeJSON(w, http.StatusOK, row)
+	if r.deps.Postgres == nil {
+		writeError(w, http.StatusServiceUnavailable, "database is not configured")
 		return
 	}
-	if err := r.deps.Supabase.Upsert(req.Context(), authToken, "push_tokens", q, payload, &rows); err != nil {
-		writeSupabaseError(w, err)
+	row, err := upsertPostgresPushToken(req.Context(), r.deps.Postgres.Pool(), payload)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "database error")
 		return
 	}
-	writeJSON(w, http.StatusOK, firstMap(rows, payload))
+	writeJSON(w, http.StatusOK, row)
 }
 
 func (r *router) unregisterPushToken(w http.ResponseWriter, req *http.Request, authToken string) {
@@ -88,33 +76,16 @@ func (r *router) unregisterPushToken(w http.ResponseWriter, req *http.Request, a
 		return
 	}
 
-	q := url.Values{}
-	q.Set("token", "eq."+token)
-	q.Set("user_id", "eq."+req.Header.Get("X-Ohey-User-ID"))
-	var rows []map[string]any
-	if r.deps.Config.DataStore == "postgres" || r.deps.Config.DataStore == "neon" {
-		if r.deps.Postgres == nil {
-			writeError(w, http.StatusServiceUnavailable, "database is not configured")
-			return
-		}
-		count, err := deletePostgresPushToken(req.Context(), r.deps.Postgres.Pool(), token, req.Header.Get("X-Ohey-User-ID"))
-		if err != nil {
-			writeError(w, http.StatusBadGateway, "database error")
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"deleted": true, "deleted_count": count})
+	if r.deps.Postgres == nil {
+		writeError(w, http.StatusServiceUnavailable, "database is not configured")
 		return
 	}
-	if r.deps.AdminSupabase != nil && r.deps.Config.SupabaseServiceRoleKey != "" {
-		if err := r.deps.AdminSupabase.Delete(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "push_tokens", q, &rows); err != nil {
-			writeSupabaseError(w, err)
-			return
-		}
-	} else if err := r.deps.Supabase.Delete(req.Context(), authToken, "push_tokens", q, &rows); err != nil {
-		writeSupabaseError(w, err)
+	count, err := deletePostgresPushToken(req.Context(), r.deps.Postgres.Pool(), token, req.Header.Get("X-Ohey-User-ID"))
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "database error")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"deleted": true, "deleted_count": len(rows)})
+	writeJSON(w, http.StatusOK, map[string]any{"deleted": true, "deleted_count": count})
 }
 
 func upsertPostgresPushToken(ctx context.Context, pool *pgxpool.Pool, payload map[string]any) (map[string]any, error) {

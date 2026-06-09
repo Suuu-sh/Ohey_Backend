@@ -7,14 +7,7 @@ import (
 )
 
 func (r *router) wishItemsUsecase() *wishitems.Usecase {
-	var repository wishitems.Repository = wishitems.NewSupabaseRepository(r.deps.Supabase)
-	if r.deps.Config.DataStore == "postgres" || r.deps.Config.DataStore == "neon" {
-		if r.deps.Postgres == nil {
-			repository = wishitems.NewPostgresRepository(nil)
-		} else {
-			repository = wishitems.NewPostgresRepository(r.deps.Postgres.Pool())
-		}
-	}
+	repository := wishitems.NewPostgresRepository(postgresPool(r))
 	return wishitems.NewUsecase(wishitems.Dependencies{
 		Repository: repository,
 	})

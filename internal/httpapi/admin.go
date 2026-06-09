@@ -6,9 +6,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"net/http"
-	"net/url"
-	"sort"
-	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -17,7 +14,6 @@ import (
 	"github.com/yota/ohey/backend/internal/features/dailystatuses"
 	"github.com/yota/ohey/backend/internal/features/profiles"
 	"github.com/yota/ohey/backend/internal/features/yurubos"
-	"github.com/yota/ohey/backend/internal/supabase"
 )
 
 const officialProfileUserID = "ohey_official"
@@ -40,46 +36,13 @@ func (r *router) adminListUsers(w http.ResponseWriter, req *http.Request, _ Auth
 		return
 	}
 
-	if r.usesPostgresStore() {
-		rows, err := r.adminListPostgresUsers(req.Context(), req.URL.Query().Get("search"), statusDate)
-		if err != nil {
-			writeError(w, http.StatusBadGateway, "database error")
-			return
-		}
-		writeJSON(w, http.StatusOK, rows)
-		return
-	}
-
-	q := url.Values{}
-	q.Set(
-		"select",
-		"id,user_id,display_name,character_key,avatar_url,is_plus,created_at,updated_at",
-	)
-	q.Set("order", "created_at.desc")
-	q.Set("limit", "80")
-	if search := sanitizePostgRESTSearch(req.URL.Query().Get("search")); search != "" {
-		q.Set("or", "(display_name.ilike.*"+search+"*,user_id.ilike.*"+search+"*)")
-	}
-
-	var rows []map[string]any
-	if err := r.deps.AdminSupabase.Get(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "profiles", q, &rows); err != nil {
-		writeSupabaseError(w, err)
-		return
-	}
-	statusByUserID, err := r.adminStatusesForDate(req.Context(), rows, statusDate)
+	rows, err := r.adminListPostgresUsers(req.Context(), req.URL.Query().Get("search"), statusDate)
 	if err != nil {
-		writeSupabaseError(w, err)
+		writeError(w, http.StatusBadGateway, "database error")
 		return
-	}
-	for _, row := range rows {
-		id, _ := row["id"].(string)
-		status := statusByUserID[id]
-		if strings.TrimSpace(status) == "" {
-			status = contracts.DailyStatusUnselected
-		}
-		row["status"] = status
 	}
 	writeJSON(w, http.StatusOK, rows)
+	return
 }
 
 func (r *router) adminCreateUser(w http.ResponseWriter, req *http.Request, _ AuthUser) {
@@ -120,75 +83,30 @@ func (r *router) adminCreateUser(w http.ResponseWriter, req *http.Request, _ Aut
 	}
 	input.Status = string(cleanStatus)
 
-	if r.usesPostgresStore() {
-		if r.deps.Postgres == nil || r.deps.ClerkAPI == nil || !r.deps.ClerkAPI.configured() {
-			writeError(w, http.StatusServiceUnavailable, "admin backend is not configured")
-			return
-		}
-		created, err := r.deps.ClerkAPI.CreateUser(req.Context(), input.Email, input.Password, input.UserID, input.DisplayName, input.AvatarURL)
-		if err != nil {
-			writeError(w, http.StatusBadGateway, "auth provider error")
-			return
-		}
-		clerkUserID := stringValue(created, "id")
-		row, err := scanAdminProfile(r.deps.Postgres.Pool().QueryRow(req.Context(), `insert into profiles (clerk_user_id,user_id,display_name,character_key,avatar_url,is_plus,updated_at) values ($1,$2,$3,'avatar',$4,$5,now()) returning id::text,user_id,display_name,character_key,avatar_url,is_plus,created_at,updated_at`, clerkUserID, input.UserID, input.DisplayName, input.AvatarURL, input.IsPlus))
-		if err != nil {
-			_ = r.deps.ClerkAPI.DeleteUser(req.Context(), clerkUserID)
-			writeError(w, http.StatusBadGateway, "database error")
-			return
-		}
-		if err := r.upsertAdminDailyStatus(req.Context(), stringValue(row, "id"), statusDate, input.Status); err != nil {
-			_ = r.deps.ClerkAPI.DeleteUser(req.Context(), clerkUserID)
-			writeError(w, http.StatusBadGateway, "database error")
-			return
-		}
-		row["status"] = input.Status
-		writeJSON(w, http.StatusCreated, row)
+	if r.deps.Postgres == nil || r.deps.ClerkAPI == nil || !r.deps.ClerkAPI.configured() {
+		writeError(w, http.StatusServiceUnavailable, "admin backend is not configured")
 		return
 	}
-
-	authPayload := map[string]any{
-		"email":         input.Email,
-		"password":      input.Password,
-		"email_confirm": true,
-		"user_metadata": map[string]any{
-			"display_name": input.DisplayName,
-			"user_id":      input.UserID,
-		},
-	}
-	var authResp map[string]any
-	if err := r.deps.AdminSupabase.AdminCreateUser(req.Context(), authPayload, &authResp); err != nil {
-		writeSupabaseError(w, err)
+	created, err := r.deps.ClerkAPI.CreateUser(req.Context(), input.Email, input.Password, input.UserID, input.DisplayName, input.AvatarURL)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "auth provider error")
 		return
 	}
-	createdUserID := authResponseUserID(authResp)
-	if createdUserID == "" {
-		writeError(w, http.StatusBadGateway, "auth user creation returned no id")
+	clerkUserID := stringValue(created, "id")
+	row, err := scanAdminProfile(r.deps.Postgres.Pool().QueryRow(req.Context(), `insert into profiles (clerk_user_id,user_id,display_name,character_key,avatar_url,is_plus,updated_at) values ($1,$2,$3,'avatar',$4,$5,now()) returning id::text,user_id,display_name,character_key,avatar_url,is_plus,created_at,updated_at`, clerkUserID, input.UserID, input.DisplayName, input.AvatarURL, input.IsPlus))
+	if err != nil {
+		_ = r.deps.ClerkAPI.DeleteUser(req.Context(), clerkUserID)
+		writeError(w, http.StatusBadGateway, "database error")
 		return
 	}
-
-	profilePayload := map[string]any{
-		"id":            createdUserID,
-		"user_id":       input.UserID,
-		"display_name":  input.DisplayName,
-		"character_key": "avatar",
-		"avatar_url":    input.AvatarURL,
-		"is_plus":       input.IsPlus,
-	}
-	q := url.Values{}
-	q.Set("on_conflict", "id")
-	var profiles []map[string]any
-	if err := r.deps.AdminSupabase.Upsert(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "profiles", q, profilePayload, &profiles); err != nil {
-		_ = r.deps.AdminSupabase.AdminDeleteUser(req.Context(), createdUserID)
-		writeSupabaseError(w, err)
+	if err := r.upsertAdminDailyStatus(req.Context(), stringValue(row, "id"), statusDate, input.Status); err != nil {
+		_ = r.deps.ClerkAPI.DeleteUser(req.Context(), clerkUserID)
+		writeError(w, http.StatusBadGateway, "database error")
 		return
 	}
-	if err := r.upsertAdminDailyStatus(req.Context(), createdUserID, statusDate, input.Status); err != nil {
-		_ = r.deps.AdminSupabase.AdminDeleteUser(req.Context(), createdUserID)
-		writeSupabaseError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusCreated, firstMap(profiles, profilePayload))
+	row["status"] = input.Status
+	writeJSON(w, http.StatusCreated, row)
+	return
 }
 
 func (r *router) adminUpdateUser(w http.ResponseWriter, req *http.Request, _ AuthUser) {
@@ -272,7 +190,7 @@ func (r *router) adminUpdateUser(w http.ResponseWriter, req *http.Request, _ Aut
 			return
 		}
 		if err := r.upsertAdminDailyStatus(req.Context(), targetID, statusDate, status); err != nil {
-			writeSupabaseError(w, err)
+			writeUpstreamError(w, err)
 			return
 		}
 	}
@@ -280,71 +198,47 @@ func (r *router) adminUpdateUser(w http.ResponseWriter, req *http.Request, _ Aut
 		authPayload["user_metadata"] = userMeta
 	}
 
-	if r.usesPostgresStore() {
-		if input.Email != nil {
-			writeError(w, http.StatusBadRequest, "email changes are not supported in Clerk admin yet")
-			return
-		}
-		if r.deps.Postgres == nil {
+	if input.Email != nil {
+		writeError(w, http.StatusBadRequest, "email changes are not supported in Clerk admin yet")
+		return
+	}
+	if r.deps.Postgres == nil {
+		writeError(w, http.StatusServiceUnavailable, "admin backend is not configured")
+		return
+	}
+	clerkUserID, err := r.postgresClerkUserIDForProfile(req.Context(), targetID)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "database error")
+		return
+	}
+	if len(authPayload) > 0 {
+		if r.deps.ClerkAPI == nil || !r.deps.ClerkAPI.configured() {
 			writeError(w, http.StatusServiceUnavailable, "admin backend is not configured")
 			return
 		}
-		clerkUserID, err := r.postgresClerkUserIDForProfile(req.Context(), targetID)
+		clerkPayload := map[string]any{}
+		if password, ok := authPayload["password"]; ok {
+			clerkPayload["password"] = password
+		}
+		if len(userMeta) > 0 {
+			clerkPayload["public_metadata"] = userMeta
+		}
+		if err := r.deps.ClerkAPI.UpdateUser(req.Context(), clerkUserID, clerkPayload); err != nil {
+			writeError(w, http.StatusBadGateway, "auth provider error")
+			return
+		}
+	}
+	if len(profilePayload) > 0 {
+		row, err := r.patchPostgresAdminProfile(req.Context(), targetID, profilePayload)
 		if err != nil {
 			writeError(w, http.StatusBadGateway, "database error")
 			return
 		}
-		if len(authPayload) > 0 {
-			if r.deps.ClerkAPI == nil || !r.deps.ClerkAPI.configured() {
-				writeError(w, http.StatusServiceUnavailable, "admin backend is not configured")
-				return
-			}
-			clerkPayload := map[string]any{}
-			if password, ok := authPayload["password"]; ok {
-				clerkPayload["password"] = password
-			}
-			if len(userMeta) > 0 {
-				clerkPayload["public_metadata"] = userMeta
-			}
-			if err := r.deps.ClerkAPI.UpdateUser(req.Context(), clerkUserID, clerkPayload); err != nil {
-				writeError(w, http.StatusBadGateway, "auth provider error")
-				return
-			}
-		}
-		if len(profilePayload) > 0 {
-			row, err := r.patchPostgresAdminProfile(req.Context(), targetID, profilePayload)
-			if err != nil {
-				writeError(w, http.StatusBadGateway, "database error")
-				return
-			}
-			writeJSON(w, http.StatusOK, []map[string]any{row})
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]string{"id": targetID})
+		writeJSON(w, http.StatusOK, []map[string]any{row})
 		return
 	}
-
-	if len(authPayload) > 0 {
-		var ignored map[string]any
-		if err := r.deps.AdminSupabase.AdminUpdateUser(req.Context(), targetID, authPayload, &ignored); err != nil {
-			writeSupabaseError(w, err)
-			return
-		}
-	}
-
-	if len(profilePayload) > 0 {
-		q := url.Values{}
-		q.Set("id", "eq."+targetID)
-		var rows []map[string]any
-		if err := r.deps.AdminSupabase.Patch(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "profiles", q, profilePayload, &rows); err != nil {
-			writeSupabaseError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, rows)
-		return
-	}
-
 	writeJSON(w, http.StatusOK, map[string]string{"id": targetID})
+	return
 }
 
 func (r *router) adminDeleteUser(w http.ResponseWriter, req *http.Request, adminUser AuthUser) {
@@ -357,31 +251,24 @@ func (r *router) adminDeleteUser(w http.ResponseWriter, req *http.Request, admin
 		writeError(w, http.StatusBadRequest, "cannot delete the signed-in admin user")
 		return
 	}
-	if r.usesPostgresStore() {
-		if r.deps.Postgres == nil {
-			writeError(w, http.StatusServiceUnavailable, "admin backend is not configured")
-			return
-		}
-		clerkUserID, err := r.postgresClerkUserIDForProfile(req.Context(), targetID)
-		if err != nil {
-			writeError(w, http.StatusBadGateway, "database error")
-			return
-		}
-		if _, err := r.deps.Postgres.Pool().Exec(req.Context(), `delete from profiles where id=$1`, targetID); err != nil {
-			writeError(w, http.StatusBadGateway, "database error")
-			return
-		}
-		if clerkUserID != "" && r.deps.ClerkAPI != nil && r.deps.ClerkAPI.configured() {
-			_ = r.deps.ClerkAPI.DeleteUser(req.Context(), clerkUserID)
-		}
-		writeJSON(w, http.StatusOK, map[string]string{"id": targetID})
+	if r.deps.Postgres == nil {
+		writeError(w, http.StatusServiceUnavailable, "admin backend is not configured")
 		return
 	}
-	if err := r.deps.AdminSupabase.AdminDeleteUser(req.Context(), targetID); err != nil {
-		writeSupabaseError(w, err)
+	clerkUserID, err := r.postgresClerkUserIDForProfile(req.Context(), targetID)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "database error")
 		return
+	}
+	if _, err := r.deps.Postgres.Pool().Exec(req.Context(), `delete from profiles where id=$1`, targetID); err != nil {
+		writeError(w, http.StatusBadGateway, "database error")
+		return
+	}
+	if clerkUserID != "" && r.deps.ClerkAPI != nil && r.deps.ClerkAPI.configured() {
+		_ = r.deps.ClerkAPI.DeleteUser(req.Context(), clerkUserID)
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"id": targetID})
+	return
 }
 
 func (r *router) adminListYurubos(w http.ResponseWriter, req *http.Request, _ AuthUser) {
@@ -391,29 +278,13 @@ func (r *router) adminListYurubos(w http.ResponseWriter, req *http.Request, _ Au
 		return
 	}
 	limit := yurubos.CleanLimit(req.URL.Query().Get("limit"), 80)
-	if r.usesPostgresStore() {
-		rows, err := r.adminListPostgresYurubos(req.Context(), status, limit)
-		if err != nil {
-			writeError(w, http.StatusBadGateway, "database error")
-			return
-		}
-		writeJSON(w, http.StatusOK, rows)
+	rows, err := r.adminListPostgresYurubos(req.Context(), status, limit)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "database error")
 		return
 	}
-	q := url.Values{}
-	q.Set("select", "id,wish_item_id,owner_user_id,title,body,category,place_text,place_lat,place_lng,time_label,starts_at,ends_at,status,visibility,expires_at,created_at,updated_at,owner:profiles!yurubos_owner_user_id_fkey(id,user_id,display_name,avatar_url,is_plus)")
-	q.Set("order", "created_at.desc")
-	q.Set("limit", strconv.Itoa(limit))
-	if status != contracts.QueryStatusAll {
-		q.Set("status", supabase.PostgRESTEq(status))
-	}
-	var rows []map[string]any
-	if err := r.deps.AdminSupabase.Get(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "yurubos", q, &rows); err != nil {
-		writeSupabaseError(w, err)
-		return
-	}
-	r.addAdminYuruboReactionCounts(req.Context(), rows)
 	writeJSON(w, http.StatusOK, rows)
+	return
 }
 
 func (r *router) adminCreateYurubo(w http.ResponseWriter, req *http.Request, _ AuthUser) {
@@ -457,25 +328,13 @@ func (r *router) adminCreateYurubo(w http.ResponseWriter, req *http.Request, _ A
 	} else if ok {
 		payload["starts_at"] = normalized
 	}
-	if r.usesPostgresStore() {
-		row, err := r.adminCreatePostgresYurubo(req.Context(), payload)
-		if err != nil {
-			writeError(w, http.StatusBadGateway, "database error")
-			return
-		}
-		writeJSON(w, http.StatusCreated, row)
+	row, err := r.adminCreatePostgresYurubo(req.Context(), payload)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "database error")
 		return
 	}
-	var rows []map[string]any
-	if err := r.deps.AdminSupabase.Post(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "yurubos", nil, payload, &rows); err != nil {
-		writeSupabaseError(w, err)
-		return
-	}
-	if len(rows) == 0 {
-		writeError(w, http.StatusBadGateway, "yurubo insert returned no rows")
-		return
-	}
-	writeJSON(w, http.StatusCreated, rows[0])
+	writeJSON(w, http.StatusCreated, row)
+	return
 }
 
 func (r *router) adminUpdateYurubo(w http.ResponseWriter, req *http.Request, _ AuthUser) {
@@ -547,23 +406,13 @@ func (r *router) adminUpdateYurubo(w http.ResponseWriter, req *http.Request, _ A
 		writeJSON(w, http.StatusOK, map[string]string{"id": yuruboID})
 		return
 	}
-	if r.usesPostgresStore() {
-		rows, err := r.adminUpdatePostgresYurubo(req.Context(), yuruboID, payload)
-		if err != nil {
-			writeError(w, http.StatusBadGateway, "database error")
-			return
-		}
-		writeJSON(w, http.StatusOK, rows)
-		return
-	}
-	q := url.Values{}
-	q.Set("id", "eq."+yuruboID)
-	var rows []map[string]any
-	if err := r.deps.AdminSupabase.Patch(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "yurubos", q, payload, &rows); err != nil {
-		writeSupabaseError(w, err)
+	rows, err := r.adminUpdatePostgresYurubo(req.Context(), yuruboID, payload)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "database error")
 		return
 	}
 	writeJSON(w, http.StatusOK, rows)
+	return
 }
 
 func (r *router) adminDeleteYurubo(w http.ResponseWriter, req *http.Request, _ AuthUser) {
@@ -572,84 +421,22 @@ func (r *router) adminDeleteYurubo(w http.ResponseWriter, req *http.Request, _ A
 		writeError(w, http.StatusBadRequest, errMessage)
 		return
 	}
-	if r.usesPostgresStore() {
-		rows, err := r.adminDeletePostgresYurubo(req.Context(), yuruboID)
-		if err != nil {
-			writeError(w, http.StatusBadGateway, "database error")
-			return
-		}
-		writeJSON(w, http.StatusOK, rows)
-		return
-	}
-	q := url.Values{}
-	q.Set("id", "eq."+yuruboID)
-	var rows []map[string]any
-	if err := r.deps.AdminSupabase.Delete(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "yurubos", q, &rows); err != nil {
-		writeSupabaseError(w, err)
+	rows, err := r.adminDeletePostgresYurubo(req.Context(), yuruboID)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "database error")
 		return
 	}
 	writeJSON(w, http.StatusOK, rows)
+	return
 }
 
 func (r *router) ensureOfficialProfile(req *http.Request) (string, error) {
-	if r.usesPostgresStore() {
-		if r.deps.Postgres == nil {
-			return "", errors.New("postgres pool is not configured")
-		}
-		var id string
-		err := r.deps.Postgres.Pool().QueryRow(req.Context(), `insert into profiles (user_id,display_name,character_key,avatar_url,is_plus,updated_at) values ($1,$2,'avatar','',true,now()) on conflict (user_id) do update set display_name=excluded.display_name,is_plus=true,updated_at=now() returning id::text`, officialProfileUserID, officialProfileDisplayName).Scan(&id)
-		return id, err
+	if r.deps.Postgres == nil {
+		return "", errors.New("postgres pool is not configured")
 	}
-	q := url.Values{}
-	q.Set("select", "id,user_id,display_name,character_key,avatar_url,is_plus")
-	q.Set("user_id", "eq."+officialProfileUserID)
-	q.Set("limit", "1")
-	var profiles []Profile
-	if err := r.deps.AdminSupabase.Get(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "profiles", q, &profiles); err != nil {
-		return "", err
-	}
-	if len(profiles) > 0 && profiles[0].ID != "" {
-		return profiles[0].ID, nil
-	}
-
-	password, err := randomAdminPassword()
-	if err != nil {
-		return "", err
-	}
-	authPayload := map[string]any{
-		"email":         officialProfileEmail,
-		"password":      password,
-		"email_confirm": true,
-		"user_metadata": map[string]any{
-			"display_name": officialProfileDisplayName,
-			"user_id":      officialProfileUserID,
-		},
-	}
-	var authResp map[string]any
-	if err := r.deps.AdminSupabase.AdminCreateUser(req.Context(), authPayload, &authResp); err != nil {
-		return "", err
-	}
-	createdUserID := authResponseUserID(authResp)
-	if createdUserID == "" {
-		return "", errors.New("official auth user creation returned no id")
-	}
-
-	profilePayload := map[string]any{
-		"id":            createdUserID,
-		"user_id":       officialProfileUserID,
-		"display_name":  officialProfileDisplayName,
-		"character_key": "avatar",
-		"avatar_url":    "",
-		"is_plus":       true,
-	}
-	upsertQ := url.Values{}
-	upsertQ.Set("on_conflict", "id")
-	var createdProfiles []Profile
-	if err := r.deps.AdminSupabase.Upsert(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "profiles", upsertQ, profilePayload, &createdProfiles); err != nil {
-		_ = r.deps.AdminSupabase.AdminDeleteUser(req.Context(), createdUserID)
-		return "", err
-	}
-	return createdUserID, nil
+	var id string
+	err := r.deps.Postgres.Pool().QueryRow(req.Context(), `insert into profiles (user_id,display_name,character_key,avatar_url,is_plus,updated_at) values ($1,$2,'avatar','',true,now()) on conflict (user_id) do update set display_name=excluded.display_name,is_plus=true,updated_at=now() returning id::text`, officialProfileUserID, officialProfileDisplayName).Scan(&id)
+	return id, err
 }
 
 func randomAdminPassword() (string, error) {
@@ -662,12 +449,7 @@ func randomAdminPassword() (string, error) {
 
 func (r *router) admin(next func(http.ResponseWriter, *http.Request, AuthUser)) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		if r.usesPostgresStore() {
-			if r.deps.Postgres == nil {
-				writeError(w, http.StatusServiceUnavailable, "admin backend is not configured")
-				return
-			}
-		} else if r.deps.AdminSupabase == nil || r.deps.Config.SupabaseServiceRoleKey == "" {
+		if r.deps.Postgres == nil {
 			writeError(w, http.StatusServiceUnavailable, "admin backend is not configured")
 			return
 		}
@@ -820,51 +602,35 @@ func (r *router) adminListPostgresUsers(ctx context.Context, search, statusDate 
 func (r *router) adminStatusesForDate(ctx context.Context, rows []map[string]any, statusDate string) (map[string]string, error) {
 	ids := make([]string, 0, len(rows))
 	for _, row := range rows {
-		id, _ := row["id"].(string)
-		if id != "" {
+		if id, _ := row["id"].(string); id != "" {
 			ids = append(ids, id)
 		}
 	}
-	if len(ids) == 0 {
+	if len(ids) == 0 || r.deps.Postgres == nil {
 		return map[string]string{}, nil
 	}
-	sort.Strings(ids)
-	statusQuery := url.Values{}
-	statusQuery.Set("select", "user_id,status")
-	statusQuery.Set("user_id", "in.("+strings.Join(ids, ",")+")")
-	statusQuery.Set("status_date", "eq."+statusDate)
-	var statuses []map[string]any
-	if err := r.deps.AdminSupabase.Get(ctx, r.deps.Config.SupabaseServiceRoleKey, "daily_statuses", statusQuery, &statuses); err != nil {
+	q, err := r.deps.Postgres.Pool().Query(ctx, `select user_id::text,status from daily_statuses where user_id=any($1::uuid[]) and status_date=$2`, ids, statusDate)
+	if err != nil {
 		return nil, err
 	}
+	defer q.Close()
 	m := map[string]string{}
-	for _, status := range statuses {
-		userID, _ := status["user_id"].(string)
-		statusKey, _ := status["status"].(string)
-		if userID != "" && strings.TrimSpace(statusKey) != "" {
-			m[userID] = statusKey
+	for q.Next() {
+		var userID, status string
+		if err := q.Scan(&userID, &status); err != nil {
+			return nil, err
 		}
+		m[userID] = status
 	}
-	return m, nil
+	return m, q.Err()
 }
 
 func (r *router) upsertAdminDailyStatus(ctx context.Context, targetUserID, statusDate, status string) error {
-	if r.usesPostgresStore() {
-		if r.deps.Postgres == nil {
-			return errors.New("postgres pool is not configured")
-		}
-		_, err := r.deps.Postgres.Pool().Exec(ctx, `insert into daily_statuses (user_id,status_date,status,updated_at) values ($1,$2,$3,now()) on conflict (user_id,status_date) do update set status=excluded.status, updated_at=now()`, targetUserID, statusDate, status)
-		return err
+	if r.deps.Postgres == nil {
+		return errors.New("postgres pool is not configured")
 	}
-	q := url.Values{}
-	q.Set("on_conflict", "user_id,status_date")
-	payload := map[string]any{
-		"user_id":     targetUserID,
-		"status_date": statusDate,
-		"status":      status,
-	}
-	var rows []map[string]any
-	return r.deps.AdminSupabase.Upsert(ctx, r.deps.Config.SupabaseServiceRoleKey, "daily_statuses", q, payload, &rows)
+	_, err := r.deps.Postgres.Pool().Exec(ctx, `insert into daily_statuses (user_id,status_date,status,updated_at) values ($1,$2,$3,now()) on conflict (user_id,status_date) do update set status=excluded.status, updated_at=now()`, targetUserID, statusDate, status)
+	return err
 }
 
 func (r *router) isAdminUser(user AuthUser) bool {
@@ -881,41 +647,79 @@ func (r *router) isAdminUser(user AuthUser) bool {
 }
 
 func (r *router) addAdminYuruboReactionCounts(ctx context.Context, rows []map[string]any) {
-	if r.usesPostgresStore() {
-		r.addPostgresAdminYuruboReactionCounts(ctx, rows)
-		return
+	r.addPostgresAdminYuruboReactionCounts(ctx, rows)
+}
+
+func cleanAdminYuruboStatus(value string, allowAll bool) (string, string) {
+	status := strings.TrimSpace(value)
+	if status == "" {
+		if allowAll {
+			return contracts.StatusOpen, ""
+		}
+		return contracts.StatusOpen, ""
 	}
-	ids := make([]string, 0, len(rows))
-	for _, row := range rows {
-		if id, _ := row["id"].(string); id != "" {
-			ids = append(ids, id)
+	if allowAll && status == contracts.QueryStatusAll {
+		return status, ""
+	}
+	switch status {
+	case contracts.StatusOpen, "closed", "expired", contracts.StatusCancelled, "scheduled":
+		return status, ""
+	default:
+		return "", "status is invalid"
+	}
+}
+
+func cleanAdminYuruboVisibility(value string) (string, string) {
+	visibility := strings.TrimSpace(value)
+	if visibility == "" {
+		return contracts.VisibilityFriends, ""
+	}
+	switch visibility {
+	case contracts.VisibilityFriends, contracts.VisibilityPrivate:
+		return visibility, ""
+	default:
+		return "", "visibility must be friends or private"
+	}
+}
+
+func validateAdminProfileInput(userID, displayName string) string {
+	if _, err := profiles.CleanUserID(userID); err != nil {
+		return err.Error()
+	}
+	if _, err := profiles.CleanDisplayName(displayName); err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
+func authResponseUserID(response map[string]any) string {
+	if id, ok := response["id"].(string); ok {
+		return id
+	}
+	if user, ok := response["user"].(map[string]any); ok {
+		if id, ok := user["id"].(string); ok {
+			return id
 		}
 	}
-	if len(ids) == 0 {
-		return
+	return ""
+}
+
+func firstMap(rows []map[string]any, fallback map[string]any) map[string]any {
+	if len(rows) > 0 {
+		return rows[0]
 	}
-	q := url.Values{}
-	q.Set("select", "yurubo_id,reaction_type")
-	q.Set("yurubo_id", "in.("+strings.Join(ids, ",")+")")
-	var reactions []map[string]any
-	if err := r.deps.AdminSupabase.Get(ctx, r.deps.Config.SupabaseServiceRoleKey, "yurubo_reactions", q, &reactions); err != nil {
-		return
-	}
-	counts := map[string]int{}
-	for _, reaction := range reactions {
-		id, _ := reaction["yurubo_id"].(string)
-		if id == "" {
-			continue
-		}
-		if reactionType, _ := reaction["reaction_type"].(string); reactionType == contracts.ReactionTypeAvailable {
-			counts[id]++
+	return fallback
+}
+
+func sanitizePostgRESTSearch(value string) string {
+	value = shortText(value, maxSearchRunes)
+	var builder strings.Builder
+	for _, r := range value {
+		if unicode.IsLetter(r) || unicode.IsNumber(r) || unicode.IsSpace(r) || r == '_' || r == '-' {
+			builder.WriteRune(r)
 		}
 	}
-	for _, row := range rows {
-		if id, _ := row["id"].(string); id != "" {
-			row["reaction_count"] = counts[id]
-		}
-	}
+	return strings.Join(strings.Fields(builder.String()), " ")
 }
 
 func (r *router) adminListPostgresYurubos(ctx context.Context, status string, limit int) ([]map[string]any, error) {
@@ -948,8 +752,7 @@ func (r *router) adminCreatePostgresYurubo(ctx context.Context, payload map[stri
 	if r.deps.Postgres == nil {
 		return nil, errors.New("postgres pool is not configured")
 	}
-	row := r.deps.Postgres.Pool().QueryRow(ctx, adminYuruboMutationSQL(`insert into yurubos (owner_user_id,title,body,category,place_text,time_label,status,visibility,starts_at,updated_at) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,now()) returning *`), payload["owner_user_id"], payload["title"], payload["body"], payload["category"], payload["place_text"], payload["time_label"], payload["status"], payload["visibility"], payload["starts_at"])
-	return scanAdminYurubo(row)
+	return scanAdminYurubo(r.deps.Postgres.Pool().QueryRow(ctx, adminYuruboMutationSQL(`insert into yurubos (owner_user_id,title,body,category,place_text,time_label,status,visibility,starts_at,updated_at) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,now()) returning *`), payload["owner_user_id"], payload["title"], payload["body"], payload["category"], payload["place_text"], payload["time_label"], payload["status"], payload["visibility"], payload["starts_at"]))
 }
 
 func (r *router) adminUpdatePostgresYurubo(ctx context.Context, id string, payload map[string]any) ([]map[string]any, error) {
@@ -968,7 +771,7 @@ func (r *router) adminUpdatePostgresYurubo(ctx context.Context, id string, paylo
 	timeLabel := valueOrExistingString(payload, "time_label", current)
 	status := valueOrExistingString(payload, "status", current)
 	visibility := valueOrExistingString(payload, "visibility", current)
-	starts := any(nil)
+	var starts any
 	if v, ok := payload["starts_at"]; ok {
 		starts = v
 	} else if v, ok := current["starts_at"]; ok {
@@ -1074,76 +877,4 @@ func (r *router) addPostgresAdminYuruboReactionCounts(ctx context.Context, rows 
 			row["reaction_count"] = counts[id]
 		}
 	}
-}
-
-func cleanAdminYuruboStatus(value string, allowAll bool) (string, string) {
-	status := strings.TrimSpace(value)
-	if status == "" {
-		if allowAll {
-			return contracts.StatusOpen, ""
-		}
-		return contracts.StatusOpen, ""
-	}
-	if allowAll && status == contracts.QueryStatusAll {
-		return status, ""
-	}
-	switch status {
-	case contracts.StatusOpen, "closed", "expired", contracts.StatusCancelled, "scheduled":
-		return status, ""
-	default:
-		return "", "status is invalid"
-	}
-}
-
-func cleanAdminYuruboVisibility(value string) (string, string) {
-	visibility := strings.TrimSpace(value)
-	if visibility == "" {
-		return contracts.VisibilityFriends, ""
-	}
-	switch visibility {
-	case contracts.VisibilityFriends, contracts.VisibilityPrivate:
-		return visibility, ""
-	default:
-		return "", "visibility must be friends or private"
-	}
-}
-
-func validateAdminProfileInput(userID, displayName string) string {
-	if _, err := profiles.CleanUserID(userID); err != nil {
-		return err.Error()
-	}
-	if _, err := profiles.CleanDisplayName(displayName); err != nil {
-		return err.Error()
-	}
-	return ""
-}
-
-func authResponseUserID(response map[string]any) string {
-	if id, ok := response["id"].(string); ok {
-		return id
-	}
-	if user, ok := response["user"].(map[string]any); ok {
-		if id, ok := user["id"].(string); ok {
-			return id
-		}
-	}
-	return ""
-}
-
-func firstMap(rows []map[string]any, fallback map[string]any) map[string]any {
-	if len(rows) > 0 {
-		return rows[0]
-	}
-	return fallback
-}
-
-func sanitizePostgRESTSearch(value string) string {
-	value = shortText(value, maxSearchRunes)
-	var builder strings.Builder
-	for _, r := range value {
-		if unicode.IsLetter(r) || unicode.IsNumber(r) || unicode.IsSpace(r) || r == '_' || r == '-' {
-			builder.WriteRune(r)
-		}
-	}
-	return strings.Join(strings.Fields(builder.String()), " ")
 }

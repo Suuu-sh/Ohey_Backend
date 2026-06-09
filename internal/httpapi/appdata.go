@@ -358,36 +358,24 @@ func (r *router) markNotificationsRead(w http.ResponseWriter, req *http.Request,
 
 func (r *router) deleteOwnAccount(w http.ResponseWriter, req *http.Request, _ string) {
 	userID := strings.TrimSpace(req.Header.Get("X-Ohey-User-ID"))
-	if r.usesPostgresStore() {
-		if r.deps.Postgres == nil {
-			writeError(w, http.StatusServiceUnavailable, "database is not configured")
-			return
-		}
-		clerkUserID := strings.TrimSpace(req.Header.Get("X-Ohey-Clerk-User-ID"))
-		if clerkUserID != "" && (r.deps.ClerkAPI == nil || !r.deps.ClerkAPI.configured()) {
-			writeError(w, http.StatusServiceUnavailable, "account deletion is temporarily unavailable")
-			return
-		}
-		if _, err := r.deps.Postgres.Pool().Exec(req.Context(), `delete from profiles where id=$1`, userID); err != nil {
-			writeError(w, http.StatusBadGateway, "database error")
-			return
-		}
-		if clerkUserID != "" {
-			if err := r.deps.ClerkAPI.DeleteUser(req.Context(), clerkUserID); err != nil {
-				writeError(w, http.StatusBadGateway, "auth provider error")
-				return
-			}
-		}
-		writeJSON(w, http.StatusOK, map[string]string{"id": userID})
+	if r.deps.Postgres == nil {
+		writeError(w, http.StatusServiceUnavailable, "database is not configured")
 		return
 	}
-	if r.deps.AdminSupabase == nil || strings.TrimSpace(r.deps.Config.SupabaseServiceRoleKey) == "" {
+	clerkUserID := strings.TrimSpace(req.Header.Get("X-Ohey-Clerk-User-ID"))
+	if clerkUserID != "" && (r.deps.ClerkAPI == nil || !r.deps.ClerkAPI.configured()) {
 		writeError(w, http.StatusServiceUnavailable, "account deletion is temporarily unavailable")
 		return
 	}
-	if err := r.deps.AdminSupabase.AdminDeleteUser(req.Context(), userID); err != nil {
-		writeSupabaseError(w, err)
+	if _, err := r.deps.Postgres.Pool().Exec(req.Context(), `delete from profiles where id=$1`, userID); err != nil {
+		writeError(w, http.StatusBadGateway, "database error")
 		return
+	}
+	if clerkUserID != "" {
+		if err := r.deps.ClerkAPI.DeleteUser(req.Context(), clerkUserID); err != nil {
+			writeError(w, http.StatusBadGateway, "auth provider error")
+			return
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"id": userID})
 }
@@ -399,7 +387,7 @@ func (r *router) listTodayReservations(w http.ResponseWriter, req *http.Request,
 		ScheduledDate: dateOnlyParam(req, "date"),
 	})
 	if err != nil {
-		writeSupabaseError(w, err)
+		writeUpstreamError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, rows)
@@ -412,7 +400,7 @@ func (r *router) listIncomingPendingInvites(w http.ResponseWriter, req *http.Req
 		ScheduledDate: dateOnlyParam(req, "date"),
 	})
 	if err != nil {
-		writeSupabaseError(w, err)
+		writeUpstreamError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, rows)
@@ -425,7 +413,7 @@ func (r *router) listOutgoingActiveInvites(w http.ResponseWriter, req *http.Requ
 		ScheduledDate: dateOnlyParam(req, "date"),
 	})
 	if err != nil {
-		writeSupabaseError(w, err)
+		writeUpstreamError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, rows)
@@ -477,14 +465,7 @@ func (r *router) updateInvite(w http.ResponseWriter, req *http.Request, authToke
 }
 
 func (r *router) inviteUsecase(req *http.Request) *invites.Usecase {
-	var repository invites.Repository = invites.NewSupabaseRepository(r.deps.Supabase)
-	if r.deps.Config.DataStore == "postgres" || r.deps.Config.DataStore == "neon" {
-		if r.deps.Postgres == nil {
-			repository = invites.NewPostgresRepository(nil)
-		} else {
-			repository = invites.NewPostgresRepository(r.deps.Postgres.Pool())
-		}
-	}
+	repository := invites.NewPostgresRepository(postgresPool(r))
 	return invites.NewUsecase(invites.Dependencies{
 		Repository: repository,
 		Publisher:  inviteEventPublisher{router: r, req: req},
@@ -492,14 +473,7 @@ func (r *router) inviteUsecase(req *http.Request) *invites.Usecase {
 }
 
 func (r *router) friendsUsecase(req *http.Request) *friends.Usecase {
-	var repository friends.Repository = friends.NewSupabaseRepository(r.deps.Supabase, r.deps.AdminSupabase, r.deps.Config.SupabaseServiceRoleKey)
-	if r.deps.Config.DataStore == "postgres" || r.deps.Config.DataStore == "neon" {
-		if r.deps.Postgres == nil {
-			repository = friends.NewPostgresRepository(nil)
-		} else {
-			repository = friends.NewPostgresRepository(r.deps.Postgres.Pool())
-		}
-	}
+	repository := friends.NewPostgresRepository(postgresPool(r))
 	return friends.NewUsecase(friends.Dependencies{
 		Repository: repository,
 		Publisher:  friendRequestEventPublisher{router: r, req: req},
@@ -585,7 +559,7 @@ func writeInviteError(w http.ResponseWriter, err error) {
 		}
 		return
 	}
-	writeSupabaseError(w, err)
+	writeUpstreamError(w, err)
 }
 
 func writeFriendsError(w http.ResponseWriter, err error) {
@@ -602,18 +576,11 @@ func writeFriendsError(w http.ResponseWriter, err error) {
 		}
 		return
 	}
-	writeSupabaseError(w, err)
+	writeUpstreamError(w, err)
 }
 
 func (r *router) userSafetyUsecase() *usersafety.Usecase {
-	var repository usersafety.Repository = usersafety.NewSupabaseRepository(r.deps.Supabase, r.deps.AdminSupabase, r.deps.Config.SupabaseServiceRoleKey)
-	if r.deps.Config.DataStore == "postgres" || r.deps.Config.DataStore == "neon" {
-		if r.deps.Postgres == nil {
-			repository = usersafety.NewPostgresRepository(nil)
-		} else {
-			repository = usersafety.NewPostgresRepository(r.deps.Postgres.Pool())
-		}
-	}
+	repository := usersafety.NewPostgresRepository(postgresPool(r))
 	return usersafety.NewUsecase(usersafety.Dependencies{
 		Repository: repository,
 	})
@@ -631,18 +598,11 @@ func writeUserSafetyError(w http.ResponseWriter, err error) {
 		}
 		return
 	}
-	writeSupabaseError(w, err)
+	writeUpstreamError(w, err)
 }
 
 func (r *router) friendGroupsUsecase() *friendgroups.Usecase {
-	var repository friendgroups.Repository = friendgroups.NewSupabaseRepository(r.deps.Supabase)
-	if r.deps.Config.DataStore == "postgres" || r.deps.Config.DataStore == "neon" {
-		if r.deps.Postgres == nil {
-			repository = friendgroups.NewPostgresRepository(nil)
-		} else {
-			repository = friendgroups.NewPostgresRepository(r.deps.Postgres.Pool())
-		}
-	}
+	repository := friendgroups.NewPostgresRepository(postgresPool(r))
 	return friendgroups.NewUsecase(friendgroups.Dependencies{
 		Repository: repository,
 	})
@@ -660,18 +620,11 @@ func writeFriendGroupsError(w http.ResponseWriter, err error) {
 		}
 		return
 	}
-	writeSupabaseError(w, err)
+	writeUpstreamError(w, err)
 }
 
 func (r *router) profileUsecase() *profiles.Usecase {
-	var repository profiles.Repository = profiles.NewSupabaseRepository(r.deps.Supabase)
-	if r.deps.Config.DataStore == "postgres" || r.deps.Config.DataStore == "neon" {
-		if r.deps.Postgres == nil {
-			repository = profiles.NewPostgresRepository(nil)
-		} else {
-			repository = profiles.NewPostgresRepository(r.deps.Postgres.Pool())
-		}
-	}
+	repository := profiles.NewPostgresRepository(postgresPool(r))
 	return profiles.NewUsecase(profiles.Dependencies{
 		Repository: repository,
 	})
@@ -689,18 +642,11 @@ func writeProfileError(w http.ResponseWriter, err error) {
 		}
 		return
 	}
-	writeSupabaseError(w, err)
+	writeUpstreamError(w, err)
 }
 
 func (r *router) dailyStatusUsecase() *dailystatuses.Usecase {
-	var repository dailystatuses.Repository = dailystatuses.NewSupabaseRepository(r.deps.Supabase)
-	if r.deps.Config.DataStore == "postgres" || r.deps.Config.DataStore == "neon" {
-		if r.deps.Postgres == nil {
-			repository = dailystatuses.NewPostgresRepository(nil)
-		} else {
-			repository = dailystatuses.NewPostgresRepository(r.deps.Postgres.Pool())
-		}
-	}
+	repository := dailystatuses.NewPostgresRepository(postgresPool(r))
 	return dailystatuses.NewUsecase(dailystatuses.Dependencies{
 		Repository: repository,
 	})
@@ -716,7 +662,7 @@ func writeDailyStatusError(w http.ResponseWriter, err error) {
 		}
 		return
 	}
-	writeSupabaseError(w, err)
+	writeUpstreamError(w, err)
 }
 
 func dateOnlyParam(req *http.Request, name string) string {

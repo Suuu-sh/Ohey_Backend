@@ -17,8 +17,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/yota/ohey/backend/internal/supabase"
 )
 
 const (
@@ -36,13 +34,11 @@ var (
 )
 
 type authVerifier struct {
-	client             *supabase.Client
-	httpClient         *http.Client
-	issuer             string
-	jwksURL            string
-	audience           string
-	authServerFallback bool
-	now                func() time.Time
+	httpClient *http.Client
+	issuer     string
+	jwksURL    string
+	audience   string
+	now        func() time.Time
 
 	mu         sync.Mutex
 	tokenCache map[[32]byte]cachedAuthUser
@@ -103,15 +99,6 @@ type jwk struct {
 	Y      string   `json:"y"`
 }
 
-func newSupabaseAuthVerifier(client *supabase.Client, supabaseURL string, now func() time.Time) *authVerifier {
-	return newAuthVerifier(authVerifierConfig{
-		client:             client,
-		issuer:             strings.TrimRight(supabaseURL, "/") + "/auth/v1",
-		authServerFallback: true,
-		now:                now,
-	})
-}
-
 func newClerkAuthVerifier(issuer, jwksURL, audience string, httpClient *http.Client, now func() time.Time) *authVerifier {
 	return newAuthVerifier(authVerifierConfig{
 		httpClient: httpClient,
@@ -123,13 +110,11 @@ func newClerkAuthVerifier(issuer, jwksURL, audience string, httpClient *http.Cli
 }
 
 type authVerifierConfig struct {
-	client             *supabase.Client
-	httpClient         *http.Client
-	issuer             string
-	jwksURL            string
-	audience           string
-	authServerFallback bool
-	now                func() time.Time
+	httpClient *http.Client
+	issuer     string
+	jwksURL    string
+	audience   string
+	now        func() time.Time
 }
 
 func newAuthVerifier(cfg authVerifierConfig) *authVerifier {
@@ -140,14 +125,12 @@ func newAuthVerifier(cfg authVerifierConfig) *authVerifier {
 		cfg.httpClient = http.DefaultClient
 	}
 	return &authVerifier{
-		client:             cfg.client,
-		httpClient:         cfg.httpClient,
-		issuer:             strings.TrimRight(cfg.issuer, "/"),
-		jwksURL:            strings.TrimSpace(cfg.jwksURL),
-		audience:           strings.TrimSpace(cfg.audience),
-		authServerFallback: cfg.authServerFallback,
-		now:                cfg.now,
-		tokenCache:         make(map[[32]byte]cachedAuthUser),
+		httpClient: cfg.httpClient,
+		issuer:     strings.TrimRight(cfg.issuer, "/"),
+		jwksURL:    strings.TrimSpace(cfg.jwksURL),
+		audience:   strings.TrimSpace(cfg.audience),
+		now:        cfg.now,
+		tokenCache: make(map[[32]byte]cachedAuthUser),
 	}
 }
 
@@ -172,7 +155,7 @@ func writeAuthVerificationError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusUnauthorized, "authentication failed")
 		return
 	}
-	writeSupabaseError(w, err)
+	writeUpstreamError(w, err)
 }
 
 func (v *authVerifier) Verify(ctx context.Context, token string) (AuthUser, error) {
@@ -198,15 +181,9 @@ func (v *authVerifier) Verify(ctx context.Context, token string) (AuthUser, erro
 				return AuthUser{}, err
 			}
 		}
-		if v.authServerFallback {
-			return v.verifyWithAuthServer(ctx, token, parsed.expiresAt)
-		}
 		return AuthUser{}, errInvalidAuthToken
 	}
 
-	if v.authServerFallback {
-		return v.verifyWithAuthServer(ctx, token, time.Time{})
-	}
 	return AuthUser{}, errInvalidAuthToken
 }
 
@@ -254,18 +231,6 @@ func (v *authVerifier) cacheToken(token string, user AuthUser, tokenExpiresAt ti
 		}
 	}
 	v.tokenCache[key] = cachedAuthUser{user: user, expiresAt: expiresAt}
-}
-
-func (v *authVerifier) verifyWithAuthServer(ctx context.Context, token string, tokenExpiresAt time.Time) (AuthUser, error) {
-	if v.client == nil {
-		return AuthUser{}, errors.New("supabase client is not configured")
-	}
-	var authUser AuthUser
-	if err := v.client.GetAuthUser(ctx, token, &authUser); err != nil {
-		return AuthUser{}, err
-	}
-	v.cacheToken(token, authUser, tokenExpiresAt, authServerTokenCacheTTL)
-	return authUser, nil
 }
 
 func parseJWT(token string) (parsedJWT, error) {
@@ -394,12 +359,7 @@ func (v *authVerifier) cachedJWKs(ctx context.Context, forceRefresh bool) ([]jwk
 			return nil, err
 		}
 	} else {
-		if v.client == nil {
-			return nil, errors.New("supabase client is not configured")
-		}
-		if err := v.client.GetAuthJWKS(ctx, &set); err != nil {
-			return nil, err
-		}
+		return nil, errors.New("jwks url is not configured")
 	}
 	v.jwksCache = cachedAuthJWKS{
 		keys:      set.Keys,

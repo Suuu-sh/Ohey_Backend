@@ -9,14 +9,7 @@ import (
 )
 
 func (r *router) yurubosUsecase() *yurubos.Usecase {
-	var repository yurubos.Repository = yurubos.NewSupabaseRepository(r.deps.Supabase, r.deps.AdminSupabase, r.deps.Config.SupabaseServiceRoleKey)
-	if r.deps.Config.DataStore == "postgres" || r.deps.Config.DataStore == "neon" {
-		if r.deps.Postgres == nil {
-			repository = yurubos.NewPostgresRepository(nil)
-		} else {
-			repository = yurubos.NewPostgresRepository(r.deps.Postgres.Pool())
-		}
-	}
+	repository := yurubos.NewPostgresRepository(postgresPool(r))
 	return yurubos.NewUsecase(yurubos.Dependencies{
 		Repository: repository,
 		Publisher:  yuruboEventPublisher{router: r},

@@ -7,6 +7,11 @@ import (
 	"time"
 )
 
+const (
+	testUserID  = "11111111-1111-1111-1111-111111111111"
+	otherUserID = "22222222-2222-2222-2222-222222222222"
+)
+
 func TestActionRateLimiterScopesByUserAndAction(t *testing.T) {
 	now := time.Date(2026, 5, 28, 12, 0, 0, 0, time.UTC)
 	limiter := newActionRateLimiter(func() time.Time { return now })

@@ -5,25 +5,7 @@ import (
 	"testing"
 )
 
-func TestLoadAllowsSupabaseStoreByDefault(t *testing.T) {
-	t.Setenv(EnvSupabaseURL, "https://example.supabase.co")
-	t.Setenv(EnvSupabaseAnonKey, "anon")
-
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	if cfg.DataStore != "supabase" {
-		t.Fatalf("DataStore = %q, want supabase", cfg.DataStore)
-	}
-	if cfg.DatabaseMaxConns != 10 {
-		t.Fatalf("DatabaseMaxConns = %d, want 10", cfg.DatabaseMaxConns)
-	}
-}
-
-func TestLoadRequiresDatabaseURLForNeonStore(t *testing.T) {
-	t.Setenv(EnvDataStore, "neon")
-	t.Setenv(EnvAuthProvider, "clerk")
+func TestLoadRequiresDatabaseURLByDefault(t *testing.T) {
 	t.Setenv(EnvClerkIssuer, "https://clerk.example")
 
 	_, err := Load()
@@ -32,10 +14,10 @@ func TestLoadRequiresDatabaseURLForNeonStore(t *testing.T) {
 	}
 }
 
-func TestLoadRequiresClerkAuthForNeonStore(t *testing.T) {
+func TestLoadRejectsNonClerkAuth(t *testing.T) {
 	t.Setenv(EnvDataStore, "neon")
 	t.Setenv(EnvDatabaseURL, "postgres://user:pass@example.neon.tech/db?sslmode=require")
-	t.Setenv(EnvAuthProvider, "supabase")
+	t.Setenv(EnvAuthProvider, "legacy")
 
 	_, err := Load()
 	if err == nil || !strings.Contains(err.Error(), EnvAuthProvider) {
