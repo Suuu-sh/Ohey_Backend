@@ -9,8 +9,9 @@ import (
 )
 
 func (r *router) yurubosUsecase() *yurubos.Usecase {
+	repository := yurubos.NewPostgresRepository(postgresPool(r))
 	return yurubos.NewUsecase(yurubos.Dependencies{
-		Repository: yurubos.NewSupabaseRepository(r.deps.Supabase, r.deps.AdminSupabase, r.deps.Config.SupabaseServiceRoleKey),
+		Repository: repository,
 		Publisher:  yuruboEventPublisher{router: r},
 	})
 }

@@ -2,25 +2,25 @@ package httpapi
 
 import (
 	"encoding/json"
-	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/yota/ohey/backend/internal/config"
 	"github.com/yota/ohey/backend/internal/contracts"
 	"github.com/yota/ohey/backend/internal/features/dailystatuses"
 	"github.com/yota/ohey/backend/internal/features/friends"
 	"github.com/yota/ohey/backend/internal/features/profiles"
-	"github.com/yota/ohey/backend/internal/supabase"
+	"github.com/yota/ohey/backend/internal/postgres"
 )
 
 type Dependencies struct {
-	Config        config.Config
-	Logger        *slog.Logger
-	Supabase      *supabase.Client
-	AdminSupabase *supabase.Client
-	FCM           *fcmSender
+	Config   config.Config
+	Logger   *slog.Logger
+	Postgres *postgres.DB
+	FCM      *fcmSender
+	ClerkAPI *clerkAPIClient
 }
 
 type router struct {
@@ -30,15 +30,32 @@ type router struct {
 	authVerifier *authVerifier
 }
 
+func newConfiguredAuthVerifier(deps Dependencies) *authVerifier {
+	return newClerkAuthVerifier(
+		deps.Config.ClerkIssuer,
+		deps.Config.ClerkJWKSURL,
+		deps.Config.ClerkAudience,
+		nil,
+		timeNow,
+	)
+}
+
 func NewRouter(deps Dependencies) http.Handler {
 	r := &router{
 		deps:         deps,
 		mux:          http.NewServeMux(),
 		rateLimiter:  newActionRateLimiter(timeNow),
-		authVerifier: newAuthVerifier(deps.Supabase, deps.Config.SupabaseURL, timeNow),
+		authVerifier: newConfiguredAuthVerifier(deps),
 	}
 	r.routes()
 	return r.withCORS(r.mux)
+}
+
+func postgresPool(r *router) *pgxpool.Pool {
+	if r == nil || r.deps.Postgres == nil {
+		return nil
+	}
+	return r.deps.Postgres.Pool()
 }
 
 func route(method, path string) string {
@@ -47,6 +64,8 @@ func route(method, path string) string {
 
 func (r *router) routes() {
 	r.mux.HandleFunc(route(http.MethodGet, contracts.APIPathHealth), r.health)
+	r.mux.HandleFunc(route(http.MethodGet, contracts.APIPathLegalTerms), r.legalTerms)
+	r.mux.HandleFunc(route(http.MethodGet, contracts.APIPathLegalPrivacy), r.legalPrivacy)
 	r.mux.HandleFunc(route(http.MethodGet, contracts.APIPathShareYurubo), r.shareYurubo)
 	r.mux.HandleFunc(route(http.MethodPost, contracts.APIPathAuthSignup), r.signupWithPassword)
 	r.mux.HandleFunc(route(http.MethodGet, contracts.APIPathMeProfile), r.auth(r.getProfile))
@@ -116,8 +135,9 @@ func (r *router) health(w http.ResponseWriter, _ *http.Request) {
 
 func (r *router) getProfile(w http.ResponseWriter, req *http.Request, authToken string) {
 	profile, err := r.profileUsecase().GetProfile(req.Context(), profiles.AuthInput{
-		AuthToken:  authToken,
-		AuthUserID: req.Header.Get("X-Ohey-User-ID"),
+		AuthToken:   authToken,
+		AuthUserID:  req.Header.Get("X-Ohey-User-ID"),
+		ClerkUserID: req.Header.Get("X-Ohey-Clerk-User-ID"),
 	})
 	if err != nil {
 		writeProfileError(w, err)
@@ -239,15 +259,19 @@ func (r *router) auth(next func(http.ResponseWriter, *http.Request, string)) htt
 			writeError(w, http.StatusUnauthorized, "missing Bearer token")
 			return
 		}
+		authUser, err := r.verifyAuthToken(req.Context(), token)
+		if err != nil {
+			writeAuthVerificationError(w, err)
+			return
+		}
+		if r.deps.Config.AuthProvider == "clerk" {
+			r.authClerk(w, req, next, token, authUser)
+			return
+		}
 		userID := strings.TrimSpace(req.Header.Get("X-Ohey-User-ID"))
 		cleanUserID, errMessage := cleanUUID(userID, "X-Ohey-User-ID")
 		if errMessage != "" {
 			writeError(w, http.StatusBadRequest, errMessage)
-			return
-		}
-		authUser, err := r.verifyAuthToken(req.Context(), token)
-		if err != nil {
-			writeAuthVerificationError(w, err)
 			return
 		}
 		authUserID, errMessage := cleanUUID(authUser.ID, "auth user id")
@@ -262,6 +286,36 @@ func (r *router) auth(next func(http.ResponseWriter, *http.Request, string)) htt
 		req.Header.Set("X-Ohey-User-ID", authUserID)
 		next(w, req, token)
 	}
+}
+
+func (r *router) authClerk(w http.ResponseWriter, req *http.Request, next func(http.ResponseWriter, *http.Request, string), authToken string, authUser AuthUser) {
+	clerkUserID := strings.TrimSpace(authUser.ID)
+	if clerkUserID == "" {
+		writeError(w, http.StatusUnauthorized, "invalid auth user")
+		return
+	}
+	if headerUserID := strings.TrimSpace(req.Header.Get("X-Ohey-User-ID")); headerUserID != "" && headerUserID != clerkUserID {
+		writeError(w, http.StatusForbidden, "auth user mismatch")
+		return
+	}
+	downstreamToken := authToken
+	profile, err := r.profileUsecase().GetProfile(req.Context(), profiles.AuthInput{
+		AuthToken:   downstreamToken,
+		ClerkUserID: clerkUserID,
+	})
+	if err == nil && profile != nil {
+		req.Header.Set("X-Ohey-User-ID", profile.ID)
+		req.Header.Set("X-Ohey-Clerk-User-ID", clerkUserID)
+		next(w, req, downstreamToken)
+		return
+	}
+	if req.Method == http.MethodPut && req.URL.Path == contracts.APIPathMeProfile {
+		req.Header.Del("X-Ohey-User-ID")
+		req.Header.Set("X-Ohey-Clerk-User-ID", clerkUserID)
+		next(w, req, downstreamToken)
+		return
+	}
+	writeProfileError(w, profiles.UserError{Kind: profiles.ErrorKindNotFound, Message: "profile not found"})
 }
 
 func (r *router) withCORS(next http.Handler) http.Handler {
@@ -303,30 +357,6 @@ func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, map[string]string{"error": message})
 }
 
-func writeSupabaseError(w http.ResponseWriter, err error) {
-	var apiErr supabase.APIError
-	if errors.As(err, &apiErr) {
-		writeError(w, apiErr.StatusCode, safeSupabaseErrorMessage(apiErr.StatusCode))
-		return
-	}
+func writeUpstreamError(w http.ResponseWriter, _ error) {
 	writeError(w, http.StatusBadGateway, "upstream service error")
-}
-
-func safeSupabaseErrorMessage(status int) string {
-	switch {
-	case status == http.StatusUnauthorized:
-		return "authentication failed"
-	case status == http.StatusForbidden:
-		return "access denied"
-	case status == http.StatusNotFound:
-		return "resource not found"
-	case status == http.StatusConflict:
-		return "request conflicts with existing data"
-	case status == http.StatusTooManyRequests:
-		return "too many requests"
-	case status >= 500:
-		return "upstream service error"
-	default:
-		return "request rejected by upstream service"
-	}
 }

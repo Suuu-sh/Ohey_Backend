@@ -12,7 +12,7 @@ import (
 
 	"github.com/yota/ohey/backend/internal/config"
 	"github.com/yota/ohey/backend/internal/httpapi"
-	"github.com/yota/ohey/backend/internal/supabase"
+	"github.com/yota/ohey/backend/internal/postgres"
 )
 
 func main() {
@@ -22,11 +22,6 @@ func main() {
 		logger.Error("configuration error", "error", err)
 		os.Exit(1)
 	}
-	if strings.TrimSpace(cfg.SupabaseServiceRoleKey) == "" {
-		logger.Error("SUPABASE_SERVICE_ROLE_KEY is required for notification worker")
-		os.Exit(1)
-	}
-
 	limit := 50
 	if raw := strings.TrimSpace(os.Getenv("NOTIFICATION_OUTBOX_WORKER_LIMIT")); raw != "" {
 		parsed, err := strconv.Atoi(raw)
@@ -38,8 +33,16 @@ func main() {
 	}
 
 	httpClient := &http.Client{Timeout: 30 * time.Second}
-	supabaseClient := supabase.NewClient(cfg.SupabaseURL, cfg.SupabaseAnonKey, httpClient)
-	adminSupabaseClient := supabase.NewClient(cfg.SupabaseURL, cfg.SupabaseServiceRoleKey, httpClient)
+	var postgresDB *postgres.DB
+	postgresDB, err = postgres.Open(context.Background(), postgres.Config{
+		DatabaseURL: cfg.DatabaseURL,
+		MaxConns:    cfg.DatabaseMaxConns,
+	})
+	if err != nil {
+		logger.Error("postgres configuration error", "error", err)
+		os.Exit(1)
+	}
+	defer postgresDB.Close()
 	fcm, err := httpapi.NewFCMSender(cfg.FCMServiceAccountJSON, httpClient)
 	if err != nil {
 		logger.Error("fcm configuration error", "error", err)
@@ -47,11 +50,10 @@ func main() {
 	}
 
 	result, err := httpapi.ProcessNotificationOutboxOnce(context.Background(), httpapi.Dependencies{
-		Config:        cfg,
-		Logger:        logger,
-		Supabase:      supabaseClient,
-		AdminSupabase: adminSupabaseClient,
-		FCM:           fcm,
+		Config:   cfg,
+		Logger:   logger,
+		Postgres: postgresDB,
+		FCM:      fcm,
 	}, limit)
 	if err != nil {
 		logger.Error("notification outbox worker failed", "error", err)

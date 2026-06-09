@@ -2,16 +2,15 @@ package httpapi
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/yota/ohey/backend/internal/contracts"
 	"github.com/yota/ohey/backend/internal/features/notifications"
-	"github.com/yota/ohey/backend/internal/supabase"
 )
 
 type notificationOutboxEvent struct {
@@ -31,15 +30,21 @@ type NotificationOutboxProcessResult struct {
 
 func ProcessNotificationOutboxOnce(ctx context.Context, deps Dependencies, limit int) (NotificationOutboxProcessResult, error) {
 	r := &router{deps: deps}
-	return r.processNotificationOutbox(ctx, deps.Config.SupabaseServiceRoleKey, limit)
+	return r.processNotificationOutbox(ctx, "", limit)
 }
+
+func (r *router) usesPostgresStore() bool { return true }
 
 func (r *router) notificationUsecase(_ *http.Request) *notifications.Usecase {
 	return notifications.NewUsecase(notifications.Dependencies{
-		Repository: notifications.NewSupabaseRepository(r.deps.Supabase, r.deps.AdminSupabase, r.deps.Config.SupabaseServiceRoleKey),
+		Repository: r.notificationRepository(),
 		PushSender: r.deps.FCM,
 		Logger:     r.deps.Logger,
 	})
+}
+
+func (r *router) notificationRepository() notifications.Repository {
+	return notifications.NewPostgresRepository(postgresPool(r))
 }
 
 func (r *router) createFriendRequestReceivedNotification(req *http.Request, authToken string, requestRow map[string]any) {
@@ -81,50 +86,48 @@ func (r *router) enqueueAndProcessNotificationOutboxEvent(ctx context.Context, a
 }
 
 func (r *router) recordNotificationOutboxEvent(ctx context.Context, event notificationOutboxEvent, status string) string {
-	if r.deps.AdminSupabase == nil || r.deps.Config.SupabaseServiceRoleKey == "" || event.EventKind == "" {
+	if event.EventKind == "" {
+		return ""
+	}
+	return r.recordPostgresNotificationOutboxEvent(ctx, event, status)
+}
+
+func (r *router) recordPostgresNotificationOutboxEvent(ctx context.Context, event notificationOutboxEvent, status string) string {
+	if r.deps.Postgres == nil {
 		return ""
 	}
 	payload := event.Payload
 	if payload == nil {
 		payload = map[string]any{}
 	}
+	payloadJSON, err := json.Marshal(payload)
+	if err != nil {
+		return ""
+	}
 	status = strings.TrimSpace(status)
 	if status == "" {
 		status = contracts.StatusPending
 	}
-	body := map[string]any{
-		"event_kind":     event.EventKind,
-		"aggregate_type": event.AggregateType,
-		"payload":        payload,
-		"status":         status,
-	}
+	attempts := 0
+	var processedAt any
 	if status == contracts.OutboxStatusProcessed {
-		body["attempts"] = 1
-		body["processed_at"] = time.Now().UTC().Format(time.RFC3339)
+		attempts = 1
+		processedAt = time.Now().UTC()
 	}
-	if event.AggregateID != "" {
-		body["aggregate_id"] = event.AggregateID
-	}
-	if event.ActorUserID != "" {
-		body["actor_user_id"] = event.ActorUserID
-	}
-	if event.RecipientUserID != "" {
-		body["recipient_user_id"] = event.RecipientUserID
-	}
-	var rows []map[string]any
-	if err := r.deps.AdminSupabase.Post(ctx, r.deps.Config.SupabaseServiceRoleKey, "notification_outbox", nil, body, &rows); err != nil {
+	var id string
+	err = r.deps.Postgres.Pool().QueryRow(ctx, `insert into notification_outbox (event_kind,aggregate_type,aggregate_id,actor_user_id,recipient_user_id,payload,status,attempts,processed_at) values ($1,$2,nullif($3,'')::uuid,nullif($4,'')::uuid,nullif($5,'')::uuid,$6::jsonb,$7,$8,$9) returning id::text`, event.EventKind, event.AggregateType, event.AggregateID, event.ActorUserID, event.RecipientUserID, string(payloadJSON), status, attempts, processedAt).Scan(&id)
+	if err != nil {
 		if r.deps.Logger != nil {
 			r.deps.Logger.Warn("failed to record notification outbox event", "event", event.EventKind, "error", err)
 		}
 		return ""
 	}
-	id, _ := firstMap(rows, nil)["id"].(string)
 	return id
 }
 
 func (r *router) dispatchNotificationOutboxEvent(ctx context.Context, authToken string, event notificationOutboxEvent) error {
 	usecase := notifications.NewUsecase(notifications.Dependencies{
-		Repository: notifications.NewSupabaseRepository(r.deps.Supabase, r.deps.AdminSupabase, r.deps.Config.SupabaseServiceRoleKey),
+		Repository: r.notificationRepository(),
 		PushSender: r.deps.FCM,
 		Logger:     r.deps.Logger,
 	})
@@ -171,28 +174,23 @@ func (r *router) markNotificationOutboxFailed(ctx context.Context, outboxID stri
 }
 
 func (r *router) patchNotificationOutbox(ctx context.Context, outboxID string, payload map[string]any) {
-	if r.deps.AdminSupabase == nil || r.deps.Config.SupabaseServiceRoleKey == "" || outboxID == "" {
+	r.patchPostgresNotificationOutbox(ctx, outboxID, payload)
+}
+
+func (r *router) patchPostgresNotificationOutbox(ctx context.Context, outboxID string, payload map[string]any) {
+	if r.deps.Postgres == nil || outboxID == "" {
 		return
 	}
-	q := url.Values{}
-	q.Set("id", "eq."+outboxID)
-	var ignored []map[string]any
-	if err := r.deps.AdminSupabase.Patch(ctx, r.deps.Config.SupabaseServiceRoleKey, "notification_outbox", q, payload, &ignored); err != nil && r.deps.Logger != nil {
+	_, err := r.deps.Postgres.Pool().Exec(ctx, `update notification_outbox set status=coalesce($2,status), attempts=coalesce($3,attempts), last_error=$4, next_attempt_at=$5, processed_at=$6 where id=$1`, outboxID, nullableString(payload["status"]), nullableInt(payload["attempts"]), nullableString(payload["last_error"]), nullableTime(payload["next_attempt_at"]), nullableTime(payload["processed_at"]))
+	if err != nil && r.deps.Logger != nil {
 		r.deps.Logger.Warn("failed to update notification outbox", "id", outboxID, "error", err)
 	}
 }
 
 func (r *router) adminListNotificationOutbox(w http.ResponseWriter, req *http.Request, _ AuthUser) {
-	q := url.Values{}
-	q.Set("select", "id,event_kind,aggregate_type,aggregate_id,actor_user_id,recipient_user_id,status,attempts,last_error,next_attempt_at,processed_at,created_at,payload")
-	q.Set("order", "created_at.desc")
-	q.Set("limit", "100")
-	if status := strings.TrimSpace(req.URL.Query().Get("status")); status != "" && status != contracts.QueryStatusAll {
-		q.Set("status", supabase.PostgRESTEq(status))
-	}
-	var rows []map[string]any
-	if err := r.deps.AdminSupabase.Get(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "notification_outbox", q, &rows); err != nil {
-		writeSupabaseError(w, err)
+	rows, err := r.listPostgresNotificationOutbox(req.Context(), strings.TrimSpace(req.URL.Query().Get("status")), 100)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "database error")
 		return
 	}
 	writeJSON(w, http.StatusOK, rows)
@@ -208,9 +206,9 @@ func (r *router) adminProcessNotificationOutbox(w http.ResponseWriter, req *http
 		}
 		limit = min(parsed, 100)
 	}
-	result, err := r.processNotificationOutbox(req.Context(), r.deps.Config.SupabaseServiceRoleKey, limit)
+	result, err := r.processNotificationOutbox(req.Context(), "", limit)
 	if err != nil {
-		writeSupabaseError(w, err)
+		writeUpstreamError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, result)
@@ -251,32 +249,59 @@ func (r *router) processNotificationOutbox(ctx context.Context, authToken string
 }
 
 func (r *router) notificationOutboxDueRows(ctx context.Context, limit int) ([]map[string]any, error) {
-	if r.deps.AdminSupabase == nil || r.deps.Config.SupabaseServiceRoleKey == "" {
+	return r.postgresNotificationOutboxDueRows(ctx, limit)
+}
+
+func (r *router) listPostgresNotificationOutbox(ctx context.Context, status string, limit int) ([]map[string]any, error) {
+	if r.deps.Postgres == nil {
 		return []map[string]any{}, nil
 	}
-	q := url.Values{}
-	q.Set("select", "id,event_kind,aggregate_type,aggregate_id,actor_user_id,recipient_user_id,status,attempts,payload,next_attempt_at")
-	q.Set("status", supabase.PostgRESTIn(contracts.StatusPending, contracts.OutboxStatusFailed))
-	q.Set("order", "created_at.asc")
-	q.Set("limit", strconv.Itoa(limit))
-	var rows []map[string]any
-	if err := r.deps.AdminSupabase.Get(ctx, r.deps.Config.SupabaseServiceRoleKey, "notification_outbox", q, &rows); err != nil {
+	if limit <= 0 {
+		limit = 100
+	}
+	where := ""
+	args := []any{limit}
+	if status != "" && status != contracts.QueryStatusAll {
+		where = " where status=$2"
+		args = append(args, status)
+	}
+	rows, err := r.deps.Postgres.Pool().Query(ctx, `select id::text,event_kind,aggregate_type,aggregate_id::text,actor_user_id::text,recipient_user_id::text,status,attempts,last_error,next_attempt_at,processed_at,created_at,payload from notification_outbox`+where+` order by created_at desc limit $1`, args...)
+	if err != nil {
 		return nil, err
 	}
-	now := time.Now().UTC()
-	due := make([]map[string]any, 0, len(rows))
-	for _, row := range rows {
-		nextAttempt := strings.TrimSpace(stringValue(row, "next_attempt_at"))
-		if nextAttempt == "" {
-			due = append(due, row)
-			continue
+	defer rows.Close()
+	out := []map[string]any{}
+	for rows.Next() {
+		m, err := scanNotificationOutboxRow(rows)
+		if err != nil {
+			return nil, err
 		}
-		parsed, err := time.Parse(time.RFC3339, nextAttempt)
-		if err != nil || !parsed.After(now) {
-			due = append(due, row)
-		}
+		out = append(out, m)
 	}
-	return due, nil
+	return out, rows.Err()
+}
+
+func (r *router) postgresNotificationOutboxDueRows(ctx context.Context, limit int) ([]map[string]any, error) {
+	if r.deps.Postgres == nil {
+		return []map[string]any{}, nil
+	}
+	if limit <= 0 {
+		limit = 20
+	}
+	rows, err := r.deps.Postgres.Pool().Query(ctx, `select id::text,event_kind,aggregate_type,aggregate_id::text,actor_user_id::text,recipient_user_id::text,status,attempts,last_error,next_attempt_at,processed_at,created_at,payload from notification_outbox where status=any($2) and (next_attempt_at is null or next_attempt_at<=now()) order by created_at asc limit $1`, limit, []string{contracts.StatusPending, contracts.OutboxStatusFailed})
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []map[string]any{}
+	for rows.Next() {
+		m, err := scanNotificationOutboxRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
 }
 
 func stringValue(row map[string]any, key string) string {
@@ -309,6 +334,85 @@ func mapValue(row map[string]any, key string) map[string]any {
 		return value
 	}
 	return map[string]any{}
+}
+
+func scanNotificationOutboxRow(row interface{ Scan(dest ...any) error }) (map[string]any, error) {
+	var id, eventKind, aggregateType, status string
+	var aggregateID, actorUserID, recipientUserID, lastError *string
+	var attempts int
+	var nextAttemptAt, processedAt *time.Time
+	var createdAt time.Time
+	var payloadBytes []byte
+	if err := row.Scan(&id, &eventKind, &aggregateType, &aggregateID, &actorUserID, &recipientUserID, &status, &attempts, &lastError, &nextAttemptAt, &processedAt, &createdAt, &payloadBytes); err != nil {
+		return nil, err
+	}
+	payload := map[string]any{}
+	if len(payloadBytes) > 0 {
+		_ = json.Unmarshal(payloadBytes, &payload)
+	}
+	m := map[string]any{"id": id, "event_kind": eventKind, "aggregate_type": aggregateType, "status": status, "attempts": attempts, "created_at": createdAt.UTC().Format(time.RFC3339Nano), "payload": payload}
+	if aggregateID != nil {
+		m["aggregate_id"] = *aggregateID
+	}
+	if actorUserID != nil {
+		m["actor_user_id"] = *actorUserID
+	}
+	if recipientUserID != nil {
+		m["recipient_user_id"] = *recipientUserID
+	}
+	if lastError != nil {
+		m["last_error"] = *lastError
+	}
+	if nextAttemptAt != nil {
+		m["next_attempt_at"] = nextAttemptAt.UTC().Format(time.RFC3339Nano)
+	}
+	if processedAt != nil {
+		m["processed_at"] = processedAt.UTC().Format(time.RFC3339Nano)
+	}
+	return m, nil
+}
+
+func nullableString(v any) any {
+	if v == nil {
+		return nil
+	}
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return nil
+}
+
+func nullableInt(v any) any {
+	if v == nil {
+		return nil
+	}
+	switch n := v.(type) {
+	case int:
+		return n
+	case int64:
+		return n
+	case float64:
+		return int(n)
+	}
+	return nil
+}
+
+func nullableTime(v any) any {
+	if v == nil {
+		return nil
+	}
+	if t, ok := v.(time.Time); ok {
+		return t
+	}
+	if s, ok := v.(string); ok && strings.TrimSpace(s) != "" {
+		if t, err := time.Parse(time.RFC3339, s); err == nil {
+			return t
+		}
+		if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
+			return t
+		}
+	}
+	return nil
 }
 
 func stringSliceValue(row map[string]any, key string) []string {
@@ -372,5 +476,5 @@ func writeNotificationError(w http.ResponseWriter, err error) {
 		}
 		return
 	}
-	writeSupabaseError(w, err)
+	writeUpstreamError(w, err)
 }

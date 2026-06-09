@@ -13,11 +13,10 @@ import (
 	"errors"
 	"math/big"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/yota/ohey/backend/internal/supabase"
 )
 
 const (
@@ -35,9 +34,11 @@ var (
 )
 
 type authVerifier struct {
-	client *supabase.Client
-	issuer string
-	now    func() time.Time
+	httpClient *http.Client
+	issuer     string
+	jwksURL    string
+	audience   string
+	now        func() time.Time
 
 	mu         sync.Mutex
 	tokenCache map[[32]byte]cachedAuthUser
@@ -98,14 +99,37 @@ type jwk struct {
 	Y      string   `json:"y"`
 }
 
-func newAuthVerifier(client *supabase.Client, supabaseURL string, now func() time.Time) *authVerifier {
-	if now == nil {
-		now = time.Now
+func newClerkAuthVerifier(issuer, jwksURL, audience string, httpClient *http.Client, now func() time.Time) *authVerifier {
+	return newAuthVerifier(authVerifierConfig{
+		httpClient: httpClient,
+		issuer:     strings.TrimRight(issuer, "/"),
+		jwksURL:    strings.TrimSpace(jwksURL),
+		audience:   strings.TrimSpace(audience),
+		now:        now,
+	})
+}
+
+type authVerifierConfig struct {
+	httpClient *http.Client
+	issuer     string
+	jwksURL    string
+	audience   string
+	now        func() time.Time
+}
+
+func newAuthVerifier(cfg authVerifierConfig) *authVerifier {
+	if cfg.now == nil {
+		cfg.now = time.Now
+	}
+	if cfg.httpClient == nil {
+		cfg.httpClient = http.DefaultClient
 	}
 	return &authVerifier{
-		client:     client,
-		issuer:     strings.TrimRight(supabaseURL, "/") + "/auth/v1",
-		now:        now,
+		httpClient: cfg.httpClient,
+		issuer:     strings.TrimRight(cfg.issuer, "/"),
+		jwksURL:    strings.TrimSpace(cfg.jwksURL),
+		audience:   strings.TrimSpace(cfg.audience),
+		now:        cfg.now,
 		tokenCache: make(map[[32]byte]cachedAuthUser),
 	}
 }
@@ -131,7 +155,7 @@ func writeAuthVerificationError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusUnauthorized, "authentication failed")
 		return
 	}
-	writeSupabaseError(w, err)
+	writeUpstreamError(w, err)
 }
 
 func (v *authVerifier) Verify(ctx context.Context, token string) (AuthUser, error) {
@@ -145,7 +169,7 @@ func (v *authVerifier) Verify(ctx context.Context, token string) (AuthUser, erro
 
 	parsed, parseErr := parseJWT(token)
 	if parseErr == nil {
-		if err := parsed.validate(v.issuer, v.now()); err != nil {
+		if err := parsed.validate(v.issuer, v.audience, v.now()); err != nil {
 			return AuthUser{}, err
 		}
 		if isAsymmetricAlg(parsed.header.Alg) {
@@ -157,10 +181,10 @@ func (v *authVerifier) Verify(ctx context.Context, token string) (AuthUser, erro
 				return AuthUser{}, err
 			}
 		}
-		return v.verifyWithAuthServer(ctx, token, parsed.expiresAt)
+		return AuthUser{}, errInvalidAuthToken
 	}
 
-	return v.verifyWithAuthServer(ctx, token, time.Time{})
+	return AuthUser{}, errInvalidAuthToken
 }
 
 func (v *authVerifier) cachedToken(token string) (AuthUser, bool) {
@@ -209,18 +233,6 @@ func (v *authVerifier) cacheToken(token string, user AuthUser, tokenExpiresAt ti
 	v.tokenCache[key] = cachedAuthUser{user: user, expiresAt: expiresAt}
 }
 
-func (v *authVerifier) verifyWithAuthServer(ctx context.Context, token string, tokenExpiresAt time.Time) (AuthUser, error) {
-	if v.client == nil {
-		return AuthUser{}, errors.New("supabase client is not configured")
-	}
-	var authUser AuthUser
-	if err := v.client.GetAuthUser(ctx, token, &authUser); err != nil {
-		return AuthUser{}, err
-	}
-	v.cacheToken(token, authUser, tokenExpiresAt, authServerTokenCacheTTL)
-	return authUser, nil
-}
-
 func parseJWT(token string) (parsedJWT, error) {
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
@@ -258,7 +270,7 @@ func parseJWT(token string) (parsedJWT, error) {
 	}, nil
 }
 
-func (p parsedJWT) validate(issuer string, now time.Time) error {
+func (p parsedJWT) validate(issuer, audience string, now time.Time) error {
 	if strings.TrimSpace(p.header.Alg) == "" || strings.EqualFold(p.header.Alg, "none") {
 		return errInvalidAuthToken
 	}
@@ -277,7 +289,25 @@ func (p parsedJWT) validate(issuer string, now time.Time) error {
 	if p.claims.Nbf != 0 && now.Add(authJWTClockSkew).Before(time.Unix(p.claims.Nbf, 0)) {
 		return errInvalidAuthToken
 	}
+	if strings.TrimSpace(audience) != "" && !jwtAudienceContains(p.claims.Aud, audience) {
+		return errInvalidAuthToken
+	}
 	return nil
+}
+
+func jwtAudienceContains(value any, expected string) bool {
+	expected = strings.TrimSpace(expected)
+	switch aud := value.(type) {
+	case string:
+		return aud == expected
+	case []any:
+		for _, item := range aud {
+			if s, ok := item.(string); ok && s == expected {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (p parsedJWT) authUser() AuthUser {
@@ -323,18 +353,40 @@ func (v *authVerifier) cachedJWKs(ctx context.Context, forceRefresh bool) ([]jwk
 	if !forceRefresh && v.jwksCache.expiresAt.After(now) {
 		return v.jwksCache.keys, nil
 	}
-	if v.client == nil {
-		return nil, errors.New("supabase client is not configured")
-	}
 	var set jwks
-	if err := v.client.GetAuthJWKS(ctx, &set); err != nil {
-		return nil, err
+	if v.jwksURL != "" {
+		if err := v.getJWKSURL(ctx, &set); err != nil {
+			return nil, err
+		}
+	} else {
+		return nil, errors.New("jwks url is not configured")
 	}
 	v.jwksCache = cachedAuthJWKS{
 		keys:      set.Keys,
 		expiresAt: now.Add(authJWKSCacheTTL),
 	}
 	return set.Keys, nil
+}
+
+func (v *authVerifier) getJWKSURL(ctx context.Context, out any) error {
+	parsed, err := url.Parse(v.jwksURL)
+	if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
+		return errInvalidAuthToken
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, v.jwksURL, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Accept", "application/json")
+	resp, err := v.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return errInvalidAuthToken
+	}
+	return json.NewDecoder(resp.Body).Decode(out)
 }
 
 func verifyJWTSignature(parsed parsedJWT, keys []jwk) error {

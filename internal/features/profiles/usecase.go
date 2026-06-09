@@ -24,8 +24,9 @@ func NewUsecase(deps Dependencies) *Usecase {
 }
 
 type AuthInput struct {
-	AuthToken  string
-	AuthUserID string
+	AuthToken   string
+	AuthUserID  string
+	ClerkUserID string
 }
 
 type GetByUserIDInput struct {
@@ -41,9 +42,10 @@ type BootstrapRequest struct {
 }
 
 type BootstrapUsecaseInput struct {
-	AuthToken  string
-	AuthUserID string
-	Request    BootstrapRequest
+	AuthToken   string
+	AuthUserID  string
+	ClerkUserID string
+	Request     BootstrapRequest
 }
 
 type UpdateInput struct {
@@ -53,11 +55,17 @@ type UpdateInput struct {
 }
 
 func (u *Usecase) GetProfile(ctx context.Context, input AuthInput) (*Profile, error) {
-	authUserID, err := CleanUUID(input.AuthUserID, "user id")
-	if err != nil {
-		return nil, err
+	var profile *Profile
+	var err error
+	if input.ClerkUserID != "" {
+		profile, err = u.repository.GetByClerkUserID(ctx, input.AuthToken, input.ClerkUserID)
+	} else {
+		authUserID, cleanErr := CleanUUID(input.AuthUserID, "user id")
+		if cleanErr != nil {
+			return nil, cleanErr
+		}
+		profile, err = u.repository.GetByID(ctx, input.AuthToken, authUserID)
 	}
-	profile, err := u.repository.GetByID(ctx, input.AuthToken, authUserID)
 	if err != nil {
 		return nil, err
 	}
@@ -85,6 +93,7 @@ func (u *Usecase) GetProfileByUserID(ctx context.Context, input GetByUserIDInput
 func (u *Usecase) BootstrapProfile(ctx context.Context, input BootstrapUsecaseInput) (map[string]any, error) {
 	payload, err := BootstrapPayload(BootstrapInput{
 		AuthUserID:   input.AuthUserID,
+		ClerkUserID:  input.ClerkUserID,
 		UserID:       input.Request.UserID,
 		DisplayName:  input.Request.DisplayName,
 		CharacterKey: input.Request.CharacterKey,

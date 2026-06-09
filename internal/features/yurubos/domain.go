@@ -282,3 +282,12 @@ func NewYuruboUpdate(yuruboID, ownerUserID string, body UpdateBody) (YuruboUpdat
 	}
 	return update, nil
 }
+
+func YuruboExpiresAt(startsAt *string, now time.Time) time.Time {
+	if startsAt != nil && strings.TrimSpace(*startsAt) != "" {
+		if parsed, err := time.Parse(time.RFC3339, strings.TrimSpace(*startsAt)); err == nil {
+			return parsed.UTC().Add(24 * time.Hour)
+		}
+	}
+	return now.UTC().Add(24 * time.Hour)
+}

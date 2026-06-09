@@ -55,8 +55,9 @@ func (r *router) upsertProfile(w http.ResponseWriter, req *http.Request, authTok
 		return
 	}
 	row, err := r.profileUsecase().BootstrapProfile(req.Context(), profiles.BootstrapUsecaseInput{
-		AuthToken:  authToken,
-		AuthUserID: req.Header.Get("X-Ohey-User-ID"),
+		AuthToken:   authToken,
+		AuthUserID:  req.Header.Get("X-Ohey-User-ID"),
+		ClerkUserID: req.Header.Get("X-Ohey-Clerk-User-ID"),
 		Request: profiles.BootstrapRequest{
 			UserID:       input.UserID,
 			DisplayName:  input.DisplayName,
@@ -358,13 +359,24 @@ func (r *router) markNotificationsRead(w http.ResponseWriter, req *http.Request,
 
 func (r *router) deleteOwnAccount(w http.ResponseWriter, req *http.Request, _ string) {
 	userID := strings.TrimSpace(req.Header.Get("X-Ohey-User-ID"))
-	if r.deps.AdminSupabase == nil || strings.TrimSpace(r.deps.Config.SupabaseServiceRoleKey) == "" {
+	if r.deps.Postgres == nil {
+		writeError(w, http.StatusServiceUnavailable, "database is not configured")
+		return
+	}
+	clerkUserID := strings.TrimSpace(req.Header.Get("X-Ohey-Clerk-User-ID"))
+	if clerkUserID != "" && (r.deps.ClerkAPI == nil || !r.deps.ClerkAPI.configured()) {
 		writeError(w, http.StatusServiceUnavailable, "account deletion is temporarily unavailable")
 		return
 	}
-	if err := r.deps.AdminSupabase.AdminDeleteUser(req.Context(), userID); err != nil {
-		writeSupabaseError(w, err)
+	if _, err := r.deps.Postgres.Pool().Exec(req.Context(), `delete from profiles where id=$1`, userID); err != nil {
+		writeError(w, http.StatusBadGateway, "database error")
 		return
+	}
+	if clerkUserID != "" {
+		if err := r.deps.ClerkAPI.DeleteUser(req.Context(), clerkUserID); err != nil {
+			writeError(w, http.StatusBadGateway, "auth provider error")
+			return
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"id": userID})
 }
@@ -376,7 +388,7 @@ func (r *router) listTodayReservations(w http.ResponseWriter, req *http.Request,
 		ScheduledDate: dateOnlyParam(req, "date"),
 	})
 	if err != nil {
-		writeSupabaseError(w, err)
+		writeUpstreamError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, rows)
@@ -389,7 +401,7 @@ func (r *router) listIncomingPendingInvites(w http.ResponseWriter, req *http.Req
 		ScheduledDate: dateOnlyParam(req, "date"),
 	})
 	if err != nil {
-		writeSupabaseError(w, err)
+		writeUpstreamError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, rows)
@@ -402,7 +414,7 @@ func (r *router) listOutgoingActiveInvites(w http.ResponseWriter, req *http.Requ
 		ScheduledDate: dateOnlyParam(req, "date"),
 	})
 	if err != nil {
-		writeSupabaseError(w, err)
+		writeUpstreamError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, rows)
@@ -454,15 +466,17 @@ func (r *router) updateInvite(w http.ResponseWriter, req *http.Request, authToke
 }
 
 func (r *router) inviteUsecase(req *http.Request) *invites.Usecase {
+	repository := invites.NewPostgresRepository(postgresPool(r))
 	return invites.NewUsecase(invites.Dependencies{
-		Repository: invites.NewSupabaseRepository(r.deps.Supabase),
+		Repository: repository,
 		Publisher:  inviteEventPublisher{router: r, req: req},
 	})
 }
 
 func (r *router) friendsUsecase(req *http.Request) *friends.Usecase {
+	repository := friends.NewPostgresRepository(postgresPool(r))
 	return friends.NewUsecase(friends.Dependencies{
-		Repository: friends.NewSupabaseRepository(r.deps.Supabase, r.deps.AdminSupabase, r.deps.Config.SupabaseServiceRoleKey),
+		Repository: repository,
 		Publisher:  friendRequestEventPublisher{router: r, req: req},
 		Logger:     r.deps.Logger,
 	})
@@ -546,7 +560,7 @@ func writeInviteError(w http.ResponseWriter, err error) {
 		}
 		return
 	}
-	writeSupabaseError(w, err)
+	writeUpstreamError(w, err)
 }
 
 func writeFriendsError(w http.ResponseWriter, err error) {
@@ -563,12 +577,13 @@ func writeFriendsError(w http.ResponseWriter, err error) {
 		}
 		return
 	}
-	writeSupabaseError(w, err)
+	writeUpstreamError(w, err)
 }
 
 func (r *router) userSafetyUsecase() *usersafety.Usecase {
+	repository := usersafety.NewPostgresRepository(postgresPool(r))
 	return usersafety.NewUsecase(usersafety.Dependencies{
-		Repository: usersafety.NewSupabaseRepository(r.deps.Supabase, r.deps.AdminSupabase, r.deps.Config.SupabaseServiceRoleKey),
+		Repository: repository,
 	})
 }
 
@@ -584,12 +599,13 @@ func writeUserSafetyError(w http.ResponseWriter, err error) {
 		}
 		return
 	}
-	writeSupabaseError(w, err)
+	writeUpstreamError(w, err)
 }
 
 func (r *router) friendGroupsUsecase() *friendgroups.Usecase {
+	repository := friendgroups.NewPostgresRepository(postgresPool(r))
 	return friendgroups.NewUsecase(friendgroups.Dependencies{
-		Repository: friendgroups.NewSupabaseRepository(r.deps.Supabase),
+		Repository: repository,
 	})
 }
 
@@ -605,12 +621,13 @@ func writeFriendGroupsError(w http.ResponseWriter, err error) {
 		}
 		return
 	}
-	writeSupabaseError(w, err)
+	writeUpstreamError(w, err)
 }
 
 func (r *router) profileUsecase() *profiles.Usecase {
+	repository := profiles.NewPostgresRepository(postgresPool(r))
 	return profiles.NewUsecase(profiles.Dependencies{
-		Repository: profiles.NewSupabaseRepository(r.deps.Supabase),
+		Repository: repository,
 	})
 }
 
@@ -626,12 +643,13 @@ func writeProfileError(w http.ResponseWriter, err error) {
 		}
 		return
 	}
-	writeSupabaseError(w, err)
+	writeUpstreamError(w, err)
 }
 
 func (r *router) dailyStatusUsecase() *dailystatuses.Usecase {
+	repository := dailystatuses.NewPostgresRepository(postgresPool(r))
 	return dailystatuses.NewUsecase(dailystatuses.Dependencies{
-		Repository: dailystatuses.NewSupabaseRepository(r.deps.Supabase),
+		Repository: repository,
 	})
 }
 
@@ -645,7 +663,7 @@ func writeDailyStatusError(w http.ResponseWriter, err error) {
 		}
 		return
 	}
-	writeSupabaseError(w, err)
+	writeUpstreamError(w, err)
 }
 
 func dateOnlyParam(req *http.Request, name string) string {

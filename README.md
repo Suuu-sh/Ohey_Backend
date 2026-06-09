@@ -1,6 +1,6 @@
 # Ohey Backend
 
-Go API for Ohey. It proxies authenticated requests to Supabase/PostgREST using the caller's Supabase JWT so RLS remains enforced by Supabase.
+Go API for Ohey. The runtime uses Clerk for authentication and Neon/Postgres for backend-owned data access.
 
 ## Architecture
 
@@ -19,7 +19,7 @@ not `localhost:8080`.
 
 ```sh
 cp .env.example .env
-# set SUPABASE_ANON_KEY from /Users/yota/Projects/Secrets/Ohey/supabase_dev-ohey.md
+# set DATABASE_URL, CLERK_ISSUER, and CLERK_SECRET_KEY from /Users/yota/Projects/Secrets/Ohey
 export $(grep -v '^#' .env | xargs)
 go run ./cmd/api
 ```
@@ -32,8 +32,18 @@ curl http://localhost:8080/healthz
 
 Authenticated requests must include:
 
-- `Authorization: Bearer <supabase access token>`
-- `X-Ohey-User-ID: <auth.users.id>`
+- `Authorization: Bearer <Clerk session token>`
+- `X-Ohey-User-ID: <authenticated user id>`
+
+Auth provider configuration:
+
+- `AUTH_PROVIDER=clerk` verifies Clerk session JWTs against `CLERK_ISSUER` / `CLERK_JWKS_URL` and optional `CLERK_AUDIENCE`.
+
+Database provider configuration:
+
+- `DATA_STORE=neon` or `DATA_STORE=postgres` opens a backend-owned Postgres pool from `DATABASE_URL`.
+- For Neon API runtime connections, use the pooled connection string from Neon (hostname contains `-pooler`) to avoid connection exhaustion; use a direct non-pooled URL for migrations, dumps, and admin tooling.
+- `DATABASE_MAX_CONNS` caps the backend pgx pool, default `10`.
 
 ## Endpoints
 
@@ -74,14 +84,13 @@ Authenticated requests must include:
 
 ## Admin endpoints
 
-Admin operations run only through the trusted backend so the Supabase service
-role key is never shipped to Flutter. Set these backend environment variables in
-dev and production before using `/v1/admin/*`:
+Admin operations run only through the trusted backend. Set these backend environment variables in dev and production before using `/v1/admin/*`:
 
-- `SUPABASE_SERVICE_ROLE_KEY`
+- `CLERK_SECRET_KEY`
+- `DATABASE_URL`
+- `OHEY_ADMIN_EMAILS`
 
-Admin access is intentionally hard-limited to Supabase Auth users whose
-emails are listed in `OHEY_ADMIN_EMAILS` for the target Render/backend environment.
+Admin access is intentionally hard-limited to Clerk users whose emails are listed in `OHEY_ADMIN_EMAILS` for the target Render/backend environment.
 
 Available endpoints:
 
@@ -93,7 +102,6 @@ Available endpoints:
 - `GET /v1/admin/notification-outbox`
 - `POST /v1/admin/notification-outbox/process`
 
-
 ## Push notifications
 
 Device push delivery uses Firebase Cloud Messaging for APNs/TestFlight builds.
@@ -104,6 +112,6 @@ Required setup:
 2. Add `google-services.json` to `android/app/`.
 3. Enable Push Notifications / APNs for the app identifier in Apple Developer and upload/configure the APNs key or certificate in Firebase.
 4. Set `FCM_SERVICE_ACCOUNT_JSON` on the backend to the Firebase service account JSON (raw JSON or base64-encoded JSON).
-5. Run the Supabase migration that creates `public.push_tokens`.
+5. Confirm the Postgres schema includes `push_tokens`.
 
 When the app starts on iOS or Android, it asks notification permission and registers the FCM token through `PUT /v1/me/push-token`. The backend sends pushes when it creates notifications for likes, friend requests, and invites.

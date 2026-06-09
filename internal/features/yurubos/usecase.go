@@ -137,7 +137,14 @@ func (u *Usecase) ListYurubos(ctx context.Context, input ListInput) ([]map[strin
 	if err != nil {
 		hiddenSet = map[string]bool{}
 	}
-	rows, err := u.repository.ListOpenYurubos(ctx, input.AuthToken, CleanLimit(input.Limit, 50))
+	var rows []map[string]any
+	if repo, ok := u.repository.(interface {
+		ListOpenYurubosForViewer(context.Context, string, string, int) ([]map[string]any, error)
+	}); ok {
+		rows, err = repo.ListOpenYurubosForViewer(ctx, input.AuthToken, userID, CleanLimit(input.Limit, 50))
+	} else {
+		rows, err = u.repository.ListOpenYurubos(ctx, input.AuthToken, CleanLimit(input.Limit, 50))
+	}
 	if err != nil {
 		return nil, err
 	}

@@ -100,6 +100,7 @@ type Profile struct {
 
 type BootstrapInput struct {
 	AuthUserID   string
+	ClerkUserID  string
 	UserID       string
 	DisplayName  string
 	CharacterKey string
@@ -108,9 +109,17 @@ type BootstrapInput struct {
 }
 
 func BootstrapPayload(input BootstrapInput) (map[string]any, error) {
-	authUserID, err := CleanUUID(input.AuthUserID, "user id")
-	if err != nil {
-		return nil, err
+	var authUserID string
+	if strings.TrimSpace(input.AuthUserID) != "" {
+		var err error
+		authUserID, err = CleanUUID(input.AuthUserID, "user id")
+		if err != nil {
+			return nil, err
+		}
+	}
+	clerkUserID := strings.TrimSpace(input.ClerkUserID)
+	if authUserID == "" && clerkUserID == "" {
+		return nil, UserError{Kind: ErrorKindInvalidInput, Message: "user id is required"}
 	}
 	userID, err := CleanUserID(input.UserID)
 	if err != nil {
@@ -124,14 +133,21 @@ func BootstrapPayload(input BootstrapInput) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{
-		"id":            authUserID,
+	payload := map[string]any{
 		"user_id":       userID,
 		"display_name":  displayName,
 		"character_key": CleanCharacterKey(input.CharacterKey),
 		"avatar_url":    avatarURL,
+		"is_plus":       false,
 		"updated_at":    input.UpdatedAt.UTC().Format(time.RFC3339),
-	}, nil
+	}
+	if authUserID != "" {
+		payload["id"] = authUserID
+	}
+	if clerkUserID != "" {
+		payload["clerk_user_id"] = clerkUserID
+	}
+	return payload, nil
 }
 
 func PatchPayload(body map[string]any, updatedAt time.Time) (map[string]any, error) {
