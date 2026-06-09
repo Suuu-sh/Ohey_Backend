@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/yota/ohey/backend/internal/contracts"
@@ -390,6 +391,15 @@ func (r *router) adminListYurubos(w http.ResponseWriter, req *http.Request, _ Au
 		return
 	}
 	limit := yurubos.CleanLimit(req.URL.Query().Get("limit"), 80)
+	if r.usesPostgresStore() {
+		rows, err := r.adminListPostgresYurubos(req.Context(), status, limit)
+		if err != nil {
+			writeError(w, http.StatusBadGateway, "database error")
+			return
+		}
+		writeJSON(w, http.StatusOK, rows)
+		return
+	}
 	q := url.Values{}
 	q.Set("select", "id,wish_item_id,owner_user_id,title,body,category,place_text,place_lat,place_lng,time_label,starts_at,ends_at,status,visibility,expires_at,created_at,updated_at,owner:profiles!yurubos_owner_user_id_fkey(id,user_id,display_name,avatar_url,is_plus)")
 	q.Set("order", "created_at.desc")
@@ -446,6 +456,15 @@ func (r *router) adminCreateYurubo(w http.ResponseWriter, req *http.Request, _ A
 		return
 	} else if ok {
 		payload["starts_at"] = normalized
+	}
+	if r.usesPostgresStore() {
+		row, err := r.adminCreatePostgresYurubo(req.Context(), payload)
+		if err != nil {
+			writeError(w, http.StatusBadGateway, "database error")
+			return
+		}
+		writeJSON(w, http.StatusCreated, row)
+		return
 	}
 	var rows []map[string]any
 	if err := r.deps.AdminSupabase.Post(req.Context(), r.deps.Config.SupabaseServiceRoleKey, "yurubos", nil, payload, &rows); err != nil {
@@ -528,6 +547,15 @@ func (r *router) adminUpdateYurubo(w http.ResponseWriter, req *http.Request, _ A
 		writeJSON(w, http.StatusOK, map[string]string{"id": yuruboID})
 		return
 	}
+	if r.usesPostgresStore() {
+		rows, err := r.adminUpdatePostgresYurubo(req.Context(), yuruboID, payload)
+		if err != nil {
+			writeError(w, http.StatusBadGateway, "database error")
+			return
+		}
+		writeJSON(w, http.StatusOK, rows)
+		return
+	}
 	q := url.Values{}
 	q.Set("id", "eq."+yuruboID)
 	var rows []map[string]any
@@ -544,6 +572,15 @@ func (r *router) adminDeleteYurubo(w http.ResponseWriter, req *http.Request, _ A
 		writeError(w, http.StatusBadRequest, errMessage)
 		return
 	}
+	if r.usesPostgresStore() {
+		rows, err := r.adminDeletePostgresYurubo(req.Context(), yuruboID)
+		if err != nil {
+			writeError(w, http.StatusBadGateway, "database error")
+			return
+		}
+		writeJSON(w, http.StatusOK, rows)
+		return
+	}
 	q := url.Values{}
 	q.Set("id", "eq."+yuruboID)
 	var rows []map[string]any
@@ -555,6 +592,14 @@ func (r *router) adminDeleteYurubo(w http.ResponseWriter, req *http.Request, _ A
 }
 
 func (r *router) ensureOfficialProfile(req *http.Request) (string, error) {
+	if r.usesPostgresStore() {
+		if r.deps.Postgres == nil {
+			return "", errors.New("postgres pool is not configured")
+		}
+		var id string
+		err := r.deps.Postgres.Pool().QueryRow(req.Context(), `insert into profiles (user_id,display_name,character_key,avatar_url,is_plus,updated_at) values ($1,$2,'avatar','',true,now()) on conflict (user_id) do update set display_name=excluded.display_name,is_plus=true,updated_at=now() returning id::text`, officialProfileUserID, officialProfileDisplayName).Scan(&id)
+		return id, err
+	}
 	q := url.Values{}
 	q.Set("select", "id,user_id,display_name,character_key,avatar_url,is_plus")
 	q.Set("user_id", "eq."+officialProfileUserID)
@@ -836,6 +881,10 @@ func (r *router) isAdminUser(user AuthUser) bool {
 }
 
 func (r *router) addAdminYuruboReactionCounts(ctx context.Context, rows []map[string]any) {
+	if r.usesPostgresStore() {
+		r.addPostgresAdminYuruboReactionCounts(ctx, rows)
+		return
+	}
 	ids := make([]string, 0, len(rows))
 	for _, row := range rows {
 		if id, _ := row["id"].(string); id != "" {
@@ -860,6 +909,164 @@ func (r *router) addAdminYuruboReactionCounts(ctx context.Context, rows []map[st
 		}
 		if reactionType, _ := reaction["reaction_type"].(string); reactionType == contracts.ReactionTypeAvailable {
 			counts[id]++
+		}
+	}
+	for _, row := range rows {
+		if id, _ := row["id"].(string); id != "" {
+			row["reaction_count"] = counts[id]
+		}
+	}
+}
+
+func (r *router) adminListPostgresYurubos(ctx context.Context, status string, limit int) ([]map[string]any, error) {
+	if r.deps.Postgres == nil {
+		return []map[string]any{}, nil
+	}
+	where := ""
+	args := []any{limit}
+	if status != contracts.QueryStatusAll {
+		where = " where y.status=$2"
+		args = append(args, status)
+	}
+	rows, err := r.deps.Postgres.Pool().Query(ctx, adminYuruboSelectSQL()+where+` order by y.created_at desc limit $1`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []map[string]any{}
+	for rows.Next() {
+		m, err := scanAdminYurubo(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
+func (r *router) adminCreatePostgresYurubo(ctx context.Context, payload map[string]any) (map[string]any, error) {
+	if r.deps.Postgres == nil {
+		return nil, errors.New("postgres pool is not configured")
+	}
+	row := r.deps.Postgres.Pool().QueryRow(ctx, adminYuruboMutationSQL(`insert into yurubos (owner_user_id,title,body,category,place_text,time_label,status,visibility,starts_at,updated_at) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,now()) returning *`), payload["owner_user_id"], payload["title"], payload["body"], payload["category"], payload["place_text"], payload["time_label"], payload["status"], payload["visibility"], payload["starts_at"])
+	return scanAdminYurubo(row)
+}
+
+func (r *router) adminUpdatePostgresYurubo(ctx context.Context, id string, payload map[string]any) ([]map[string]any, error) {
+	if r.deps.Postgres == nil {
+		return nil, errors.New("postgres pool is not configured")
+	}
+	current, err := scanAdminYurubo(r.deps.Postgres.Pool().QueryRow(ctx, adminYuruboSelectSQL()+` where y.id=$1`, id))
+	if err != nil {
+		return nil, err
+	}
+	owner := valueOrExistingString(payload, "owner_user_id", current)
+	title := valueOrExistingString(payload, "title", current)
+	body := valueOrExistingString(payload, "body", current)
+	category := valueOrExistingString(payload, "category", current)
+	place := valueOrExistingString(payload, "place_text", current)
+	timeLabel := valueOrExistingString(payload, "time_label", current)
+	status := valueOrExistingString(payload, "status", current)
+	visibility := valueOrExistingString(payload, "visibility", current)
+	starts := any(nil)
+	if v, ok := payload["starts_at"]; ok {
+		starts = v
+	} else if v, ok := current["starts_at"]; ok {
+		starts = v
+	}
+	row, err := scanAdminYurubo(r.deps.Postgres.Pool().QueryRow(ctx, adminYuruboMutationSQL(`update yurubos set owner_user_id=$2,title=$3,body=$4,category=$5,place_text=$6,time_label=$7,status=$8,visibility=$9,starts_at=$10,updated_at=now() where id=$1 returning *`), id, owner, title, body, category, place, timeLabel, status, visibility, starts))
+	if err != nil {
+		return nil, err
+	}
+	return []map[string]any{row}, nil
+}
+
+func (r *router) adminDeletePostgresYurubo(ctx context.Context, id string) ([]map[string]any, error) {
+	if r.deps.Postgres == nil {
+		return nil, errors.New("postgres pool is not configured")
+	}
+	row, err := scanAdminYurubo(r.deps.Postgres.Pool().QueryRow(ctx, adminYuruboMutationSQL(`delete from yurubos where id=$1 returning *`), id))
+	if err != nil {
+		return nil, err
+	}
+	return []map[string]any{row}, nil
+}
+
+func adminYuruboSelectSQL() string {
+	return `select y.id::text,y.wish_item_id::text,y.owner_user_id::text,y.title,y.body,y.category,y.place_text,y.place_lat,y.place_lng,y.time_label,y.starts_at,y.ends_at,y.status,y.visibility,y.expires_at,y.created_at,y.updated_at,o.id::text,o.user_id,o.display_name,o.avatar_url,o.is_plus,(select count(*) from yurubo_reactions yr where yr.yurubo_id=y.id and yr.reaction_type='available') from yurubos y join profiles o on o.id=y.owner_user_id`
+}
+
+func adminYuruboMutationSQL(mutation string) string {
+	return `with y as (` + mutation + `) select y.id::text,y.wish_item_id::text,y.owner_user_id::text,y.title,y.body,y.category,y.place_text,y.place_lat,y.place_lng,y.time_label,y.starts_at,y.ends_at,y.status,y.visibility,y.expires_at,y.created_at,y.updated_at,o.id::text,o.user_id,o.display_name,o.avatar_url,o.is_plus,(select count(*) from yurubo_reactions yr where yr.yurubo_id=y.id and yr.reaction_type='available') from y join profiles o on o.id=y.owner_user_id`
+}
+
+type rowScanner interface{ Scan(dest ...any) error }
+
+func scanAdminYurubo(row rowScanner) (map[string]any, error) {
+	var id, owner, title, body, category, place, timeLabel, status, visibility string
+	var wishID, avatarURL *string
+	var lat, lng *float64
+	var starts, ends, expires *time.Time
+	var created, updated time.Time
+	var ownerID, ownerUserID, ownerName string
+	var ownerPlus bool
+	var reactionCount int
+	if err := row.Scan(&id, &wishID, &owner, &title, &body, &category, &place, &lat, &lng, &timeLabel, &starts, &ends, &status, &visibility, &expires, &created, &updated, &ownerID, &ownerUserID, &ownerName, &avatarURL, &ownerPlus, &reactionCount); err != nil {
+		return nil, err
+	}
+	m := map[string]any{"id": id, "owner_user_id": owner, "title": title, "body": body, "category": category, "place_text": place, "time_label": timeLabel, "status": status, "visibility": visibility, "created_at": created.UTC().Format(time.RFC3339Nano), "updated_at": updated.UTC().Format(time.RFC3339Nano), "reaction_count": reactionCount, "owner": map[string]any{"id": ownerID, "user_id": ownerUserID, "display_name": ownerName, "is_plus": ownerPlus}}
+	if wishID != nil {
+		m["wish_item_id"] = *wishID
+	}
+	if lat != nil {
+		m["place_lat"] = *lat
+	}
+	if lng != nil {
+		m["place_lng"] = *lng
+	}
+	if starts != nil {
+		m["starts_at"] = starts.UTC().Format(time.RFC3339Nano)
+	}
+	if ends != nil {
+		m["ends_at"] = ends.UTC().Format(time.RFC3339Nano)
+	}
+	if expires != nil {
+		m["expires_at"] = expires.UTC().Format(time.RFC3339Nano)
+	}
+	if avatarURL != nil {
+		m["owner"].(map[string]any)["avatar_url"] = *avatarURL
+	}
+	return m, nil
+}
+
+func valueOrExistingString(payload map[string]any, key string, current map[string]any) string {
+	if v, ok := payload[key].(string); ok {
+		return v
+	}
+	return stringValue(current, key)
+}
+
+func (r *router) addPostgresAdminYuruboReactionCounts(ctx context.Context, rows []map[string]any) {
+	ids := make([]string, 0, len(rows))
+	for _, row := range rows {
+		if id, _ := row["id"].(string); id != "" {
+			ids = append(ids, id)
+		}
+	}
+	if len(ids) == 0 || r.deps.Postgres == nil {
+		return
+	}
+	q, err := r.deps.Postgres.Pool().Query(ctx, `select yurubo_id::text,count(*) from yurubo_reactions where yurubo_id=any($1::uuid[]) and reaction_type=$2 group by yurubo_id`, ids, contracts.ReactionTypeAvailable)
+	if err != nil {
+		return
+	}
+	defer q.Close()
+	counts := map[string]int{}
+	for q.Next() {
+		var id string
+		var count int
+		if q.Scan(&id, &count) == nil {
+			counts[id] = count
 		}
 	}
 	for _, row := range rows {
