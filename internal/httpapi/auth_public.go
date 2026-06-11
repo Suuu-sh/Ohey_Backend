@@ -100,9 +100,31 @@ func writeClerkSignupError(w http.ResponseWriter, err error) {
 	switch {
 	case strings.Contains(body, "already") || strings.Contains(body, "duplicate") || strings.Contains(body, "taken"):
 		writeError(w, http.StatusConflict, "このメールアドレスはすでに登録されています。")
-	case strings.Contains(body, "password") || strings.Contains(body, "email"):
-		writeError(w, http.StatusBadRequest, "登録情報を確認してください。")
+	case strings.Contains(body, "password"):
+		writeError(w, http.StatusBadRequest, friendlyClerkPasswordError(body))
+	case strings.Contains(body, "email"):
+		writeError(w, http.StatusBadRequest, "メールアドレスを確認してください。")
 	default:
 		writeError(w, http.StatusBadGateway, "signup failed")
+	}
+}
+
+func friendlyClerkPasswordError(lowerBody string) string {
+	switch {
+	case strings.Contains(lowerBody, "pwned"),
+		strings.Contains(lowerBody, "breach"),
+		strings.Contains(lowerBody, "compromised"),
+		strings.Contains(lowerBody, "found in a breach"):
+		return "このパスワードは安全性が低いため使えません。別のパスワードにしてください。"
+	case strings.Contains(lowerBody, "too weak"),
+		strings.Contains(lowerBody, "strength"),
+		strings.Contains(lowerBody, "stronger"):
+		return "パスワードが弱すぎます。英字・数字を混ぜて、推測されにくいものにしてください。"
+	case strings.Contains(lowerBody, "too short"),
+		strings.Contains(lowerBody, "minimum"),
+		strings.Contains(lowerBody, "length"):
+		return "パスワードは6文字以上で入力してください。"
+	default:
+		return "パスワードを確認してください。安全性の高い別のパスワードを試してください。"
 	}
 }
