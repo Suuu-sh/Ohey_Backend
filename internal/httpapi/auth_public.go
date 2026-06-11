@@ -4,6 +4,8 @@ import (
 	"net"
 	"net/http"
 	"strings"
+
+	"github.com/yota/ohey/backend/internal/features/profiles"
 )
 
 type SignupRequest struct {
@@ -46,7 +48,26 @@ func (r *router) signupWithPassword(w http.ResponseWriter, req *http.Request) {
 		writeClerkSignupError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]any{"user": created})
+	clerkUserID, _ := created["id"].(string)
+	if strings.TrimSpace(clerkUserID) == "" {
+		writeError(w, http.StatusBadGateway, "signup failed")
+		return
+	}
+	profile, err := r.profileUsecase().BootstrapProfile(req.Context(), profiles.BootstrapUsecaseInput{
+		ClerkUserID: clerkUserID,
+		Request: profiles.BootstrapRequest{
+			UserID:       userID,
+			DisplayName:  displayName,
+			CharacterKey: "",
+			AvatarURL:    avatarURL,
+		},
+	})
+	if err != nil {
+		_ = r.deps.ClerkAPI.DeleteUser(req.Context(), clerkUserID)
+		writeProfileError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"user": created, "profile": profile})
 	return
 }
 
