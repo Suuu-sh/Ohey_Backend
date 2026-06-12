@@ -2,6 +2,4 @@ name = "ohey-api-proxy"
 main = "src/worker.js"
 compatibility_date = "2026-06-12"
 workers_dev = false
-routes = [
-  { pattern = "api.oheyapp.com/*", zone_name = "oheyapp.com" }
-]
+routes = []
