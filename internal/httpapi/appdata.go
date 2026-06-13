@@ -6,13 +6,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yota/ohey/backend/internal/features/dailystatuses"
-	"github.com/yota/ohey/backend/internal/features/friendgroups"
-	"github.com/yota/ohey/backend/internal/features/friends"
-	"github.com/yota/ohey/backend/internal/features/invites"
-	"github.com/yota/ohey/backend/internal/features/notifications"
-	"github.com/yota/ohey/backend/internal/features/profiles"
-	"github.com/yota/ohey/backend/internal/features/usersafety"
+	"github.com/Suuu-sh/Ohey_Backend/internal/features/dailystatuses"
+	"github.com/Suuu-sh/Ohey_Backend/internal/features/friendgroups"
+	"github.com/Suuu-sh/Ohey_Backend/internal/features/friends"
+	"github.com/Suuu-sh/Ohey_Backend/internal/features/invites"
+	"github.com/Suuu-sh/Ohey_Backend/internal/features/notifications"
+	"github.com/Suuu-sh/Ohey_Backend/internal/features/profiles"
+	"github.com/Suuu-sh/Ohey_Backend/internal/features/usersafety"
 )
 
 type ProfileSaveRequest struct {

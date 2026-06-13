@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yota/ohey/backend/internal/contracts"
-	"github.com/yota/ohey/backend/internal/features/notifications"
+	"github.com/Suuu-sh/Ohey_Backend/internal/contracts"
+	"github.com/Suuu-sh/Ohey_Backend/internal/features/notifications"
 )
 
 type notificationOutboxEvent struct {

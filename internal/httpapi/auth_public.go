@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/yota/ohey/backend/internal/features/profiles"
+	"github.com/Suuu-sh/Ohey_Backend/internal/features/profiles"
 )
 
 type SignupRequest struct {

@@ -10,10 +10,10 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/yota/ohey/backend/internal/contracts"
-	"github.com/yota/ohey/backend/internal/features/dailystatuses"
-	"github.com/yota/ohey/backend/internal/features/profiles"
-	"github.com/yota/ohey/backend/internal/features/yurubos"
+	"github.com/Suuu-sh/Ohey_Backend/internal/contracts"
+	"github.com/Suuu-sh/Ohey_Backend/internal/features/dailystatuses"
+	"github.com/Suuu-sh/Ohey_Backend/internal/features/profiles"
+	"github.com/Suuu-sh/Ohey_Backend/internal/features/yurubos"
 )
 
 const officialProfileUserID = "ohey_official"

@@ -25,6 +25,24 @@ services:
         sync: false
       - key: CLERK_SECRET_KEY
         sync: false
+      - key: CLERK_WEBHOOK_SECRET
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM_EMAIL
+        sync: false
+      - key: RESEND_REPLY_TO_EMAIL
+        sync: false
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET
+        value: ohey-public
+      - key: R2_PUBLIC_URL
+        sync: false
       - key: FCM_SERVICE_ACCOUNT_JSON
         sync: false
       - key: ALLOWED_ORIGINS

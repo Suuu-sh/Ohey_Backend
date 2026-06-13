@@ -7,9 +7,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/yota/ohey/backend/internal/config"
-	"github.com/yota/ohey/backend/internal/httpapi"
-	"github.com/yota/ohey/backend/internal/postgres"
+	"github.com/Suuu-sh/Ohey_Backend/internal/config"
+	"github.com/Suuu-sh/Ohey_Backend/internal/httpapi"
+	"github.com/Suuu-sh/Ohey_Backend/internal/postgres"
 )
 
 func main() {

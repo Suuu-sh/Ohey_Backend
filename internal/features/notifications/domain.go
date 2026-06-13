@@ -7,7 +7,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/yota/ohey/backend/internal/contracts"
+	"github.com/Suuu-sh/Ohey_Backend/internal/contracts"
 )
 
 type ErrorKind string

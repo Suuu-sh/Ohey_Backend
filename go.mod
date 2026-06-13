@@ -1,4 +1,4 @@
-module github.com/yota/ohey/backend
+module github.com/Suuu-sh/Ohey_Backend
 
 go 1.25.0
 

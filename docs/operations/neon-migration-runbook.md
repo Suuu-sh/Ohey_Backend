@@ -16,7 +16,7 @@ Use pooled Neon connection strings (`*-pooler`) for Render runtime. Use direct N
 The backend-owned schema is stored in:
 
 ```bash
-Backend/db/neon_baseline.sql
+Backend/db/migrations/000001_neon_baseline.sql
 ```
 
 
@@ -28,7 +28,7 @@ Notes:
 Apply to an empty Neon database with:
 
 ```bash
-psql "$DIRECT_DATABASE_URL" -v ON_ERROR_STOP=1 -f Backend/db/neon_baseline.sql
+psql "$DIRECT_DATABASE_URL" -v ON_ERROR_STOP=1 -f Backend/db/migrations/000001_neon_baseline.sql
 ```
 
 ## Data migration verification

@@ -5,9 +5,9 @@ import (
 	"errors"
 	"time"
 
+	"github.com/Suuu-sh/Ohey_Backend/internal/contracts"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/yota/ohey/backend/internal/contracts"
 )
 
 type PostgresRepository struct{ pool *pgxpool.Pool }

@@ -6,13 +6,13 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/Suuu-sh/Ohey_Backend/internal/config"
+	"github.com/Suuu-sh/Ohey_Backend/internal/contracts"
+	"github.com/Suuu-sh/Ohey_Backend/internal/features/dailystatuses"
+	"github.com/Suuu-sh/Ohey_Backend/internal/features/friends"
+	"github.com/Suuu-sh/Ohey_Backend/internal/features/profiles"
+	"github.com/Suuu-sh/Ohey_Backend/internal/postgres"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/yota/ohey/backend/internal/config"
-	"github.com/yota/ohey/backend/internal/contracts"
-	"github.com/yota/ohey/backend/internal/features/dailystatuses"
-	"github.com/yota/ohey/backend/internal/features/friends"
-	"github.com/yota/ohey/backend/internal/features/profiles"
-	"github.com/yota/ohey/backend/internal/postgres"
 )
 
 type Dependencies struct {
@@ -68,6 +68,7 @@ func (r *router) routes() {
 	r.mux.HandleFunc(route(http.MethodGet, contracts.APIPathLegalPrivacy), r.legalPrivacy)
 	r.mux.HandleFunc(route(http.MethodGet, contracts.APIPathShareYurubo), r.shareYurubo)
 	r.mux.HandleFunc(route(http.MethodPost, contracts.APIPathAuthSignup), r.signupWithPassword)
+	r.mux.HandleFunc(route(http.MethodPost, contracts.APIPathClerkEmailWebhook), r.handleClerkEmailWebhook)
 	r.mux.HandleFunc(route(http.MethodGet, contracts.APIPathMeProfile), r.auth(r.getProfile))
 	r.mux.HandleFunc(route(http.MethodPut, contracts.APIPathMeProfile), r.auth(r.upsertProfile))
 	r.mux.HandleFunc(route(http.MethodPatch, contracts.APIPathMeProfile), r.auth(r.updateProfile))

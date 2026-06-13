@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/yota/ohey/backend/internal/contracts"
+	"github.com/Suuu-sh/Ohey_Backend/internal/contracts"
 )
 
 const (
