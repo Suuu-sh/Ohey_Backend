@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yota/ohey/backend/internal/contracts"
+	"github.com/Suuu-sh/Ohey_Backend/internal/contracts"
 )
 
 type Dependencies struct {

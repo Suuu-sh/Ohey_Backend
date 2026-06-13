@@ -19,13 +19,22 @@ type Config struct {
 	ClerkAudience         string
 	ClerkSecretKey        string
 	AllowedOrigins        []string
+	ResendAPIKey          string
+	ResendFromEmail       string
+	ResendReplyToEmail    string
+	ClerkWebhookSecret    string
+	R2AccountID           string
+	R2AccessKeyID         string
+	R2SecretAccessKey     string
+	R2Bucket              string
+	R2PublicURL           string
 	FCMServiceAccountJSON string
 	AdminEmails           []string
 }
 
 func Load() (Config, error) {
 	cfg := Config{
-		Environment:           getEnv(EnvOheyEnvironment, "production"),
+		Environment:           getEnv(EnvAppEnvironment, "production"),
 		Port:                  getEnv(EnvPort, "8080"),
 		DataStore:             strings.ToLower(getEnv(EnvDataStore, "neon")),
 		DatabaseURL:           strings.TrimSpace(os.Getenv(EnvDatabaseURL)),
@@ -36,6 +45,15 @@ func Load() (Config, error) {
 		ClerkAudience:         strings.TrimSpace(os.Getenv(EnvClerkAudience)),
 		ClerkSecretKey:        strings.TrimSpace(os.Getenv(EnvClerkSecretKey)),
 		AllowedOrigins:        splitCSV(getEnv(EnvAllowedOrigins, "*")),
+		ResendAPIKey:          strings.TrimSpace(os.Getenv(EnvResendAPIKey)),
+		ResendFromEmail:       strings.TrimSpace(os.Getenv(EnvResendFromEmail)),
+		ResendReplyToEmail:    strings.TrimSpace(os.Getenv(EnvResendReplyToEmail)),
+		ClerkWebhookSecret:    strings.TrimSpace(os.Getenv(EnvClerkWebhookSecret)),
+		R2AccountID:           strings.TrimSpace(os.Getenv(EnvR2AccountID)),
+		R2AccessKeyID:         strings.TrimSpace(os.Getenv(EnvR2AccessKeyID)),
+		R2SecretAccessKey:     strings.TrimSpace(os.Getenv(EnvR2SecretAccessKey)),
+		R2Bucket:              getEnv(EnvR2Bucket, "ohey-public"),
+		R2PublicURL:           strings.TrimRight(strings.TrimSpace(os.Getenv(EnvR2PublicURL)), "/"),
 		FCMServiceAccountJSON: strings.TrimSpace(os.Getenv(EnvFCMServiceAccountJSON)),
 		AdminEmails:           splitCSV(os.Getenv(EnvOheyAdminEmails)),
 	}

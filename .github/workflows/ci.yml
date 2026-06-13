@@ -45,7 +45,7 @@ jobs:
         uses: Suuu-sh/Shared/actions/go-test@main
         with:
           working-directory: .
-          go-version: '1.23'
+          go-version: '1.25'
           test-command: go test ./...
           upload-coverage: 'false'
 
@@ -61,6 +61,6 @@ jobs:
         uses: Suuu-sh/Shared/actions/go-test@main
         with:
           working-directory: .
-          go-version: '1.23'
+          go-version: '1.25'
           test-command: go vet ./...
           upload-coverage: 'false'

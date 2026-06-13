@@ -7,9 +7,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/yota/ohey/backend/internal/config"
-	"github.com/yota/ohey/backend/internal/httpapi"
-	"github.com/yota/ohey/backend/internal/postgres"
+	"github.com/Suuu-sh/Ohey_Backend/internal/config"
+	"github.com/Suuu-sh/Ohey_Backend/internal/httpapi"
+	"github.com/Suuu-sh/Ohey_Backend/internal/postgres"
 )
 
 func main() {
@@ -45,7 +45,7 @@ func main() {
 		Handler:           httpapi.NewRouter(httpapi.Dependencies{Config: cfg, Logger: logger, Postgres: postgresDB, FCM: fcm, ClerkAPI: clerkAPI}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
-		WriteTimeout:      20 * time.Second,
+		WriteTimeout:      35 * time.Second,
 		IdleTimeout:       60 * time.Second,
 		MaxHeaderBytes:    1 << 20,
 	}

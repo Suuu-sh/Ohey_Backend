@@ -3,7 +3,7 @@ package httpapi
 import (
 	"net/http"
 
-	"github.com/yota/ohey/backend/internal/features/wishitems"
+	"github.com/Suuu-sh/Ohey_Backend/internal/features/wishitems"
 )
 
 func (r *router) wishItemsUsecase() *wishitems.Usecase {

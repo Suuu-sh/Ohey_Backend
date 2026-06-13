@@ -27,7 +27,7 @@ go run ./cmd/api
 Health check:
 
 ```sh
-curl http://localhost:8080/healthz
+curl http://localhost:8080/health
 ```
 
 Authenticated requests must include:
@@ -47,7 +47,7 @@ Database provider configuration:
 
 ## Endpoints
 
-- `GET /healthz`
+- `GET /health`
 - `GET /v1/me/profile`
 - `PUT /v1/me/profile`
 - `PATCH /v1/me/profile`
