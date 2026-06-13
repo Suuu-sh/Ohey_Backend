@@ -3,7 +3,7 @@ services:
     name: ohey-backend
     runtime: docker
     plan: free
-    healthCheckPath: /healthz
+    healthCheckPath: /health
     envVars:
       - key: OHEY_ENV
         value: production

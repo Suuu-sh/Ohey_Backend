@@ -1,10 +1,12 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/Suuu-sh/Ohey_Backend/internal/config"
 	"github.com/Suuu-sh/Ohey_Backend/internal/contracts"
@@ -130,8 +132,19 @@ func (r *router) routes() {
 	r.mux.HandleFunc(route(http.MethodPost, contracts.APIPathAdminNotifications), r.admin(r.adminCreateNotification))
 }
 
-func (r *router) health(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "service": "ohey-backend"})
+func (r *router) health(w http.ResponseWriter, req *http.Request) {
+	pool := postgresPool(r)
+	if pool == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"status": "degraded", "services": map[string]string{"database": "not configured"}})
+		return
+	}
+	ctx, cancel := context.WithTimeout(req.Context(), 2*time.Second)
+	defer cancel()
+	if err := pool.Ping(ctx); err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"status": "degraded", "services": map[string]string{"database": "error: " + err.Error()}})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "services": map[string]string{"database": "ok"}})
 }
 
 func (r *router) getProfile(w http.ResponseWriter, req *http.Request, authToken string) {
