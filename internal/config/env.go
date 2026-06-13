@@ -1,7 +1,7 @@
 package config
 
 const (
-	EnvOheyEnvironment       = "OHEY_ENV"
+	EnvAppEnvironment        = "APP_ENV"
 	EnvPort                  = "PORT"
 	EnvDataStore             = "DATA_STORE"
 	EnvDatabaseURL           = "DATABASE_URL"

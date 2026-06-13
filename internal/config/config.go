@@ -34,7 +34,7 @@ type Config struct {
 
 func Load() (Config, error) {
 	cfg := Config{
-		Environment:           getEnv(EnvOheyEnvironment, "production"),
+		Environment:           getEnv(EnvAppEnvironment, "production"),
 		Port:                  getEnv(EnvPort, "8080"),
 		DataStore:             strings.ToLower(getEnv(EnvDataStore, "neon")),
 		DatabaseURL:           strings.TrimSpace(os.Getenv(EnvDatabaseURL)),
