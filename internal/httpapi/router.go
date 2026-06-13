@@ -66,6 +66,8 @@ func route(method, path string) string {
 
 func (r *router) routes() {
 	r.mux.HandleFunc(route(http.MethodGet, contracts.APIPathHealth), r.health)
+	r.mux.HandleFunc(route(http.MethodGet, contracts.APIPathLegacyHealth), r.health)
+	r.mux.HandleFunc(route(http.MethodGet, contracts.APIPathReady), r.ready)
 	r.mux.HandleFunc(route(http.MethodGet, contracts.APIPathLegalTerms), r.legalTerms)
 	r.mux.HandleFunc(route(http.MethodGet, contracts.APIPathLegalPrivacy), r.legalPrivacy)
 	r.mux.HandleFunc(route(http.MethodGet, contracts.APIPathShareYurubo), r.shareYurubo)
@@ -133,6 +135,10 @@ func (r *router) routes() {
 }
 
 func (r *router) health(w http.ResponseWriter, req *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"service": "ohey-backend", "status": "ok"})
+}
+
+func (r *router) ready(w http.ResponseWriter, req *http.Request) {
 	pool := postgresPool(r)
 	if pool == nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"status": "degraded", "services": map[string]string{"database": "not configured"}})
