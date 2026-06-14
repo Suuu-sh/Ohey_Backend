@@ -1,12 +1,10 @@
 package httpapi
 
 import (
-	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/Suuu-sh/Ohey_Backend/internal/config"
 	"github.com/Suuu-sh/Ohey_Backend/internal/contracts"
@@ -66,8 +64,6 @@ func route(method, path string) string {
 
 func (r *router) routes() {
 	r.mux.HandleFunc(route(http.MethodGet, contracts.APIPathHealth), r.health)
-	r.mux.HandleFunc(route(http.MethodGet, contracts.APIPathLegacyHealth), r.health)
-	r.mux.HandleFunc(route(http.MethodGet, contracts.APIPathReady), r.ready)
 	r.mux.HandleFunc(route(http.MethodGet, contracts.APIPathLegalTerms), r.legalTerms)
 	r.mux.HandleFunc(route(http.MethodGet, contracts.APIPathLegalPrivacy), r.legalPrivacy)
 	r.mux.HandleFunc(route(http.MethodGet, contracts.APIPathShareYurubo), r.shareYurubo)
@@ -136,21 +132,6 @@ func (r *router) routes() {
 
 func (r *router) health(w http.ResponseWriter, req *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"service": "ohey-backend", "status": "ok"})
-}
-
-func (r *router) ready(w http.ResponseWriter, req *http.Request) {
-	pool := postgresPool(r)
-	if pool == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"status": "degraded", "services": map[string]string{"database": "not configured"}})
-		return
-	}
-	ctx, cancel := context.WithTimeout(req.Context(), 2*time.Second)
-	defer cancel()
-	if err := pool.Ping(ctx); err != nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"status": "degraded", "services": map[string]string{"database": "error: " + err.Error()}})
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "services": map[string]string{"database": "ok"}})
 }
 
 func (r *router) getProfile(w http.ResponseWriter, req *http.Request, authToken string) {
