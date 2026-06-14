@@ -64,6 +64,7 @@ func route(method, path string) string {
 
 func (r *router) routes() {
 	r.mux.HandleFunc(route(http.MethodGet, contracts.APIPathHealth), r.health)
+	r.mux.HandleFunc(route(http.MethodGet, contracts.APIPathLegacyHealth), r.health)
 	r.mux.HandleFunc(route(http.MethodGet, contracts.APIPathLegalTerms), r.legalTerms)
 	r.mux.HandleFunc(route(http.MethodGet, contracts.APIPathLegalPrivacy), r.legalPrivacy)
 	r.mux.HandleFunc(route(http.MethodGet, contracts.APIPathShareYurubo), r.shareYurubo)

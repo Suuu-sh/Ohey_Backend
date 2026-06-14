@@ -3,6 +3,7 @@ package contracts
 const (
 	APIPathClerkEmailWebhook = "/webhooks/clerk/email"
 	APIPathHealth            = "/health"
+	APIPathLegacyHealth      = "/healthz"
 	APIPathLegalTerms        = "/legal/terms.txt"
 	APIPathLegalPrivacy      = "/legal/privacy-policy.txt"
 	APIPathShareYurubo       = "/share/yurubos/{id}"
