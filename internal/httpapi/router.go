@@ -64,6 +64,8 @@ func route(method, path string) string {
 
 func (r *router) routes() {
 	r.mux.HandleFunc(route(http.MethodGet, contracts.APIPathHealth), r.health)
+	// Keep legacy Render health check compatibility while dashboards/blueprints converge on /health.
+	r.mux.HandleFunc(route(http.MethodGet, "/healthz"), r.health)
 	r.mux.HandleFunc(route(http.MethodGet, contracts.APIPathLegalTerms), r.legalTerms)
 	r.mux.HandleFunc(route(http.MethodGet, contracts.APIPathLegalPrivacy), r.legalPrivacy)
 	r.mux.HandleFunc(route(http.MethodGet, contracts.APIPathShareYurubo), r.shareYurubo)

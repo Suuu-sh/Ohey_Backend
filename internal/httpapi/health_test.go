@@ -22,9 +22,21 @@ func TestHealthEndpointIsLivenessOnly(t *testing.T) {
 	}
 }
 
-func TestOnlyHealthEndpointIsRegistered(t *testing.T) {
+func TestLegacyHealthzEndpointIsRegistered(t *testing.T) {
 	handler := NewRouter(Dependencies{})
-	for _, path := range []string{"/healthz", "/ready"} {
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+}
+
+func TestOnlyKnownHealthEndpointsAreRegistered(t *testing.T) {
+	handler := NewRouter(Dependencies{})
+	for _, path := range []string{"/ready"} {
 		t.Run(path, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, path, nil)
 			rec := httptest.NewRecorder()
