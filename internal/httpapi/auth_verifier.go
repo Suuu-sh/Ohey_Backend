@@ -11,6 +11,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"io"
 	"math/big"
 	"net/http"
 	"net/url"
@@ -26,6 +27,7 @@ const (
 	authJWTClockSkew          = 30 * time.Second
 	maxAuthTokenCacheEntries  = 4096
 	maxAuthTokenLengthForAuth = 64 * 1024
+	maxAuthJWKSResponseBytes  = 1 << 20
 )
 
 var (
@@ -122,7 +124,7 @@ func newAuthVerifier(cfg authVerifierConfig) *authVerifier {
 		cfg.now = time.Now
 	}
 	if cfg.httpClient == nil {
-		cfg.httpClient = http.DefaultClient
+		cfg.httpClient = &http.Client{Timeout: 10 * time.Second}
 	}
 	return &authVerifier{
 		httpClient: cfg.httpClient,
@@ -349,10 +351,13 @@ func (v *authVerifier) verifyAsymmetric(ctx context.Context, parsed parsedJWT) e
 func (v *authVerifier) cachedJWKs(ctx context.Context, forceRefresh bool) ([]jwk, error) {
 	now := v.now()
 	v.mu.Lock()
-	defer v.mu.Unlock()
 	if !forceRefresh && v.jwksCache.expiresAt.After(now) {
-		return v.jwksCache.keys, nil
+		keys := append([]jwk(nil), v.jwksCache.keys...)
+		v.mu.Unlock()
+		return keys, nil
 	}
+	v.mu.Unlock()
+
 	var set jwks
 	if v.jwksURL != "" {
 		if err := v.getJWKSURL(ctx, &set); err != nil {
@@ -361,11 +366,14 @@ func (v *authVerifier) cachedJWKs(ctx context.Context, forceRefresh bool) ([]jwk
 	} else {
 		return nil, errors.New("jwks url is not configured")
 	}
+	keys := append([]jwk(nil), set.Keys...)
+	v.mu.Lock()
 	v.jwksCache = cachedAuthJWKS{
-		keys:      set.Keys,
+		keys:      keys,
 		expiresAt: now.Add(authJWKSCacheTTL),
 	}
-	return set.Keys, nil
+	v.mu.Unlock()
+	return append([]jwk(nil), keys...), nil
 }
 
 func (v *authVerifier) getJWKSURL(ctx context.Context, out any) error {
@@ -386,7 +394,7 @@ func (v *authVerifier) getJWKSURL(ctx context.Context, out any) error {
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return errInvalidAuthToken
 	}
-	return json.NewDecoder(resp.Body).Decode(out)
+	return json.NewDecoder(io.LimitReader(resp.Body, maxAuthJWKSResponseBytes)).Decode(out)
 }
 
 func verifyJWTSignature(parsed parsedJWT, keys []jwk) error {

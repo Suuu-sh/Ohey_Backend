@@ -86,6 +86,14 @@ func (u *Usecase) CreateInvite(ctx context.Context, input CreateInput) (map[stri
 		return nil, UserError{Kind: ErrorKindConflict, Message: "blocked users cannot be invited"}
 	}
 
+	alreadyFriend, err := u.repository.FriendshipExists(ctx, input.AuthToken, inviterUserID, inviteeUserID)
+	if err != nil {
+		return nil, err
+	}
+	if !alreadyFriend {
+		return nil, UserError{Kind: ErrorKindForbidden, Message: "friendship is required"}
+	}
+
 	dailyStatus, err := u.repository.DailyStatus(ctx, input.AuthToken, inviteeUserID, scheduledDate)
 	if err != nil {
 		return nil, err

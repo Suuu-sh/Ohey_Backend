@@ -35,12 +35,19 @@ func (r *PostgresRepository) CreateYurubo(ctx context.Context, _ string, item Yu
 	return out, nil
 }
 
-func (r *PostgresRepository) LinkVisibilityGroup(ctx context.Context, _ string, yuruboID, groupID string) error {
+func (r *PostgresRepository) LinkVisibilityGroup(ctx context.Context, _ string, ownerUserID, yuruboID, groupID string) (bool, error) {
 	if r.pool == nil {
-		return errors.New("postgres pool is not configured")
+		return false, errors.New("postgres pool is not configured")
 	}
-	_, err := r.pool.Exec(ctx, `insert into yurubo_visibility_groups (yurubo_id,group_id) values ($1,$2) on conflict do nothing`, yuruboID, groupID)
-	return mapPostgresYuruboError(err)
+	tag, err := r.pool.Exec(ctx, `insert into yurubo_visibility_groups (yurubo_id,group_id)
+		select $1, fg.id
+		from friend_groups fg
+		where fg.id=$2 and fg.owner_user_id=$3
+		on conflict do nothing`, yuruboID, groupID, ownerUserID)
+	if err != nil {
+		return false, mapPostgresYuruboError(err)
+	}
+	return tag.RowsAffected() > 0, nil
 }
 
 func (r *PostgresRepository) UpdateYurubo(ctx context.Context, _ string, update YuruboUpdate) (map[string]any, error) {
@@ -111,7 +118,38 @@ func (r *PostgresRepository) ListOpenYurubosForViewer(ctx context.Context, _ str
 	if r.pool == nil {
 		return nil, errors.New("postgres pool is not configured")
 	}
-	rows, err := r.pool.Query(ctx, yuruboSelectSQL+` where y.status=$1 and y.expires_at > now() and (y.owner_user_id=$2 or y.visibility=$3 or (y.visibility=$4 and exists(select 1 from yurubo_visibility_groups yvg join friend_group_members fgm on fgm.group_id=yvg.group_id where yvg.yurubo_id=y.id and fgm.friend_user_id=$2))) order by y.created_at desc limit $5`, contracts.StatusOpen, viewerUserID, contracts.VisibilityFriends, contracts.VisibilityGroup, limit)
+	rows, err := r.pool.Query(ctx, yuruboSelectSQL+` where y.status=$1 and y.expires_at > now() and (
+		y.owner_user_id=$2
+		or (
+			not exists(
+				select 1
+				from user_blocks ub
+				where (ub.blocker_user_id=$2 and ub.blocked_user_id=y.owner_user_id)
+				   or (ub.blocker_user_id=y.owner_user_id and ub.blocked_user_id=$2)
+			)
+			and (
+				(
+					y.visibility=$3
+					and exists(
+						select 1
+						from friendships f
+						where (f.user_a_id=$2 and f.user_b_id=y.owner_user_id)
+						   or (f.user_a_id=y.owner_user_id and f.user_b_id=$2)
+					)
+				)
+				or (
+					y.visibility=$4
+					and exists(
+						select 1
+						from yurubo_visibility_groups yvg
+						join friend_groups fg on fg.id=yvg.group_id and fg.owner_user_id=y.owner_user_id
+						join friend_group_members fgm on fgm.group_id=fg.id
+						where yvg.yurubo_id=y.id and fgm.friend_user_id=$2
+					)
+				)
+			)
+		)
+	) order by y.created_at desc limit $5`, contracts.StatusOpen, viewerUserID, contracts.VisibilityFriends, contracts.VisibilityGroup, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -222,12 +260,50 @@ func (r *PostgresRepository) VisibilityLabels(ctx context.Context, _ string, row
 	}
 	return labels, q.Err()
 }
-func (r *PostgresRepository) UpsertReaction(ctx context.Context, _ string, reaction Reaction) error {
+func (r *PostgresRepository) UpsertReaction(ctx context.Context, _ string, reaction Reaction) (bool, error) {
 	if r.pool == nil {
-		return errors.New("postgres pool is not configured")
+		return false, errors.New("postgres pool is not configured")
 	}
-	_, err := r.pool.Exec(ctx, `insert into yurubo_reactions (yurubo_id,user_id,reaction_type,updated_at) values ($1,$2,$3,now()) on conflict (yurubo_id,user_id) do update set reaction_type=excluded.reaction_type, updated_at=now()`, reaction.YuruboID, reaction.UserID, reaction.ReactionType)
-	return mapPostgresYuruboError(err)
+	tag, err := r.pool.Exec(ctx, `insert into yurubo_reactions (yurubo_id,user_id,reaction_type,updated_at)
+		select y.id,$2,$3,now()
+		from yurubos y
+		where y.id=$1 and y.status=$4 and y.expires_at > now() and (
+			y.owner_user_id=$2
+			or (
+				not exists(
+					select 1
+					from user_blocks ub
+					where (ub.blocker_user_id=$2 and ub.blocked_user_id=y.owner_user_id)
+					   or (ub.blocker_user_id=y.owner_user_id and ub.blocked_user_id=$2)
+				)
+				and (
+					(
+						y.visibility=$5
+						and exists(
+							select 1
+							from friendships f
+							where (f.user_a_id=$2 and f.user_b_id=y.owner_user_id)
+							   or (f.user_a_id=y.owner_user_id and f.user_b_id=$2)
+						)
+					)
+					or (
+						y.visibility=$6
+						and exists(
+							select 1
+							from yurubo_visibility_groups yvg
+							join friend_groups fg on fg.id=yvg.group_id and fg.owner_user_id=y.owner_user_id
+							join friend_group_members fgm on fgm.group_id=fg.id
+							where yvg.yurubo_id=y.id and fgm.friend_user_id=$2
+						)
+					)
+				)
+			)
+		)
+		on conflict (yurubo_id,user_id) do update set reaction_type=excluded.reaction_type, updated_at=now()`, reaction.YuruboID, reaction.UserID, reaction.ReactionType, contracts.StatusOpen, contracts.VisibilityFriends, contracts.VisibilityGroup)
+	if err != nil {
+		return false, mapPostgresYuruboError(err)
+	}
+	return tag.RowsAffected() > 0, nil
 }
 func (r *PostgresRepository) ApproveReaction(ctx context.Context, _ string, ownerUserID, yuruboID, participantID string) (bool, error) {
 	if r.pool == nil {

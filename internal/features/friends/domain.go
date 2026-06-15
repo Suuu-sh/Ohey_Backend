@@ -12,6 +12,7 @@ type ErrorKind string
 
 const (
 	ErrorKindInvalidInput ErrorKind = "invalid_input"
+	ErrorKindForbidden    ErrorKind = "forbidden"
 	ErrorKindConflict     ErrorKind = "conflict"
 	ErrorKindNotFound     ErrorKind = "not_found"
 )

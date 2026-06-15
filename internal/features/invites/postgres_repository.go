@@ -70,6 +70,15 @@ func (r *PostgresRepository) BlockExistsBetweenUsers(ctx context.Context, _ stri
 	return exists, err
 }
 
+func (r *PostgresRepository) FriendshipExists(ctx context.Context, _ string, inviterUserID, inviteeUserID string) (bool, error) {
+	if r.pool == nil {
+		return false, errors.New("postgres pool is not configured")
+	}
+	var exists bool
+	err := r.pool.QueryRow(ctx, `select exists(select 1 from friendships where (user_a_id=$1 and user_b_id=$2) or (user_a_id=$2 and user_b_id=$1))`, inviterUserID, inviteeUserID).Scan(&exists)
+	return exists, err
+}
+
 func (r *PostgresRepository) FindActiveInviteBetweenUsersForDate(ctx context.Context, _ string, inviterUserID, inviteeUserID, scheduledDate string) (*ExistingInvite, error) {
 	if r.pool == nil {
 		return nil, errors.New("postgres pool is not configured")

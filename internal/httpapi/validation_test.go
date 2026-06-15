@@ -53,6 +53,18 @@ func TestCleanDateOnlyOrToday(t *testing.T) {
 	}
 }
 
+func TestDateOnlyParamRejectsInvalidDateInsteadOfFallingBackToToday(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/v1/friends?date=2026/05/23", nil)
+	w := httptest.NewRecorder()
+
+	if got, ok := dateOnlyParam(w, req, "date"); ok || got != "" {
+		t.Fatalf("dateOnlyParam() = (%q, %v), want rejection", got, ok)
+	}
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
 func TestDecodeJSONBodyRejectsTrailingJSON(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"ok":true}{"extra":true}`))
 	w := httptest.NewRecorder()

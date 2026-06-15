@@ -46,4 +46,4 @@ services:
       - key: FCM_SERVICE_ACCOUNT_JSON
         sync: false
       - key: ALLOWED_ORIGINS
-        value: "*"
+        value: "https://oheyapp.com,https://www.oheyapp.com"

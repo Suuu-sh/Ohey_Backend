@@ -44,10 +44,10 @@ func (r *fakeRepository) CreateYurubo(_ context.Context, _ string, item Yurubo) 
 	return map[string]any{"id": yuruboID, "title": item.Title}, nil
 }
 
-func (r *fakeRepository) LinkVisibilityGroup(_ context.Context, _ string, yuruboID, groupID string) error {
+func (r *fakeRepository) LinkVisibilityGroup(_ context.Context, _ string, _ string, yuruboID, groupID string) (bool, error) {
 	r.linkedYuruboID = yuruboID
 	r.linkedGroupID = groupID
-	return nil
+	return true, nil
 }
 
 func (r *fakeRepository) UpdateYurubo(_ context.Context, _ string, update YuruboUpdate) (map[string]any, error) {
@@ -95,9 +95,9 @@ func (r *fakeRepository) VisibilityLabels(_ context.Context, _ string, _ []map[s
 	return r.labels, nil
 }
 
-func (r *fakeRepository) UpsertReaction(_ context.Context, _ string, reaction Reaction) error {
+func (r *fakeRepository) UpsertReaction(_ context.Context, _ string, reaction Reaction) (bool, error) {
 	r.upserted = reaction
-	return nil
+	return true, nil
 }
 
 func (r *fakeRepository) ApproveReaction(_ context.Context, _ string, _ string, _ string, _ string) (bool, error) {

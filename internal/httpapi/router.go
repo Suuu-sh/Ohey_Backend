@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/Suuu-sh/Ohey_Backend/internal/config"
 	"github.com/Suuu-sh/Ohey_Backend/internal/contracts"
@@ -35,7 +36,7 @@ func newConfiguredAuthVerifier(deps Dependencies) *authVerifier {
 		deps.Config.ClerkIssuer,
 		deps.Config.ClerkJWKSURL,
 		deps.Config.ClerkAudience,
-		nil,
+		&http.Client{Timeout: 10 * time.Second},
 		timeNow,
 	)
 }
@@ -167,10 +168,14 @@ func (r *router) updateProfile(w http.ResponseWriter, req *http.Request, authTok
 }
 
 func (r *router) listFriends(w http.ResponseWriter, req *http.Request, authToken string) {
+	date, ok := dateOnlyParam(w, req, "date")
+	if !ok {
+		return
+	}
 	rows, err := r.friendsUsecase(req).ListFriends(req.Context(), friends.ListInput{
 		AuthToken: authToken,
 		UserID:    req.Header.Get("X-Ohey-User-ID"),
-		Date:      dateOnlyParam(req, "date"),
+		Date:      date,
 	})
 	if err != nil {
 		writeFriendsError(w, err)
@@ -297,16 +302,24 @@ func (r *router) authClerk(w http.ResponseWriter, req *http.Request, next func(h
 		writeError(w, http.StatusUnauthorized, "invalid auth user")
 		return
 	}
-	if headerUserID := strings.TrimSpace(req.Header.Get("X-Ohey-User-ID")); headerUserID != "" && headerUserID != clerkUserID {
-		writeError(w, http.StatusForbidden, "auth user mismatch")
-		return
-	}
+	headerUserID := strings.TrimSpace(req.Header.Get("X-Ohey-User-ID"))
 	downstreamToken := authToken
 	profile, err := r.profileUsecase().GetProfile(req.Context(), profiles.AuthInput{
 		AuthToken:   downstreamToken,
 		ClerkUserID: clerkUserID,
 	})
 	if err == nil && profile != nil {
+		if headerUserID != "" && headerUserID != clerkUserID {
+			cleanHeaderUserID, errMessage := cleanUUID(headerUserID, "X-Ohey-User-ID")
+			if errMessage != "" {
+				writeError(w, http.StatusBadRequest, errMessage)
+				return
+			}
+			if cleanHeaderUserID != profile.ID {
+				writeError(w, http.StatusForbidden, "auth user mismatch")
+				return
+			}
+		}
 		req.Header.Set("X-Ohey-User-ID", profile.ID)
 		req.Header.Set("X-Ohey-Clerk-User-ID", clerkUserID)
 		next(w, req, downstreamToken)

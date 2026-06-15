@@ -124,10 +124,34 @@ func (r *PostgresRepository) VisibleYuruboRecipientIDs(ctx context.Context, _ st
 		return nil, errors.New("postgres pool is not configured")
 	}
 	if visibility == contracts.VisibilityGroup && len(groupIDs) > 0 {
-		rows, err := r.pool.Query(ctx, `select distinct friend_user_id::text from friend_group_members where group_id=any($1::uuid[]) and friend_user_id<>$2`, groupIDs, ownerUserID)
+		rows, err := r.pool.Query(ctx, `select distinct fgm.friend_user_id::text
+			from friend_group_members fgm
+			join friend_groups fg on fg.id=fgm.group_id and fg.owner_user_id=$2
+			where fgm.group_id=any($1::uuid[])
+			  and fgm.friend_user_id<>$2
+			  and exists(
+			    select 1
+			    from friendships f
+			    where (f.user_a_id=$2 and f.user_b_id=fgm.friend_user_id)
+			       or (f.user_a_id=fgm.friend_user_id and f.user_b_id=$2)
+			  )
+			  and not exists(
+			    select 1
+			    from user_blocks ub
+			    where (ub.blocker_user_id=$2 and ub.blocked_user_id=fgm.friend_user_id)
+			       or (ub.blocker_user_id=fgm.friend_user_id and ub.blocked_user_id=$2)
+			  )`, groupIDs, ownerUserID)
 		return scanIDRows(rows, err)
 	}
-	rows, err := r.pool.Query(ctx, `select case when user_a_id=$1 then user_b_id::text else user_a_id::text end from friendships where user_a_id=$1 or user_b_id=$1`, ownerUserID)
+	rows, err := r.pool.Query(ctx, `select case when f.user_a_id=$1 then f.user_b_id::text else f.user_a_id::text end
+		from friendships f
+		where (f.user_a_id=$1 or f.user_b_id=$1)
+		  and not exists(
+		    select 1
+		    from user_blocks ub
+		    where (ub.blocker_user_id=$1 and ub.blocked_user_id=case when f.user_a_id=$1 then f.user_b_id else f.user_a_id end)
+		       or (ub.blocker_user_id=case when f.user_a_id=$1 then f.user_b_id else f.user_a_id end and ub.blocked_user_id=$1)
+		  )`, ownerUserID)
 	return scanIDRows(rows, err)
 }
 func (r *PostgresRepository) PushTokens(ctx context.Context, recipientUserID string) ([]string, error) {

@@ -1,6 +1,10 @@
 package httpapi
 
-import "testing"
+import (
+	"net/http"
+	"net/http/httptest"
+	"testing"
+)
 
 func TestFriendlyClerkPasswordError(t *testing.T) {
 	tests := []struct {
@@ -31,5 +35,25 @@ func TestFriendlyClerkPasswordError(t *testing.T) {
 				t.Fatalf("friendlyClerkPasswordError() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestClientIPUsesRightmostValidForwardedAddress(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/v1/auth/signup", nil)
+	req.RemoteAddr = "10.0.0.10:12345"
+	req.Header.Set("X-Forwarded-For", "203.0.113.9, bad, 198.51.100.7")
+
+	if got := clientIP(req); got != "198.51.100.7" {
+		t.Fatalf("clientIP() = %q, want rightmost valid forwarded address", got)
+	}
+}
+
+func TestClientIPFallsBackToRemoteAddrWhenForwardedHeaderIsInvalid(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/v1/auth/signup", nil)
+	req.RemoteAddr = "192.0.2.20:54321"
+	req.Header.Set("X-Forwarded-For", "spoofed")
+
+	if got := clientIP(req); got != "192.0.2.20" {
+		t.Fatalf("clientIP() = %q, want remote addr host", got)
 	}
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/Suuu-sh/Ohey_Backend/internal/features/dailystatuses"
 	"github.com/Suuu-sh/Ohey_Backend/internal/features/friendgroups"
@@ -333,10 +332,14 @@ func firstNonEmpty(values ...string) string {
 }
 
 func (r *router) listNotifications(w http.ResponseWriter, req *http.Request, authToken string) {
+	date, ok := dateOnlyParam(w, req, "date")
+	if !ok {
+		return
+	}
 	rows, err := r.notificationUsecase(req).ListNotifications(req.Context(), notifications.ListInput{
 		AuthToken: authToken,
 		UserID:    req.Header.Get("X-Ohey-User-ID"),
-		Date:      dateOnlyParam(req, "date"),
+		Date:      date,
 	})
 	if err != nil {
 		writeNotificationError(w, err)
@@ -382,10 +385,14 @@ func (r *router) deleteOwnAccount(w http.ResponseWriter, req *http.Request, _ st
 }
 
 func (r *router) listTodayReservations(w http.ResponseWriter, req *http.Request, authToken string) {
+	date, ok := dateOnlyParam(w, req, "date")
+	if !ok {
+		return
+	}
 	rows, err := r.inviteUsecase(req).ListTodayReservations(req.Context(), invites.ListInput{
 		AuthToken:     authToken,
 		UserID:        req.Header.Get("X-Ohey-User-ID"),
-		ScheduledDate: dateOnlyParam(req, "date"),
+		ScheduledDate: date,
 	})
 	if err != nil {
 		writeUpstreamError(w, err)
@@ -395,10 +402,14 @@ func (r *router) listTodayReservations(w http.ResponseWriter, req *http.Request,
 }
 
 func (r *router) listIncomingPendingInvites(w http.ResponseWriter, req *http.Request, authToken string) {
+	date, ok := dateOnlyParam(w, req, "date")
+	if !ok {
+		return
+	}
 	rows, err := r.inviteUsecase(req).ListIncomingPending(req.Context(), invites.ListInput{
 		AuthToken:     authToken,
 		UserID:        req.Header.Get("X-Ohey-User-ID"),
-		ScheduledDate: dateOnlyParam(req, "date"),
+		ScheduledDate: date,
 	})
 	if err != nil {
 		writeUpstreamError(w, err)
@@ -408,10 +419,14 @@ func (r *router) listIncomingPendingInvites(w http.ResponseWriter, req *http.Req
 }
 
 func (r *router) listOutgoingActiveInvites(w http.ResponseWriter, req *http.Request, authToken string) {
+	date, ok := dateOnlyParam(w, req, "date")
+	if !ok {
+		return
+	}
 	rows, err := r.inviteUsecase(req).ListOutgoingActive(req.Context(), invites.ListInput{
 		AuthToken:     authToken,
 		UserID:        req.Header.Get("X-Ohey-User-ID"),
-		ScheduledDate: dateOnlyParam(req, "date"),
+		ScheduledDate: date,
 	})
 	if err != nil {
 		writeUpstreamError(w, err)
@@ -551,6 +566,8 @@ func writeInviteError(w http.ResponseWriter, err error) {
 		switch kind {
 		case invites.ErrorKindInvalidInput:
 			writeError(w, http.StatusBadRequest, err.Error())
+		case invites.ErrorKindForbidden:
+			writeError(w, http.StatusForbidden, err.Error())
 		case invites.ErrorKindConflict:
 			writeError(w, http.StatusConflict, err.Error())
 		case invites.ErrorKindNotFound:
@@ -568,6 +585,8 @@ func writeFriendsError(w http.ResponseWriter, err error) {
 		switch kind {
 		case friends.ErrorKindInvalidInput:
 			writeError(w, http.StatusBadRequest, err.Error())
+		case friends.ErrorKindForbidden:
+			writeError(w, http.StatusForbidden, err.Error())
 		case friends.ErrorKindConflict:
 			writeError(w, http.StatusConflict, err.Error())
 		case friends.ErrorKindNotFound:
@@ -666,10 +685,11 @@ func writeDailyStatusError(w http.ResponseWriter, err error) {
 	writeUpstreamError(w, err)
 }
 
-func dateOnlyParam(req *http.Request, name string) string {
+func dateOnlyParam(w http.ResponseWriter, req *http.Request, name string) (string, bool) {
 	value, errMessage := cleanDateOnlyOrToday(req.URL.Query().Get(name), name)
 	if errMessage != "" {
-		return time.Now().Format(time.DateOnly)
+		writeError(w, http.StatusBadRequest, errMessage)
+		return "", false
 	}
-	return value
+	return value, true
 }

@@ -67,7 +67,10 @@ func (r *router) signupWithPassword(w http.ResponseWriter, req *http.Request) {
 		writeProfileError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]any{"user": created, "profile": profile})
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"user":    map[string]any{"id": clerkUserID},
+		"profile": profile,
+	})
 	return
 }
 
@@ -83,10 +86,13 @@ func (r *router) enforceSignupRateLimit(w http.ResponseWriter, req *http.Request
 
 func clientIP(req *http.Request) string {
 	if forwarded := strings.TrimSpace(req.Header.Get("X-Forwarded-For")); forwarded != "" {
-		if first, _, ok := strings.Cut(forwarded, ","); ok {
-			return strings.TrimSpace(first)
+		parts := strings.Split(forwarded, ",")
+		for i := len(parts) - 1; i >= 0; i-- {
+			candidate := strings.TrimSpace(parts[i])
+			if net.ParseIP(candidate) != nil {
+				return candidate
+			}
 		}
-		return forwarded
 	}
 	host, _, err := net.SplitHostPort(req.RemoteAddr)
 	if err == nil && host != "" {

@@ -175,6 +175,18 @@ func TestDeleteFriendshipRequiresExistingRow(t *testing.T) {
 	assertUserError(t, err, ErrorKindNotFound, "friendship not found")
 }
 
+func TestCreateFriendshipRequiresFriendRequestApproval(t *testing.T) {
+	repo := &fakeRepository{}
+	usecase := NewUsecase(Dependencies{Repository: repo})
+
+	_, err := usecase.CreateFriendship(context.Background(), FriendInput{AuthToken: testAuthToken, UserID: testUserID, FriendID: otherUserID})
+
+	assertUserError(t, err, ErrorKindForbidden, "friend request approval is required")
+	if len(repo.calls) != 0 {
+		t.Fatalf("repository calls = %v, want none", repo.calls)
+	}
+}
+
 func TestCreateFriendRequestRejectsExistingFriendBeforeInsert(t *testing.T) {
 	repo := &fakeRepository{alreadyFriend: true}
 	usecase := NewUsecase(Dependencies{Repository: repo})
