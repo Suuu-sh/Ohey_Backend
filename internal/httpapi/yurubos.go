@@ -4,8 +4,8 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/yota/ohey/backend/internal/contracts"
-	"github.com/yota/ohey/backend/internal/features/yurubos"
+	"github.com/Suuu-sh/Ohey_Backend/internal/contracts"
+	"github.com/Suuu-sh/Ohey_Backend/internal/features/yurubos"
 )
 
 func (r *router) yurubosUsecase() *yurubos.Usecase {

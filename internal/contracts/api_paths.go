@@ -1,10 +1,11 @@
 package contracts
 
 const (
-	APIPathHealth       = "/healthz"
-	APIPathLegalTerms   = "/legal/terms.txt"
-	APIPathLegalPrivacy = "/legal/privacy-policy.txt"
-	APIPathShareYurubo  = "/share/yurubos/{id}"
+	APIPathClerkEmailWebhook = "/webhooks/clerk/email"
+	APIPathHealth            = "/health"
+	APIPathLegalTerms        = "/legal/terms.txt"
+	APIPathLegalPrivacy      = "/legal/privacy-policy.txt"
+	APIPathShareYurubo       = "/share/yurubos/{id}"
 
 	APIPathAuthSignup       = "/v1/auth/signup"
 	APIPathMeProfile        = "/v1/me/profile"

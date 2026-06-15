@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/yota/ohey/backend/internal/contracts"
+	"github.com/Suuu-sh/Ohey_Backend/internal/contracts"
 )
 
 const testUserID = "11111111-1111-1111-1111-111111111111"

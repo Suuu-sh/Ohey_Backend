@@ -9,7 +9,9 @@ on:
       - 'internal/**'
       - 'docs/**'
       - 'Dockerfile'
+      - '.env.example'
       - 'go.mod'
+      - 'go.sum'
       - 'render.yaml'
       - '.github/workflows/ci.yml'
   pull_request:
@@ -20,7 +22,9 @@ on:
       - 'internal/**'
       - 'docs/**'
       - 'Dockerfile'
+      - '.env.example'
       - 'go.mod'
+      - 'go.sum'
       - 'render.yaml'
       - '.github/workflows/ci.yml'
   workflow_dispatch:
@@ -39,13 +43,13 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
 
       - name: Run shared Go test action
-        uses: Suuu-sh/Shared/actions/go-test@main
+        uses: Suuu-sh/Shared/actions/go-test@7f6f9dc12a0b3e34bee54aaf7c60f45dadfb6ba4
         with:
           working-directory: .
-          go-version: '1.23'
+          go-version: '1.25'
           test-command: go test ./...
           upload-coverage: 'false'
 
@@ -55,12 +59,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
 
       - name: Run go vet via shared Go action
-        uses: Suuu-sh/Shared/actions/go-test@main
+        uses: Suuu-sh/Shared/actions/go-test@7f6f9dc12a0b3e34bee54aaf7c60f45dadfb6ba4
         with:
           working-directory: .
-          go-version: '1.23'
+          go-version: '1.25'
           test-command: go vet ./...
           upload-coverage: 'false'

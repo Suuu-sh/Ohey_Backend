@@ -5,13 +5,14 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/yota/ohey/backend/internal/contracts"
+	"github.com/Suuu-sh/Ohey_Backend/internal/contracts"
 )
 
 type ErrorKind string
 
 const (
 	ErrorKindInvalidInput ErrorKind = "invalid_input"
+	ErrorKindForbidden    ErrorKind = "forbidden"
 	ErrorKindConflict     ErrorKind = "conflict"
 	ErrorKindNotFound     ErrorKind = "not_found"
 )

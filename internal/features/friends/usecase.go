@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yota/ohey/backend/internal/contracts"
+	"github.com/Suuu-sh/Ohey_Backend/internal/contracts"
 )
 
 type Dependencies struct {
@@ -96,14 +96,7 @@ func (u *Usecase) CreateFriendship(ctx context.Context, input FriendInput) (map[
 	if friendID == userID {
 		return nil, UserError{Kind: ErrorKindInvalidInput, Message: "cannot add yourself as a friend"}
 	}
-	blocked, err := u.repository.BlockExistsBetweenUsers(ctx, input.AuthToken, userID, friendID)
-	if err != nil {
-		return nil, err
-	}
-	if blocked {
-		return nil, UserError{Kind: ErrorKindConflict, Message: "cannot add blocked user"}
-	}
-	return u.repository.UpsertFriendshipPair(ctx, input.AuthToken, userID, friendID)
+	return nil, UserError{Kind: ErrorKindForbidden, Message: "friend request approval is required"}
 }
 
 func (u *Usecase) UpdateFriendFavorite(ctx context.Context, input FavoriteInput) (map[string]any, error) {

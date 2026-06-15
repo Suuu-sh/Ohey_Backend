@@ -83,9 +83,4 @@ When adding the UI, keep retry as an explicit admin action rather than automatic
 
 Enable Render cron only after user volume or notification reliability requirements justify paid cron/Pro.
 
-Future cron settings:
-
-- service name: `ohey-notification-outbox-worker`
-- schedule: `*/5 * * * *`
-- docker command: `/ohey-notification-worker`
-- env: `OHEY_ENV`, `DATABASE_URL`, `CLERK_ISSUER`, `CLERK_SECRET_KEY`, `FCM_SERVICE_ACCOUNT_JSON`, `ALLOWED_ORIGINS`
+The previous standalone notification worker binary was removed while cron is unused. If cron is needed later, add a new worker entry point and Render service deliberately at that time.

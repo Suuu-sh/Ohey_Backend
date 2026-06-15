@@ -5,10 +5,10 @@ import (
 	"errors"
 	"time"
 
+	"github.com/Suuu-sh/Ohey_Backend/internal/contracts"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/yota/ohey/backend/internal/contracts"
 )
 
 type PostgresRepository struct{ pool *pgxpool.Pool }
@@ -67,6 +67,15 @@ func (r *PostgresRepository) BlockExistsBetweenUsers(ctx context.Context, _ stri
 	}
 	var exists bool
 	err := r.pool.QueryRow(ctx, `select exists(select 1 from user_blocks where (blocker_user_id=$1 and blocked_user_id=$2) or (blocker_user_id=$2 and blocked_user_id=$1))`, inviterUserID, inviteeUserID).Scan(&exists)
+	return exists, err
+}
+
+func (r *PostgresRepository) FriendshipExists(ctx context.Context, _ string, inviterUserID, inviteeUserID string) (bool, error) {
+	if r.pool == nil {
+		return false, errors.New("postgres pool is not configured")
+	}
+	var exists bool
+	err := r.pool.QueryRow(ctx, `select exists(select 1 from friendships where (user_a_id=$1 and user_b_id=$2) or (user_a_id=$2 and user_b_id=$1))`, inviterUserID, inviteeUserID).Scan(&exists)
 	return exists, err
 }
 

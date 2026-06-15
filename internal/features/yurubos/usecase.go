@@ -3,7 +3,7 @@ package yurubos
 import (
 	"context"
 
-	"github.com/yota/ohey/backend/internal/contracts"
+	"github.com/Suuu-sh/Ohey_Backend/internal/contracts"
 )
 
 type Dependencies struct {
@@ -83,8 +83,12 @@ func (u *Usecase) CreateYurubo(ctx context.Context, input CreateInput) (map[stri
 		if yuruboID == "" {
 			return nil, UserError{Kind: ErrorKindUpstream, Message: "yurubo insert returned no id"}
 		}
-		if err := u.repository.LinkVisibilityGroup(ctx, input.AuthToken, yuruboID, groupID); err != nil {
+		linked, err := u.repository.LinkVisibilityGroup(ctx, input.AuthToken, item.OwnerUserID, yuruboID, groupID)
+		if err != nil {
 			return nil, err
+		}
+		if !linked {
+			return nil, UserError{Kind: ErrorKindInvalidInput, Message: "group not found"}
 		}
 		groupIDs = append(groupIDs, groupID)
 	}
@@ -189,8 +193,12 @@ func (u *Usecase) ReactYurubo(ctx context.Context, input ReactionInput) (Reactio
 	if err != nil {
 		return ReactionState{}, err
 	}
-	if err := u.repository.UpsertReaction(ctx, input.AuthToken, reaction); err != nil {
+	reacted, err := u.repository.UpsertReaction(ctx, input.AuthToken, reaction)
+	if err != nil {
 		return ReactionState{}, err
+	}
+	if !reacted {
+		return ReactionState{}, UserError{Kind: ErrorKindNotFound, Message: "yurubo not found"}
 	}
 	return ReactionState{ReactedByMe: true}, nil
 }

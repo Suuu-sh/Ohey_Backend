@@ -5,14 +5,15 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
+	"github.com/Suuu-sh/Ohey_Backend/internal/config"
+	"github.com/Suuu-sh/Ohey_Backend/internal/contracts"
+	"github.com/Suuu-sh/Ohey_Backend/internal/features/dailystatuses"
+	"github.com/Suuu-sh/Ohey_Backend/internal/features/friends"
+	"github.com/Suuu-sh/Ohey_Backend/internal/features/profiles"
+	"github.com/Suuu-sh/Ohey_Backend/internal/postgres"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/yota/ohey/backend/internal/config"
-	"github.com/yota/ohey/backend/internal/contracts"
-	"github.com/yota/ohey/backend/internal/features/dailystatuses"
-	"github.com/yota/ohey/backend/internal/features/friends"
-	"github.com/yota/ohey/backend/internal/features/profiles"
-	"github.com/yota/ohey/backend/internal/postgres"
 )
 
 type Dependencies struct {
@@ -35,7 +36,7 @@ func newConfiguredAuthVerifier(deps Dependencies) *authVerifier {
 		deps.Config.ClerkIssuer,
 		deps.Config.ClerkJWKSURL,
 		deps.Config.ClerkAudience,
-		nil,
+		&http.Client{Timeout: 10 * time.Second},
 		timeNow,
 	)
 }
@@ -64,10 +65,13 @@ func route(method, path string) string {
 
 func (r *router) routes() {
 	r.mux.HandleFunc(route(http.MethodGet, contracts.APIPathHealth), r.health)
+	// Keep legacy Render health check compatibility while dashboards/blueprints converge on /health.
+	r.mux.HandleFunc(route(http.MethodGet, "/healthz"), r.health)
 	r.mux.HandleFunc(route(http.MethodGet, contracts.APIPathLegalTerms), r.legalTerms)
 	r.mux.HandleFunc(route(http.MethodGet, contracts.APIPathLegalPrivacy), r.legalPrivacy)
 	r.mux.HandleFunc(route(http.MethodGet, contracts.APIPathShareYurubo), r.shareYurubo)
 	r.mux.HandleFunc(route(http.MethodPost, contracts.APIPathAuthSignup), r.signupWithPassword)
+	r.mux.HandleFunc(route(http.MethodPost, contracts.APIPathClerkEmailWebhook), r.handleClerkEmailWebhook)
 	r.mux.HandleFunc(route(http.MethodGet, contracts.APIPathMeProfile), r.auth(r.getProfile))
 	r.mux.HandleFunc(route(http.MethodPut, contracts.APIPathMeProfile), r.auth(r.upsertProfile))
 	r.mux.HandleFunc(route(http.MethodPatch, contracts.APIPathMeProfile), r.auth(r.updateProfile))
@@ -129,8 +133,8 @@ func (r *router) routes() {
 	r.mux.HandleFunc(route(http.MethodPost, contracts.APIPathAdminNotifications), r.admin(r.adminCreateNotification))
 }
 
-func (r *router) health(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "service": "ohey-backend"})
+func (r *router) health(w http.ResponseWriter, req *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"service": "ohey-backend", "status": "ok"})
 }
 
 func (r *router) getProfile(w http.ResponseWriter, req *http.Request, authToken string) {
@@ -164,10 +168,14 @@ func (r *router) updateProfile(w http.ResponseWriter, req *http.Request, authTok
 }
 
 func (r *router) listFriends(w http.ResponseWriter, req *http.Request, authToken string) {
+	date, ok := dateOnlyParam(w, req, "date")
+	if !ok {
+		return
+	}
 	rows, err := r.friendsUsecase(req).ListFriends(req.Context(), friends.ListInput{
 		AuthToken: authToken,
 		UserID:    req.Header.Get("X-Ohey-User-ID"),
-		Date:      dateOnlyParam(req, "date"),
+		Date:      date,
 	})
 	if err != nil {
 		writeFriendsError(w, err)
@@ -294,16 +302,24 @@ func (r *router) authClerk(w http.ResponseWriter, req *http.Request, next func(h
 		writeError(w, http.StatusUnauthorized, "invalid auth user")
 		return
 	}
-	if headerUserID := strings.TrimSpace(req.Header.Get("X-Ohey-User-ID")); headerUserID != "" && headerUserID != clerkUserID {
-		writeError(w, http.StatusForbidden, "auth user mismatch")
-		return
-	}
+	headerUserID := strings.TrimSpace(req.Header.Get("X-Ohey-User-ID"))
 	downstreamToken := authToken
 	profile, err := r.profileUsecase().GetProfile(req.Context(), profiles.AuthInput{
 		AuthToken:   downstreamToken,
 		ClerkUserID: clerkUserID,
 	})
 	if err == nil && profile != nil {
+		if headerUserID != "" && headerUserID != clerkUserID {
+			cleanHeaderUserID, errMessage := cleanUUID(headerUserID, "X-Ohey-User-ID")
+			if errMessage != "" {
+				writeError(w, http.StatusBadRequest, errMessage)
+				return
+			}
+			if cleanHeaderUserID != profile.ID {
+				writeError(w, http.StatusForbidden, "auth user mismatch")
+				return
+			}
+		}
 		req.Header.Set("X-Ohey-User-ID", profile.ID)
 		req.Header.Set("X-Ohey-Clerk-User-ID", clerkUserID)
 		next(w, req, downstreamToken)

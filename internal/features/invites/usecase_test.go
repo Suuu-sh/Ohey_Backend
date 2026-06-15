@@ -15,12 +15,13 @@ const (
 )
 
 type fakeRepository struct {
-	calls       []string
-	dailyStatus string
-	blocked     bool
-	existing    *ExistingInvite
-	created     map[string]any
-	updated     map[string]any
+	calls         []string
+	dailyStatus   string
+	blocked       bool
+	alreadyFriend bool
+	existing      *ExistingInvite
+	created       map[string]any
+	updated       map[string]any
 
 	createdInvite NewInvite
 	updatedInvite struct {
@@ -54,6 +55,11 @@ func (f *fakeRepository) DailyStatus(context.Context, string, string, string) (s
 func (f *fakeRepository) BlockExistsBetweenUsers(context.Context, string, string, string) (bool, error) {
 	f.calls = append(f.calls, "block")
 	return f.blocked, nil
+}
+
+func (f *fakeRepository) FriendshipExists(context.Context, string, string, string) (bool, error) {
+	f.calls = append(f.calls, "friendship")
+	return f.alreadyFriend, nil
 }
 
 func (f *fakeRepository) FindActiveInviteBetweenUsersForDate(context.Context, string, string, string, string) (*ExistingInvite, error) {
@@ -112,7 +118,7 @@ func TestCreateInviteRejectsSelfInviteBeforeRepositoryAccess(t *testing.T) {
 }
 
 func TestCreateInviteBlocksHasPlansDailyStatus(t *testing.T) {
-	repo := &fakeRepository{dailyStatus: "has_plans"}
+	repo := &fakeRepository{dailyStatus: "has_plans", alreadyFriend: true}
 	usecase := NewUsecase(Dependencies{Repository: repo})
 
 	_, err := usecase.CreateInvite(context.Background(), CreateInput{
@@ -124,13 +130,30 @@ func TestCreateInviteBlocksHasPlansDailyStatus(t *testing.T) {
 	})
 
 	assertUserError(t, err, ErrorKindConflict, "相手に予定があるため今日は誘えません。")
-	if want := []string{"block", "daily_status"}; !reflect.DeepEqual(repo.calls, want) {
+	if want := []string{"block", "friendship", "daily_status"}; !reflect.DeepEqual(repo.calls, want) {
+		t.Fatalf("repository calls = %v, want %v", repo.calls, want)
+	}
+}
+
+func TestCreateInviteRejectsNonFriendBeforeDailyStatusLookup(t *testing.T) {
+	repo := &fakeRepository{}
+	usecase := NewUsecase(Dependencies{Repository: repo})
+
+	_, err := usecase.CreateInvite(context.Background(), CreateInput{
+		AuthToken:     testAuthToken,
+		InviterUserID: testUserID,
+		InviteeUserID: otherUserID,
+		ScheduledDate: "2026-05-23",
+	})
+
+	assertUserError(t, err, ErrorKindForbidden, "friendship is required")
+	if want := []string{"block", "friendship"}; !reflect.DeepEqual(repo.calls, want) {
 		t.Fatalf("repository calls = %v, want %v", repo.calls, want)
 	}
 }
 
 func TestCreateInviteRejectsExistingAcceptedInvite(t *testing.T) {
-	repo := &fakeRepository{existing: &ExistingInvite{ID: testInviteID, Status: InviteStatusAccepted}}
+	repo := &fakeRepository{alreadyFriend: true, existing: &ExistingInvite{ID: testInviteID, Status: InviteStatusAccepted}}
 	usecase := NewUsecase(Dependencies{Repository: repo})
 
 	_, err := usecase.CreateInvite(context.Background(), CreateInput{
@@ -141,13 +164,13 @@ func TestCreateInviteRejectsExistingAcceptedInvite(t *testing.T) {
 	})
 
 	assertUserError(t, err, ErrorKindConflict, "今日はもう予約済みです。")
-	if want := []string{"block", "daily_status", "find_active"}; !reflect.DeepEqual(repo.calls, want) {
+	if want := []string{"block", "friendship", "daily_status", "find_active"}; !reflect.DeepEqual(repo.calls, want) {
 		t.Fatalf("repository calls = %v, want %v", repo.calls, want)
 	}
 }
 
 func TestCreateInviteRejectsLongActivityLabelBeforeRepositoryAccess(t *testing.T) {
-	repo := &fakeRepository{}
+	repo := &fakeRepository{alreadyFriend: true}
 	usecase := NewUsecase(Dependencies{Repository: repo})
 
 	_, err := usecase.CreateInvite(context.Background(), CreateInput{
@@ -165,7 +188,7 @@ func TestCreateInviteRejectsLongActivityLabelBeforeRepositoryAccess(t *testing.T
 }
 
 func TestCreateInviteCreatesPendingInviteAndNotifiesRecipient(t *testing.T) {
-	repo := &fakeRepository{}
+	repo := &fakeRepository{alreadyFriend: true}
 	publisher := &fakePublisher{}
 	usecase := NewUsecase(Dependencies{Repository: repo, Publisher: publisher})
 
@@ -188,7 +211,7 @@ func TestCreateInviteCreatesPendingInviteAndNotifiesRecipient(t *testing.T) {
 	if len(publisher.events) != 1 || publisher.events[0].Kind != EventInviteCreated || publisher.events[0].Invite.InviteeUserID != otherUserID {
 		t.Fatalf("events = %#v", publisher.events)
 	}
-	if want := []string{"block", "daily_status", "find_active", "create"}; !reflect.DeepEqual(repo.calls, want) {
+	if want := []string{"block", "friendship", "daily_status", "find_active", "create"}; !reflect.DeepEqual(repo.calls, want) {
 		t.Fatalf("repository calls = %v, want %v", repo.calls, want)
 	}
 }
