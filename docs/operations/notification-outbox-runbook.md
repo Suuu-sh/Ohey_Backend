@@ -29,7 +29,7 @@ Never expose `CLERK_SECRET_KEY`, `DATABASE_URL`, or Firebase service-account val
 curl -sS \
   -H "Authorization: Bearer $ADMIN_ACCESS_TOKEN" \
   -H "X-Ohey-User-ID: $ADMIN_USER_ID" \
-  "https://ohey-backend.onrender.com/v1/admin/notification-outbox?status=failed" | jq .
+  "https://api.oheyapp.com/v1/admin/notification-outbox?status=failed" | jq .
 ```
 
 Supported `status` values:
@@ -54,7 +54,7 @@ Check:
 curl -sS -X POST \
   -H "Authorization: Bearer $ADMIN_ACCESS_TOKEN" \
   -H "X-Ohey-User-ID: $ADMIN_USER_ID" \
-  "https://ohey-backend.onrender.com/v1/admin/notification-outbox/process?limit=50" | jq .
+  "https://api.oheyapp.com/v1/admin/notification-outbox/process?limit=50" | jq .
 ```
 
 Expected response:
