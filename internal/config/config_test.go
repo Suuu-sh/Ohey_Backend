@@ -26,6 +26,7 @@ func TestLoadRejectsNonClerkAuth(t *testing.T) {
 }
 
 func TestLoadNeonStoreParsesDatabaseMaxConns(t *testing.T) {
+	t.Setenv(EnvAppEnvironment, "development")
 	t.Setenv(EnvDataStore, "neon")
 	t.Setenv(EnvDatabaseURL, "postgres://user:pass@example.neon.tech/db?sslmode=require")
 	t.Setenv(EnvDatabaseMaxConns, "4")
@@ -44,5 +45,34 @@ func TestLoadNeonStoreParsesDatabaseMaxConns(t *testing.T) {
 	}
 	if cfg.DatabaseMaxConns != 4 {
 		t.Fatalf("DatabaseMaxConns = %d, want 4", cfg.DatabaseMaxConns)
+	}
+}
+
+func TestLoadRejectsWildcardOriginInProduction(t *testing.T) {
+	t.Setenv(EnvAppEnvironment, "production")
+	t.Setenv(EnvDataStore, "neon")
+	t.Setenv(EnvDatabaseURL, "postgres://user:pass@example.neon.tech/db?sslmode=require")
+	t.Setenv(EnvAuthProvider, "clerk")
+	t.Setenv(EnvClerkIssuer, "https://clerk.example")
+	t.Setenv(EnvClerkAudience, "ohey-mobile")
+	t.Setenv(EnvAllowedOrigins, "*")
+
+	_, err := Load()
+	if err == nil || !strings.Contains(err.Error(), EnvAllowedOrigins) {
+		t.Fatalf("Load() error = %v, want %s production validation", err, EnvAllowedOrigins)
+	}
+}
+
+func TestLoadRequiresClerkAudienceInProduction(t *testing.T) {
+	t.Setenv(EnvAppEnvironment, "production")
+	t.Setenv(EnvDataStore, "neon")
+	t.Setenv(EnvDatabaseURL, "postgres://user:pass@example.neon.tech/db?sslmode=require")
+	t.Setenv(EnvAuthProvider, "clerk")
+	t.Setenv(EnvClerkIssuer, "https://clerk.example")
+	t.Setenv(EnvAllowedOrigins, "https://oheyapp.com")
+
+	_, err := Load()
+	if err == nil || !strings.Contains(err.Error(), EnvClerkAudience) {
+		t.Fatalf("Load() error = %v, want %s production validation", err, EnvClerkAudience)
 	}
 }

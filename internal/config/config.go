@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -30,6 +31,7 @@ type Config struct {
 	R2PublicURL           string
 	FCMServiceAccountJSON string
 	AdminEmails           []string
+	OriginVerifySecret    string
 }
 
 func Load() (Config, error) {
@@ -56,6 +58,7 @@ func Load() (Config, error) {
 		R2PublicURL:           strings.TrimRight(strings.TrimSpace(os.Getenv(EnvR2PublicURL)), "/"),
 		FCMServiceAccountJSON: strings.TrimSpace(os.Getenv(EnvFCMServiceAccountJSON)),
 		AdminEmails:           splitCSV(os.Getenv(EnvOheyAdminEmails)),
+		OriginVerifySecret:    strings.TrimSpace(os.Getenv(EnvOriginVerifySecret)),
 	}
 	if cfg.DataStore == "" {
 		cfg.DataStore = "neon"
@@ -79,6 +82,19 @@ func Load() (Config, error) {
 	}
 	if cfg.ClerkJWKSURL == "" {
 		cfg.ClerkJWKSURL = cfg.ClerkIssuer + "/.well-known/jwks.json"
+	}
+	if parsed, err := url.Parse(cfg.ClerkJWKSURL); err != nil || parsed.Scheme != "https" || parsed.Host == "" {
+		return cfg, errors.New(EnvClerkJWKSURL + " must be an https URL")
+	}
+	if isProduction(cfg.Environment) {
+		for _, origin := range cfg.AllowedOrigins {
+			if origin == "*" {
+				return cfg, errors.New(EnvAllowedOrigins + " cannot include * in production")
+			}
+		}
+		if strings.TrimSpace(cfg.ClerkAudience) == "" {
+			return cfg, errors.New(EnvClerkAudience + " is required in production")
+		}
 	}
 	return cfg, nil
 }
@@ -111,4 +127,8 @@ func int32FromEnv(key string, fallback int32) int32 {
 		return fallback
 	}
 	return int32(parsed)
+}
+
+func isProduction(value string) bool {
+	return strings.EqualFold(strings.TrimSpace(value), "production")
 }

@@ -49,7 +49,7 @@ func NewRouter(deps Dependencies) http.Handler {
 		authVerifier: newConfiguredAuthVerifier(deps),
 	}
 	r.routes()
-	return r.withCORS(r.mux)
+	return r.withSecurityHeaders(r.withCORS(r.originVerify(r.mux)))
 }
 
 func postgresPool(r *router) *pgxpool.Pool {
