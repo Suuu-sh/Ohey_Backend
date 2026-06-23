@@ -23,4 +23,5 @@ const (
 	EnvR2PublicURL           = "R2_PUBLIC_URL"
 	EnvFCMServiceAccountJSON = "FCM_SERVICE_ACCOUNT_JSON"
 	EnvOheyAdminEmails       = "OHEY_ADMIN_EMAILS"
+	EnvOriginVerifySecret    = "ORIGIN_VERIFY_SECRET"
 )
