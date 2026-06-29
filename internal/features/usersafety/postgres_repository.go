@@ -59,8 +59,21 @@ func (r *PostgresRepository) CleanupBlockedRelations(ctx context.Context, rel Us
 		return errors.New("postgres pool is not configured")
 	}
 	now := time.Now().UTC()
-	_, err := r.pool.Exec(ctx, `delete from friendships where (user_a_id=$1 and user_b_id=$2) or (user_a_id=$2 and user_b_id=$1); update friend_requests set status=case when from_user_id=$1 then $3 else $4 end, responded_at=$5 where status=$6 and ((from_user_id=$1 and to_user_id=$2) or (from_user_id=$2 and to_user_id=$1)); update invites set status=case when inviter_user_id=$1 then $3 else $4 end, responded_at=$5 where status=$6 and ((inviter_user_id=$1 and invitee_user_id=$2) or (inviter_user_id=$2 and invitee_user_id=$1));`, rel.ActorUserID, rel.TargetUserID, contracts.StatusCancelled, contracts.StatusRejected, now, contracts.StatusPending)
-	return err
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	if _, err := tx.Exec(ctx, `delete from friendships where (user_a_id=$1 and user_b_id=$2) or (user_a_id=$2 and user_b_id=$1)`, rel.ActorUserID, rel.TargetUserID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `update friend_requests set status=case when from_user_id=$1 then $3 else $4 end, responded_at=$5 where status=$6 and ((from_user_id=$1 and to_user_id=$2) or (from_user_id=$2 and to_user_id=$1))`, rel.ActorUserID, rel.TargetUserID, contracts.StatusCancelled, contracts.StatusRejected, now, contracts.StatusPending); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `update invites set status=case when inviter_user_id=$1 then $3 else $4 end, responded_at=$5 where status=$6 and ((inviter_user_id=$1 and invitee_user_id=$2) or (inviter_user_id=$2 and invitee_user_id=$1))`, rel.ActorUserID, rel.TargetUserID, contracts.StatusCancelled, contracts.StatusRejected, now, contracts.StatusPending); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func (r *PostgresRepository) listRelations(ctx context.Context, sql, userID string) ([]map[string]any, error) {
