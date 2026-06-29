@@ -371,15 +371,15 @@ func (r *router) deleteOwnAccount(w http.ResponseWriter, req *http.Request, _ st
 		writeError(w, http.StatusServiceUnavailable, "account deletion is temporarily unavailable")
 		return
 	}
-	if _, err := r.deps.Postgres.Pool().Exec(req.Context(), `delete from profiles where id=$1`, userID); err != nil {
-		writeError(w, http.StatusBadGateway, "database error")
-		return
-	}
 	if clerkUserID != "" {
 		if err := r.deps.ClerkAPI.DeleteUser(req.Context(), clerkUserID); err != nil {
 			writeError(w, http.StatusBadGateway, "auth provider error")
 			return
 		}
+	}
+	if _, err := r.deps.Postgres.Pool().Exec(req.Context(), `delete from profiles where id=$1`, userID); err != nil {
+		writeError(w, http.StatusBadGateway, "database error")
+		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"id": userID})
 }
