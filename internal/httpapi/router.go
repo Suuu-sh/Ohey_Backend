@@ -49,7 +49,7 @@ func NewRouter(deps Dependencies) http.Handler {
 		authVerifier: newConfiguredAuthVerifier(deps),
 	}
 	r.routes()
-	return r.withSecurityHeaders(r.withCORS(r.originVerify(r.mux)))
+	return r.withRequestObservability(r.withSecurityHeaders(r.withCORS(r.originVerify(r.mux))))
 }
 
 func postgresPool(r *router) *pgxpool.Pool {
@@ -343,6 +343,7 @@ func (r *router) withCORS(next http.Handler) http.Handler {
 		}
 		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Ohey-User-ID")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Expose-Headers", "Retry-After, X-Request-ID")
 		if req.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return

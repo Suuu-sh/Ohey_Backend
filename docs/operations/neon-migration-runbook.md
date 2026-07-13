@@ -1,6 +1,6 @@
 # Neon migration runbook
 
-Last updated: 2026-06-09
+Last updated: 2026-07-14
 
 Ohey backend uses Clerk for auth and Neon/Postgres for application data.
 
@@ -18,6 +18,19 @@ The backend-owned schema is stored in:
 ```bash
 Backend/db/migrations/000001_neon_baseline.sql
 ```
+
+> **Danger:** this baseline contains `drop table ... cascade`. It is only for a
+> verified empty database. Never run it against development or production data.
+> For an existing database, add a new numbered, forward-only migration instead.
+
+Before every non-empty database migration:
+
+1. create/record a Neon restore point or branch;
+2. use the direct non-pooler URL and `ON_ERROR_STOP=1`;
+3. review locks and expected row changes;
+4. apply to development and run the full smoke test;
+5. apply to production before deploying code that requires the new schema;
+6. insert the applied version into `app_schema_migrations` in the same transaction.
 
 
 Notes:

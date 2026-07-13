@@ -38,6 +38,10 @@ Authenticated requests must include:
 Auth provider configuration:
 
 - `AUTH_PROVIDER=clerk` verifies Clerk session JWTs against `CLERK_ISSUER` / `CLERK_JWKS_URL` and optional `CLERK_AUDIENCE`.
+- Production fails closed unless the Clerk audience and live secret key are set,
+  the Render origin verification secret is at least 32 bytes, at least one
+  moderation administrator is configured, browser origins are HTTPS-only, and
+  the database URL requires TLS.
 
 Database provider configuration:
 
@@ -48,6 +52,8 @@ Database provider configuration:
 ## Endpoints
 
 - `GET /health`
+- `GET /legal/terms.txt`
+- `GET /legal/privacy-policy.txt`
 - `GET /v1/me/profile`
 - `PUT /v1/me/profile`
 - `PATCH /v1/me/profile`
@@ -91,6 +97,14 @@ Admin operations run only through the trusted backend. Set these backend environ
 - `OHEY_ADMIN_EMAILS`
 
 Admin access is intentionally hard-limited to Clerk users whose emails are listed in `OHEY_ADMIN_EMAILS` for the target Render/backend environment.
+
+Production release and incident operations:
+
+- [Production release runbook](docs/operations/production-release-runbook.md)
+- [Pre-release smoke test](docs/operations/pre-release-smoke-test.md)
+- [Moderation / media / push operations](docs/operations/moderation-media-push-ops.md)
+- [Notification outbox runbook](docs/operations/notification-outbox-runbook.md)
+- [Security policy](SECURITY.md)
 
 Available endpoints:
 

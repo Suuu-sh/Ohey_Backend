@@ -2,11 +2,15 @@ package config
 
 import (
 	"errors"
+	"fmt"
+	"net/mail"
 	"net/url"
 	"os"
 	"strconv"
 	"strings"
 )
+
+const minimumOriginVerifySecretBytes = 32
 
 type Config struct {
 	Environment           string
@@ -36,7 +40,7 @@ type Config struct {
 
 func Load() (Config, error) {
 	cfg := Config{
-		Environment:           getEnv(EnvAppEnvironment, "production"),
+		Environment:           strings.ToLower(getEnv(EnvAppEnvironment, "production")),
 		Port:                  getEnv(EnvPort, "8080"),
 		DataStore:             strings.ToLower(getEnv(EnvDataStore, "neon")),
 		DatabaseURL:           strings.TrimSpace(os.Getenv(EnvDatabaseURL)),
@@ -60,6 +64,9 @@ func Load() (Config, error) {
 		AdminEmails:           splitCSV(os.Getenv(EnvOheyAdminEmails)),
 		OriginVerifySecret:    strings.TrimSpace(os.Getenv(EnvOriginVerifySecret)),
 	}
+	if err := validateEnvironment(cfg.Environment); err != nil {
+		return cfg, err
+	}
 	if cfg.DataStore == "" {
 		cfg.DataStore = "neon"
 	}
@@ -80,6 +87,9 @@ func Load() (Config, error) {
 	if cfg.ClerkIssuer == "" {
 		return cfg, errors.New(EnvClerkIssuer + " is required when " + EnvAuthProvider + "=clerk")
 	}
+	if err := validateHTTPSURL(EnvClerkIssuer, cfg.ClerkIssuer, false); err != nil {
+		return cfg, err
+	}
 	if cfg.ClerkJWKSURL == "" {
 		cfg.ClerkJWKSURL = cfg.ClerkIssuer + "/.well-known/jwks.json"
 	}
@@ -87,16 +97,80 @@ func Load() (Config, error) {
 		return cfg, errors.New(EnvClerkJWKSURL + " must be an https URL")
 	}
 	if isProduction(cfg.Environment) {
-		for _, origin := range cfg.AllowedOrigins {
-			if origin == "*" {
-				return cfg, errors.New(EnvAllowedOrigins + " cannot include * in production")
-			}
-		}
-		if strings.TrimSpace(cfg.ClerkAudience) == "" {
-			return cfg, errors.New(EnvClerkAudience + " is required in production")
+		if err := validateProduction(cfg); err != nil {
+			return cfg, err
 		}
 	}
 	return cfg, nil
+}
+
+func validateEnvironment(value string) error {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "local", "dev", "development", "production":
+		return nil
+	default:
+		return errors.New(EnvAppEnvironment + " must be local, dev, development, or production")
+	}
+}
+
+func validateProduction(cfg Config) error {
+	if len(cfg.AllowedOrigins) == 0 {
+		return errors.New(EnvAllowedOrigins + " is required in production")
+	}
+	for _, origin := range cfg.AllowedOrigins {
+		if origin == "*" {
+			return errors.New(EnvAllowedOrigins + " cannot include * in production")
+		}
+		if err := validateHTTPSURL(EnvAllowedOrigins, origin, true); err != nil {
+			return err
+		}
+	}
+	if strings.TrimSpace(cfg.ClerkAudience) == "" {
+		return errors.New(EnvClerkAudience + " is required in production")
+	}
+	if !strings.HasPrefix(cfg.ClerkSecretKey, "sk_live_") {
+		return errors.New(EnvClerkSecretKey + " must be a Clerk production secret key in production")
+	}
+	if len(cfg.OriginVerifySecret) < minimumOriginVerifySecretBytes {
+		return fmt.Errorf("%s must contain at least %d bytes in production", EnvOriginVerifySecret, minimumOriginVerifySecretBytes)
+	}
+	if len(cfg.AdminEmails) == 0 {
+		return errors.New(EnvOheyAdminEmails + " must include at least one moderation administrator in production")
+	}
+	for _, email := range cfg.AdminEmails {
+		parsed, err := mail.ParseAddress(email)
+		if err != nil || !strings.EqualFold(parsed.Address, strings.TrimSpace(email)) {
+			return errors.New(EnvOheyAdminEmails + " must contain valid email addresses")
+		}
+	}
+	if err := validateProductionDatabaseURL(cfg.DatabaseURL); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateHTTPSURL(key, value string, originOnly bool) error {
+	parsed, err := url.Parse(strings.TrimSpace(value))
+	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil {
+		return errors.New(key + " must contain valid https URLs")
+	}
+	if originOnly && (parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "") {
+		return errors.New(key + " entries must be HTTPS origins without paths, queries, or fragments")
+	}
+	return nil
+}
+
+func validateProductionDatabaseURL(value string) error {
+	parsed, err := url.Parse(strings.TrimSpace(value))
+	if err != nil || (parsed.Scheme != "postgres" && parsed.Scheme != "postgresql") || parsed.Host == "" {
+		return errors.New(EnvDatabaseURL + " must be a valid Postgres URL in production")
+	}
+	switch strings.ToLower(parsed.Query().Get("sslmode")) {
+	case "require", "verify-ca", "verify-full":
+		return nil
+	default:
+		return errors.New(EnvDatabaseURL + " must require TLS with sslmode=require, verify-ca, or verify-full in production")
+	}
 }
 
 func getEnv(key, fallback string) string {

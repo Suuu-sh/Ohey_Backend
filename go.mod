@@ -1,6 +1,6 @@
 module github.com/Suuu-sh/Ohey_Backend
 
-go 1.26.4
+go 1.26.5
 
 require github.com/jackc/pgx/v5 v5.10.0
 
