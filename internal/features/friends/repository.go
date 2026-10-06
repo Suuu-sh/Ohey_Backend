@@ -16,6 +16,7 @@ type Repository interface {
 	ListPendingFriendRequests(ctx context.Context, authToken, userID string, direction RequestDirection) ([]map[string]any, error)
 	PendingFriendRequestBetween(ctx context.Context, authToken, userID, friendID string) (map[string]any, error)
 	CreateFriendRequest(ctx context.Context, authToken, fromUserID, toUserID string) (map[string]any, error)
+	// Accepted requests and their friendship row must be committed atomically.
 	UpdatePendingFriendRequestStatus(ctx context.Context, authToken, requestID, userID string, status RequestStatus, respondedAt time.Time) (map[string]any, error)
 }
 

@@ -4,8 +4,7 @@ import "context"
 
 type Repository interface {
 	WishItemExists(ctx context.Context, authToken, ownerUserID, wishItemID string) (bool, error)
-	CreateYurubo(ctx context.Context, authToken string, item Yurubo) (map[string]any, error)
-	LinkVisibilityGroup(ctx context.Context, authToken, ownerUserID, yuruboID, groupID string) (bool, error)
+	CreateYurubo(ctx context.Context, authToken string, item Yurubo, groupID string) (map[string]any, error)
 	UpdateYurubo(ctx context.Context, authToken string, update YuruboUpdate) (map[string]any, error)
 	DeleteYurubo(ctx context.Context, authToken, yuruboID, ownerUserID string) (map[string]any, error)
 	HiddenYuruboIDs(ctx context.Context, authToken, userID string) (map[string]bool, error)

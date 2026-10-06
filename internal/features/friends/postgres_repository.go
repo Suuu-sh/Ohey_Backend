@@ -188,17 +188,31 @@ func (r *PostgresRepository) UpdatePendingFriendRequestStatus(ctx context.Contex
 	if r.pool == nil {
 		return nil, errors.New("postgres pool is not configured")
 	}
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
 	userCol := "to_user_id"
 	if status == RequestStatusCancelled {
 		userCol = "from_user_id"
 	}
-	row := r.pool.QueryRow(ctx, `update friend_requests set status=$3, responded_at=$4 where id=$1 and `+userCol+`=$2 and status=$5 returning id::text, from_user_id::text, to_user_id::text, status, created_at, responded_at`, requestID, userID, string(status), respondedAt, contracts.StatusPending)
+	row := tx.QueryRow(ctx, `update friend_requests set status=$3, responded_at=$4 where id=$1 and `+userCol+`=$2 and status=$5 returning id::text, from_user_id::text, to_user_id::text, status, created_at, responded_at`, requestID, userID, string(status), respondedAt, contracts.StatusPending)
 	out, err := scanFriendRequestSimple(row)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, mapPostgresFriendError(err)
+	}
+	if status == RequestStatusAccepted {
+		first, second := OrderedPair(out["from_user_id"].(string), out["to_user_id"].(string))
+		if _, err := tx.Exec(ctx, `insert into friendships (user_a_id,user_b_id) values ($1,$2) on conflict (user_a_id,user_b_id) do update set user_a_id=excluded.user_a_id`, first, second); err != nil {
+			return nil, mapPostgresFriendError(err)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
 	}
 	return out, nil
 }

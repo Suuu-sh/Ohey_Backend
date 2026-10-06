@@ -21,6 +21,7 @@ type fakeRepository struct {
 	created        Yurubo
 	linkedYuruboID string
 	linkedGroupID  string
+	groupError     error
 	updated        YuruboUpdate
 	deletedYurubo  string
 	deletedUser    string
@@ -35,19 +36,26 @@ type fakeRepository struct {
 	approved       bool
 }
 
+type fakePublisher struct{ events []DomainEvent }
+
+func (p *fakePublisher) Publish(_ context.Context, _ string, event DomainEvent) {
+	p.events = append(p.events, event)
+}
+
 func (r *fakeRepository) WishItemExists(_ context.Context, _ string, _ string, _ string) (bool, error) {
 	return r.wishItemExists, nil
 }
 
-func (r *fakeRepository) CreateYurubo(_ context.Context, _ string, item Yurubo) (map[string]any, error) {
+func (r *fakeRepository) CreateYurubo(_ context.Context, _ string, item Yurubo, groupID string) (map[string]any, error) {
 	r.created = item
-	return map[string]any{"id": yuruboID, "title": item.Title}, nil
-}
-
-func (r *fakeRepository) LinkVisibilityGroup(_ context.Context, _ string, _ string, yuruboID, groupID string) (bool, error) {
-	r.linkedYuruboID = yuruboID
 	r.linkedGroupID = groupID
-	return true, nil
+	if groupID != "" {
+		r.linkedYuruboID = yuruboID
+	}
+	if r.groupError != nil {
+		return nil, r.groupError
+	}
+	return map[string]any{"id": yuruboID, "title": item.Title}, nil
 }
 
 func (r *fakeRepository) UpdateYurubo(_ context.Context, _ string, update YuruboUpdate) (map[string]any, error) {
@@ -164,6 +172,26 @@ func TestCreateYuruboRejectsMissingWishItem(t *testing.T) {
 	kind, ok := ErrorKindOf(err)
 	if !ok || kind != ErrorKindInvalidInput {
 		t.Fatalf("kind = %q ok=%v err=%v", kind, ok, err)
+	}
+}
+
+func TestCreateYuruboDoesNotPublishWhenGroupLinkFails(t *testing.T) {
+	repo := &fakeRepository{groupError: UserError{Kind: ErrorKindInvalidInput, Message: "group not found"}}
+	publisher := &fakePublisher{}
+	usecase := NewUsecase(Dependencies{Repository: repo, Publisher: publisher})
+
+	_, err := usecase.CreateYurubo(context.Background(), CreateInput{
+		OwnerUserID: ownerID,
+		Body:        CreateBody{Title: "Dinner", Visibility: contracts.VisibilityGroup, GroupID: groupID},
+	})
+	if kind, ok := ErrorKindOf(err); !ok || kind != ErrorKindInvalidInput {
+		t.Fatalf("error = %v, want invalid group error", err)
+	}
+	if repo.linkedGroupID != groupID {
+		t.Fatalf("group id passed to atomic create = %q, want %q", repo.linkedGroupID, groupID)
+	}
+	if len(publisher.events) != 0 {
+		t.Fatalf("events = %#v, want none after failed create", publisher.events)
 	}
 }
 

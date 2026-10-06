@@ -2,6 +2,7 @@ package friends
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"testing"
 	"time"
@@ -22,6 +23,7 @@ type fakeRepository struct {
 	pendingRequest map[string]any
 	createdRequest map[string]any
 	updatedRequest map[string]any
+	updateErr      error
 	favoriteRow    map[string]any
 	friendshipRow  map[string]any
 	statusesDate   string
@@ -86,7 +88,7 @@ func (f *fakeRepository) CreateFriendRequest(context.Context, string, string, st
 
 func (f *fakeRepository) UpdatePendingFriendRequestStatus(context.Context, string, string, string, RequestStatus, time.Time) (map[string]any, error) {
 	f.calls = append(f.calls, "update_request")
-	return f.updatedRequest, nil
+	return f.updatedRequest, f.updateErr
 }
 
 type fakePublisher struct {
@@ -227,7 +229,7 @@ func TestUpdateFriendRequestAcceptedCreatesFriendshipAndNotification(t *testing.
 	if row["status"] != "accepted" {
 		t.Fatalf("row = %#v", row)
 	}
-	if want := []string{"update_request", "upsert"}; !reflect.DeepEqual(repo.calls, want) {
+	if want := []string{"update_request"}; !reflect.DeepEqual(repo.calls, want) {
 		t.Fatalf("calls = %v, want %v", repo.calls, want)
 	}
 	if len(publisher.events) != 1 || publisher.events[0].Kind != EventFriendRequestAccepted {
@@ -241,6 +243,25 @@ func TestUpdateFriendRequestNotFound(t *testing.T) {
 
 	_, err := usecase.UpdateFriendRequest(context.Background(), UpdateFriendRequestInput{AuthToken: testAuthToken, RequestID: testRequestID, UserID: testUserID, Status: "rejected"})
 	assertUserError(t, err, ErrorKindNotFound, "friend request not found")
+}
+
+func TestUpdateFriendRequestAcceptedFailureDoesNotPublishNotification(t *testing.T) {
+	repo := &fakeRepository{updateErr: errors.New("friendship insert failed")}
+	publisher := &fakePublisher{}
+	usecase := NewUsecase(Dependencies{Repository: repo, Publisher: publisher})
+
+	_, err := usecase.UpdateFriendRequest(context.Background(), UpdateFriendRequestInput{
+		AuthToken: testAuthToken,
+		RequestID: testRequestID,
+		UserID:    testUserID,
+		Status:    "accepted",
+	})
+	if err == nil || err.Error() != "friendship insert failed" {
+		t.Fatalf("error = %v, want friendship write failure", err)
+	}
+	if len(publisher.events) != 0 {
+		t.Fatalf("events = %#v, want none when atomic acceptance fails", publisher.events)
+	}
 }
 
 func assertUserError(t *testing.T, err error, wantKind ErrorKind, wantMessage string) {

@@ -73,23 +73,14 @@ func (u *Usecase) CreateYurubo(ctx context.Context, input CreateInput) (map[stri
 			return nil, UserError{Kind: ErrorKindInvalidInput, Message: "wish item not found"}
 		}
 	}
-	row, err := u.repository.CreateYurubo(ctx, input.AuthToken, item)
+	// The insert and optional visibility-group link must succeed or fail together.
+	// Otherwise a bad group ID leaves an inaccessible group-only yurubo behind.
+	row, err := u.repository.CreateYurubo(ctx, input.AuthToken, item, groupID)
 	if err != nil {
 		return nil, err
 	}
 	groupIDs := []string{}
 	if item.Visibility == contracts.VisibilityGroup {
-		yuruboID, _ := row["id"].(string)
-		if yuruboID == "" {
-			return nil, UserError{Kind: ErrorKindUpstream, Message: "yurubo insert returned no id"}
-		}
-		linked, err := u.repository.LinkVisibilityGroup(ctx, input.AuthToken, item.OwnerUserID, yuruboID, groupID)
-		if err != nil {
-			return nil, err
-		}
-		if !linked {
-			return nil, UserError{Kind: ErrorKindInvalidInput, Message: "group not found"}
-		}
 		groupIDs = append(groupIDs, groupID)
 	}
 	if u.publisher != nil {

@@ -237,9 +237,6 @@ func (u *Usecase) UpdateFriendRequest(ctx context.Context, input UpdateFriendReq
 	if status == RequestStatusAccepted {
 		request := FriendRequestFromRow(row)
 		if request.FromUserID != "" && request.ToUserID != "" {
-			if _, err := u.repository.UpsertFriendshipPair(ctx, input.AuthToken, request.FromUserID, request.ToUserID); err != nil {
-				return nil, err
-			}
 			if u.publisher != nil {
 				if event, ok := NewFriendRequestAcceptedEvent(row); ok {
 					u.publisher.Publish(ctx, input.AuthToken, event)

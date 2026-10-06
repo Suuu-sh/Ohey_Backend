@@ -22,32 +22,38 @@ func (r *PostgresRepository) WishItemExists(ctx context.Context, _ string, owner
 	return r.exists(ctx, `select exists(select 1 from wish_items where id=$1 and owner_user_id=$2)`, wishItemID, ownerUserID)
 }
 
-func (r *PostgresRepository) CreateYurubo(ctx context.Context, _ string, item Yurubo) (map[string]any, error) {
+func (r *PostgresRepository) CreateYurubo(ctx context.Context, _ string, item Yurubo, groupID string) (map[string]any, error) {
 	if r.pool == nil {
 		return nil, errors.New("postgres pool is not configured")
 	}
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
 	expires := YuruboExpiresAt(item.StartsAt, time.Now().UTC())
-	row := r.pool.QueryRow(ctx, yuruboReturningSQL(`insert into yurubos (owner_user_id,title,body,category,place_text,time_label,starts_at,visibility,wish_item_id,expires_at,updated_at) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,now()) returning`), item.OwnerUserID, item.Title, item.Body, item.Category, item.PlaceText, item.TimeLabel, item.StartsAt, item.Visibility, item.WishItemID, expires)
+	row := tx.QueryRow(ctx, yuruboReturningSQL(`insert into yurubos (owner_user_id,title,body,category,place_text,time_label,starts_at,visibility,wish_item_id,expires_at,updated_at) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,now()) returning`), item.OwnerUserID, item.Title, item.Body, item.Category, item.PlaceText, item.TimeLabel, item.StartsAt, item.Visibility, item.WishItemID, expires)
 	out, err := scanYuruboJoined(row)
 	if err != nil {
 		return nil, mapPostgresYuruboError(err)
 	}
-	return out, nil
-}
-
-func (r *PostgresRepository) LinkVisibilityGroup(ctx context.Context, _ string, ownerUserID, yuruboID, groupID string) (bool, error) {
-	if r.pool == nil {
-		return false, errors.New("postgres pool is not configured")
-	}
-	tag, err := r.pool.Exec(ctx, `insert into yurubo_visibility_groups (yurubo_id,group_id)
+	if item.Visibility == contracts.VisibilityGroup {
+		tag, err := tx.Exec(ctx, `insert into yurubo_visibility_groups (yurubo_id,group_id)
 		select $1, fg.id
 		from friend_groups fg
 		where fg.id=$2 and fg.owner_user_id=$3
-		on conflict do nothing`, yuruboID, groupID, ownerUserID)
-	if err != nil {
-		return false, mapPostgresYuruboError(err)
+		on conflict do nothing`, out["id"], groupID, item.OwnerUserID)
+		if err != nil {
+			return nil, mapPostgresYuruboError(err)
+		}
+		if tag.RowsAffected() == 0 {
+			return nil, UserError{Kind: ErrorKindInvalidInput, Message: "group not found"}
+		}
 	}
-	return tag.RowsAffected() > 0, nil
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (r *PostgresRepository) UpdateYurubo(ctx context.Context, _ string, update YuruboUpdate) (map[string]any, error) {
